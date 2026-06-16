@@ -15,8 +15,12 @@ report() {
 
 echo "=== verstak-official-plugins check ==="
 
+# ── Dependency checks ──
+HAS_PYTHON=0
+if command -v python3 &>/dev/null; then HAS_PYTHON=1; fi
+
 # Validate all plugin manifests against the SDK schema
-if command -v python3 &>/dev/null; then
+if [ "$HAS_PYTHON" -eq 1 ]; then
   echo "[manifest validation]"
   SDK_SCHEMA="$ROOT/../verstak-sdk/schemas/manifest.json"
   if [ -f "$SDK_SCHEMA" ]; then
@@ -35,7 +39,7 @@ for plugin_dir in glob.glob('$ROOT/plugins/*/'):
         skipped.append(plugin_dir.split('/')[-2])
         continue
     except json.JSONDecodeError as e:
-        problems.append(f'{plugin_dir.split(\"/\")[-2]}: invalid JSON — {e}')
+        problems.append(plugin_dir.split('/')[-2] + ': invalid JSON — ' + str(e))
         continue
 
     checks = {
@@ -47,15 +51,15 @@ for plugin_dir in glob.glob('$ROOT/plugins/*/'):
     }
     for check, ok in checks.items():
         if not ok:
-            problems.append(f'{manifest.get(\"id\", plugin_dir.split(\"/\")[-2])}: missing/empty \"{check}\"')
+            problems.append(manifest.get('id', plugin_dir.split('/')[-2]) + ': missing/empty \"' + check + '\"')
 
 if skipped:
-    print(f'  ⚠️  skipped (no plugin.json): {\", \".join(skipped)}')
+    print('  \u26a0\ufe0f  skipped (no plugin.json): ' + ', '.join(skipped))
 if problems:
     for p in problems:
-        print(f'  ❌ {p}')
+        print('  \u274c ' + p)
 else:
-    print('  ✅ all manifests valid')
+    print('  \u2705 all manifests valid')
 "
     report "manifests valid" $?
   else

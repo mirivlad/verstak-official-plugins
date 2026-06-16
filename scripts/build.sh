@@ -3,6 +3,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FAILED=0
+BUILT=0
+SKIPPED=0
+FAILED_PLUGINS=""
 
 report() {
   if [ "$2" -eq 0 ]; then
@@ -13,11 +16,33 @@ report() {
   fi
 }
 
+ensure_npm_deps() {
+  local dir="$1"
+  if [ ! -f "$dir/package.json" ]; then
+    return 1
+  fi
+  if [ ! -d "$dir/node_modules" ]; then
+    if [ -f "$dir/package-lock.json" ]; then
+      (cd "$dir" && npm ci --no-audit --no-fund)
+    else
+      (cd "$dir" && npm install --no-audit --no-fund)
+    fi
+    report "npm install in $(basename "$dir")" $?
+  fi
+  return 0
+}
+
 echo "=== verstak-official-plugins build ==="
 
-BUILT=0
-SKIPPED=0
-FAILED_PLUGINS=""
+# ── Dependency checks ──
+echo "[deps]"
+HAS_DEPS=1
+if ! command -v node &>/dev/null; then echo "  ❌ node: not found"; HAS_DEPS=0; else echo "  ✅ node $(node --version)"; fi
+if ! command -v npm &>/dev/null; then echo "  ❌ npm: not found"; HAS_DEPS=0; fi
+if ! command -v go &>/dev/null; then echo "  ❌ go: not found"; HAS_DEPS=0; else echo "  ✅ go $(go version | grep -oP 'go\S+')"; fi
+if [ "$HAS_DEPS" -eq 0 ]; then
+  echo "  ⚠️  some deps missing — will skip matching plugin parts"
+fi
 
 for plugin_dir in "$ROOT"/plugins/*/; do
   [ -d "$plugin_dir" ] || continue
@@ -47,23 +72,29 @@ for plugin_dir in "$ROOT"/plugins/*/; do
 
   # Frontend build
   if [ -f "$plugin_dir/frontend/package.json" ]; then
-    echo "  → frontend: npm ci + build"
-    (cd "$plugin_dir/frontend" && npm ci --no-audit --no-fund)
-    report "npm ci" $?
-    (cd "$plugin_dir/frontend" && npm run build)
-    report "frontend build" $?
-    BUILT=1
+    echo "  → frontend"
+    if command -v npm &>/dev/null; then
+      ensure_npm_deps "$plugin_dir/frontend"
+      (cd "$plugin_dir/frontend" && npm run build)
+      report "frontend build" $?
+      BUILT=1
+    else
+      echo "  ⚠️  npm not available — skipping frontend"
+    fi
   else
     echo "  ℹ️  no frontend/package.json — skipping frontend"
   fi
 
   # Backend build (Go)
   if [ -f "$plugin_dir/backend/go.mod" ] || [ -f "$plugin_dir/backend/main.go" ]; then
-    echo "  → backend: go build"
-    if [ -d "$plugin_dir/backend" ]; then
+    echo "  → backend"
+    if command -v go &>/dev/null; then
+      (cd "$plugin_dir/backend" && go mod download 2>/dev/null || true)
       (cd "$plugin_dir/backend" && go build ./...)
       report "backend go build" $?
       BUILT=1
+    else
+      echo "  ⚠️  go not available — skipping backend"
     fi
   else
     echo "  ℹ️  no backend/ — skipping backend"
