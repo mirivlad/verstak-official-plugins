@@ -3,8 +3,6 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FAILED=0
-BUILT=0
-SKIPPED=0
 FAILED_PLUGINS=""
 
 report() {
@@ -30,6 +28,52 @@ ensure_npm_deps() {
     report "npm install in $(basename "$dir")" $?
   fi
   return 0
+}
+
+# ── Packaging function ─────────────────────────────────────
+# Creates dist/<plugin-id>/ from a built plugin directory.
+package_plugin() {
+  local plugin_dir="$1"
+  local plugin_name="$2"
+  local dist_dir="$ROOT/dist/$plugin_name"
+
+  echo "  → packaging dist/$plugin_name"
+  rm -rf "$dist_dir"
+  mkdir -p "$dist_dir"
+
+  # 1. plugin.json
+  if [ -f "$plugin_dir/plugin.json" ]; then
+    cp "$plugin_dir/plugin.json" "$dist_dir/"
+  fi
+
+  # 2. frontend/dist/
+  if [ -d "$plugin_dir/frontend/dist" ]; then
+    mkdir -p "$dist_dir/frontend/dist"
+    cp -r "$plugin_dir/frontend/dist/." "$dist_dir/frontend/dist/"
+    echo "    └─ frontend/dist ($(find "$dist_dir/frontend/dist" -type f | wc -l) file(s))"
+  fi
+
+  # 3. backend binary
+  if [ -d "$plugin_dir/backend" ]; then
+    # Find the compiled binary (same name as plugin directory)
+    local bin_name="$plugin_name"
+    if [ -f "$plugin_dir/backend/$bin_name" ]; then
+      mkdir -p "$dist_dir/backend"
+      cp "$plugin_dir/backend/$bin_name" "$dist_dir/backend/"
+      chmod +x "$dist_dir/backend/$bin_name"
+      echo "    └─ backend/$bin_name ($(du -h "$dist_dir/backend/$bin_name" | cut -f1))"
+    fi
+  fi
+
+  # 4. Verify dist package has at least plugin.json
+  if [ ! -f "$dist_dir/plugin.json" ]; then
+    echo "    ❌ dist package missing plugin.json"
+    return 1
+  fi
+
+  local file_count
+  file_count=$(find "$dist_dir" -type f | wc -l)
+  echo "    └─ dist package: $file_count file(s)"
 }
 
 echo "=== verstak-official-plugins build ==="
@@ -77,7 +121,6 @@ for plugin_dir in "$ROOT"/plugins/*/; do
       ensure_npm_deps "$plugin_dir/frontend"
       (cd "$plugin_dir/frontend" && npm run build)
       report "frontend build" $?
-      BUILT=1
     else
       echo "  ⚠️  npm not available — skipping frontend"
     fi
@@ -90,15 +133,18 @@ for plugin_dir in "$ROOT"/plugins/*/; do
     echo "  → backend"
     if command -v go &>/dev/null; then
       (cd "$plugin_dir/backend" && go mod download 2>/dev/null || true)
-      (cd "$plugin_dir/backend" && go build ./...)
+      (cd "$plugin_dir/backend" && go build -o "$plugin_name" .)
       report "backend go build" $?
-      BUILT=1
     else
       echo "  ⚠️  go not available — skipping backend"
     fi
   else
     echo "  ℹ️  no backend/ — skipping backend"
   fi
+
+  # Package dist/
+  package_plugin "$plugin_dir" "$plugin_name"
+  report "dist package" $?
 done
 
 echo ""
