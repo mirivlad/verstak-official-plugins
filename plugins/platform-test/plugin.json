@@ -66,6 +66,14 @@
         "position": "right",
         "handler": "openDiagnostics"
       }
+    ],
+    "settingsPanels": [
+      {
+        "id": "verstak.platform-test.settings",
+        "title": "Platform Test Settings",
+        "icon": "🧪",
+        "component": "PlatformTestSettings"
+      }
     ]
   }
 }
