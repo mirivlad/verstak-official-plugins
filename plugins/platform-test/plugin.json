@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "id": "verstak.platform-test",
+  "name": "Platform Test",
+  "version": "0.1.0",
+  "apiVersion": "0.1.0",
+  "description": "Runtime test plugin for verifying the Verstak platform: manifest loading, capability registration, contribution injection, event bus, and UI rendering.",
+  "source": "official",
+  "icon": "🧪",
+  "provides": [
+    "verstak/platform-test/v1",
+    "verstak/diagnostics/v1"
+  ],
+  "requires": [
+    "verstak/core/plugin-manager/v1"
+  ],
+  "optionalRequires": [
+    "verstak/core/vault/v1",
+    "verstak/core/sync/v1"
+  ],
+  "permissions": [
+    "vault.read",
+    "events.publish",
+    "events.subscribe",
+    "ui.register",
+    "commands.register",
+    "storage.namespace"
+  ],
+  "frontend": {
+    "entry": "frontend/dist/index.js"
+  },
+  "contributes": {
+    "views": [
+      {
+        "id": "verstak.platform-test.diagnostics",
+        "title": "Platform Diagnostics",
+        "icon": "🧪",
+        "component": "DiagnosticsPanel"
+      }
+    ],
+    "commands": [
+      {
+        "id": "verstak.platform-test.run-tests",
+        "title": "Run Platform Tests",
+        "handler": "runAllTests"
+      },
+      {
+        "id": "verstak.platform-test.show-version",
+        "title": "Show Version Info",
+        "handler": "showVersion"
+      }
+    ],
+    "sidebarItems": [
+      {
+        "id": "verstak.platform-test.sidebar",
+        "title": "Platform Test",
+        "icon": "🧪",
+        "view": "verstak.platform-test.diagnostics",
+        "position": 100
+      }
+    ],
+    "statusBarItems": [
+      {
+        "id": "verstak.platform-test.status",
+        "label": "🧪 All Tests Pass",
+        "position": "right",
+        "handler": "openDiagnostics"
+      }
+    ]
+  }
+}
