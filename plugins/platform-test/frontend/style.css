@@ -1,0 +1,289 @@
+/* ================================================
+   Platform Test — Verstak Plugin Shared Styles
+   Dark theme, responsive, clean design
+   ================================================ */
+
+.pt-root {
+  display: block;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: #1a1a2e;
+  color: #e0e0f0;
+  box-sizing: border-box;
+}
+
+.pt-root *,
+.pt-root *::before,
+.pt-root *::after {
+  box-sizing: border-box;
+}
+
+/* Header */
+.pt-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #0f3460;
+}
+
+.pt-icon {
+  font-size: 1.8rem;
+  line-height: 1;
+}
+
+.pt-title-group {
+  flex: 1;
+}
+
+.pt-plugin-name {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #e0e0f0;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.pt-plugin-id {
+  font-size: 0.75rem;
+  color: #6c6c8a;
+  font-family: 'SF Mono', 'Fira Code', 'Fira Mono', monospace;
+  margin: 0;
+}
+
+.pt-version {
+  font-size: 0.7rem;
+  color: #4ecca3;
+  background: rgba(78, 204, 163, 0.12);
+  padding: 0.15rem 0.45rem;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+/* Cards */
+.pt-card {
+  background: #16213e;
+  border: 1px solid #0f3460;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  transition: border-color 0.2s ease;
+}
+
+.pt-card:hover {
+  border-color: #1a4a7a;
+}
+
+.pt-card-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #a0a0b8;
+  margin: 0 0 0.75rem 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Badges */
+.pt-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 5px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pt-badge-success {
+  background: rgba(78, 204, 163, 0.15);
+  color: #4ecca3;
+  border: 1px solid rgba(78, 204, 163, 0.3);
+}
+
+.pt-badge-info {
+  background: rgba(78, 154, 204, 0.15);
+  color: #4e9acc;
+  border: 1px solid rgba(78, 154, 204, 0.3);
+}
+
+.pt-badge-warning {
+  background: rgba(204, 178, 78, 0.15);
+  color: #ccb24e;
+  border: 1px solid rgba(204, 178, 78, 0.3);
+}
+
+.pt-badge-danger {
+  background: rgba(233, 69, 96, 0.15);
+  color: #e94560;
+  border: 1px solid rgba(233, 69, 96, 0.3);
+}
+
+/* Test Results */
+.pt-test-summary {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.pt-test-stat {
+  flex: 1;
+  min-width: 80px;
+  text-align: center;
+  padding: 0.6rem;
+  background: #1a1a2e;
+  border-radius: 6px;
+}
+
+.pt-test-stat-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+  display: block;
+}
+
+.pt-test-stat-label {
+  font-size: 0.65rem;
+  color: #6c6c8a;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 0.15rem;
+  display: block;
+}
+
+.pt-pass { color: #4ecca3; }
+.pt-fail { color: #e94560; }
+.pt-skip { color: #ccb24e; }
+
+/* List */
+.pt-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.pt-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid rgba(15, 52, 96, 0.4);
+  font-size: 0.82rem;
+}
+
+.pt-list-item:last-child {
+  border-bottom: none;
+}
+
+.pt-list-label {
+  color: #a0a0b8;
+}
+
+.pt-list-value {
+  font-weight: 500;
+}
+
+/* Capability status dots */
+.pt-cap-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 0.4rem;
+}
+
+.pt-cap-dot-ok { background: #4ecca3; }
+.pt-cap-dot-missing { background: #e94560; }
+
+/* Buttons */
+.pt-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.9rem;
+  border: 1px solid #0f3460;
+  border-radius: 6px;
+  background: #16213e;
+  color: #e0e0f0;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.pt-btn:hover {
+  background: #1a2a4a;
+  border-color: #4ecca3;
+  color: #4ecca3;
+}
+
+.pt-btn:active {
+  transform: scale(0.97);
+}
+
+.pt-btn-accent {
+  background: rgba(78, 204, 163, 0.15);
+  border-color: rgba(78, 204, 163, 0.3);
+  color: #4ecca3;
+}
+
+.pt-btn-accent:hover {
+  background: rgba(78, 204, 163, 0.25);
+  border-color: #4ecca3;
+}
+
+/* Counter display */
+.pt-counter {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem;
+  background: #1a1a2e;
+  border-radius: 6px;
+  margin: 0.75rem 0;
+}
+
+.pt-counter-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #4ecca3;
+  min-width: 3rem;
+  text-align: center;
+}
+
+.pt-counter-label {
+  font-size: 0.75rem;
+  color: #6c6c8a;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .pt-header {
+    flex-wrap: wrap;
+  }
+  .pt-test-summary {
+    flex-direction: column;
+  }
+  .pt-test-stat {
+    min-width: unset;
+  }
+}
+
+/* Scrollbar styling for webkit */
+.pt-root ::-webkit-scrollbar {
+  width: 6px;
+}
+
+.pt-root ::-webkit-scrollbar-track {
+  background: #1a1a2e;
+}
+
+.pt-root ::-webkit-scrollbar-thumb {
+  background: #0f3460;
+  border-radius: 3px;
+}
+
+.pt-root ::-webkit-scrollbar-thumb:hover {
+  background: #1a4a7a;
+}
