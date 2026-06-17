@@ -6,7 +6,7 @@
   "apiVersion": "0.1.0",
   "description": "Runtime test plugin for verifying the Verstak platform: manifest loading, capability registration, contribution injection, event bus, and UI rendering.",
   "source": "official",
-  "icon": "🧪",
+  "icon": "flask",
   "provides": [
     "verstak/platform-test/v1",
     "verstak/diagnostics/v1"
@@ -34,7 +34,7 @@
       {
         "id": "verstak.platform-test.diagnostics",
         "title": "Platform Diagnostics",
-        "icon": "🧪",
+        "icon": "flask",
         "component": "DiagnosticsPanel"
       }
     ],
@@ -54,7 +54,7 @@
       {
         "id": "verstak.platform-test.sidebar",
         "title": "Platform Test",
-        "icon": "🧪",
+        "icon": "flask",
         "view": "verstak.platform-test.diagnostics",
         "position": 100
       }
@@ -62,7 +62,7 @@
     "statusBarItems": [
       {
         "id": "verstak.platform-test.status",
-        "label": "🧪 All Tests Pass",
+        "label": "[OK] All Tests Pass",
         "position": "right",
         "handler": "openDiagnostics"
       }
@@ -71,7 +71,7 @@
       {
         "id": "verstak.platform-test.settings",
         "title": "Platform Test Settings",
-        "icon": "🧪",
+        "icon": "flask",
         "component": "PlatformTestSettings"
       }
     ]

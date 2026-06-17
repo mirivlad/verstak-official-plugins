@@ -66,7 +66,7 @@
 
       /* ── Header ─────────────────────────────────────────────────── */
       var header = div('pt-header', [
-        span('pt-icon', '🧪'),
+        span('pt-icon', '◉'),
         div('pt-title-group', [
           el('h2', { className: 'pt-plugin-name' }, ['Platform Diagnostics']),
           el('p', { className: 'pt-plugin-id' }, [api.pluginId]),
