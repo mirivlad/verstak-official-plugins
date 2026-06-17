@@ -79,7 +79,7 @@
         el('span', {}, ['✅']),
         el('span', {}, ['Frontend Bundle Loaded']),
       ]);
-      var badgeRow = div('', { style: { marginBottom: '1rem' } }, [badge]);
+      var badgeRow = div('', [badge]);
 
       /* ── Test results summary ──────────────────────────────────── */
       var testsData = [
