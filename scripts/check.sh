@@ -84,6 +84,15 @@ if [ "$MISSING_EXEC" -eq 0 ]; then
 fi
 
 echo ""
+echo "[frontend smoke]"
+if command -v node &>/dev/null; then
+  node "$ROOT/scripts/smoke-platform-frontend.js"
+  report "platform-test frontend components mount" $?
+else
+  echo "  ⚠️  node not available — skipping frontend smoke"
+fi
+
+echo ""
 if [ "$FAILED" -eq 0 ]; then
   echo "✅ all checks passed"
 else

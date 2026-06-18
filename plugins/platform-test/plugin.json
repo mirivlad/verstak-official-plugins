@@ -12,11 +12,14 @@
     "verstak/diagnostics/v1"
   ],
   "requires": [
-    "verstak/core/plugin-manager/v1"
+    "verstak/core/plugin-manager/v1",
+    "verstak/core/capability-registry/v1"
   ],
   "optionalRequires": [
     "verstak/core/vault/v1",
-    "verstak/core/sync/v1"
+    "verstak/core/sync/v1",
+    "verstak/core/files/v1",
+    "verstak/core/workbench/v1"
   ],
   "permissions": [
     "vault.read",
@@ -24,7 +27,11 @@
     "events.subscribe",
     "ui.register",
     "commands.register",
-    "storage.namespace"
+    "storage.namespace",
+    "files.read",
+    "files.write",
+    "files.delete",
+    "workbench.open"
   ],
   "frontend": {
     "entry": "frontend/dist/index.js"
@@ -73,6 +80,27 @@
         "title": "Platform Test Settings",
         "icon": "flask",
         "component": "PlatformTestSettings"
+      }
+    ],
+    "openProviders": [
+      {
+        "id": "verstak.platform-test.markdown-diagnostic",
+        "title": "Platform Test Markdown Diagnostic",
+        "priority": 100,
+        "component": "MarkdownDiagnosticProvider",
+        "supports": [
+          {
+            "kind": "vault-file",
+            "extensions": [".md", ".markdown"],
+            "contexts": ["generic-markdown", "notes-markdown"]
+          },
+          {
+            "kind": "vault-file",
+            "mime": ["text/plain"],
+            "extensions": [".txt", ".log"],
+            "contexts": ["generic-text"]
+          }
+        ]
       }
     ]
   }
