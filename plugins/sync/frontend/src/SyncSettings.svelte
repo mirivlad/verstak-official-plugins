@@ -16,19 +16,16 @@
   let showResetKeyConfirm = false
   let connectionOk = null
 
-  function wailsCall(method, ...args) {
-    try {
-      if (window['go'] && window['go']['main'] && window['go']['main']['App']) {
-        const fn = window['go']['main']['App'][method]
-        if (typeof fn === 'function') return fn(...args)
-      }
-    } catch (e) { console.error('Wails error:', method, e) }
-    return Promise.reject(new Error('Wails not connected: ' + method))
+  async function backendCall(method, ...args) {
+    if (api && api.backend && typeof api.backend.call === 'function') {
+      return await api.backend.call(method, ...args)
+    }
+    throw new Error('Plugin API backend.call not available')
   }
 
   async function load() {
     try {
-      settings = await wailsCall('SyncStatus')
+      settings = await backendCall('SyncStatus')
       if (settings) {
         serverUrl = settings.serverUrl || ''
         syncInterval = settings.syncInterval || 0
@@ -45,7 +42,7 @@
     resultKind = ''
     connectionOk = null
     try {
-      await wailsCall('SyncTestConnection', serverUrl, username, password)
+      await backendCall('SyncTestConnection', serverUrl, username, password)
       connectionOk = true
       resultMsg = 'connection ok'
     } catch (e) {
@@ -60,7 +57,7 @@
     errorMsg = ''
     resultKind = ''
     try {
-      await wailsCall('SyncConfigure', serverUrl, username, password)
+      await backendCall('SyncConfigure', serverUrl, username, password)
       resultMsg = 'configured'
       username = ''
       password = ''
@@ -89,7 +86,7 @@
     errorMsg = ''
     resultKind = ''
     try {
-      const r = await wailsCall('SyncNow')
+      const r = await backendCall('SyncNow')
       const summary = 'pushed ' + (r?.pushed || 0) + ', pulled ' + (r?.pulled || 0)
       const warning = syncResultWarning(r)
       resultMsg = warning ? summary + ' · ' + warning : summary
@@ -106,7 +103,7 @@
     errorMsg = ''
     resultKind = ''
     try {
-      await wailsCall('SyncSetInterval', syncInterval)
+      await backendCall('SyncSetInterval', syncInterval)
       resultMsg = 'settings saved'
       resultKind = ''
     } catch (e) {
@@ -122,7 +119,7 @@
     errorMsg = ''
     resultKind = ''
     try {
-      await wailsCall('SyncSetInterval', minutes)
+      await backendCall('SyncSetInterval', minutes)
       resultMsg = autoSync ? 'auto-sync enabled' : 'auto-sync disabled'
       resultKind = ''
     } catch (e) {
@@ -140,7 +137,7 @@
     loading = true
     resultKind = ''
     try {
-      await wailsCall('SyncDisconnect')
+      await backendCall('SyncDisconnect')
       resultMsg = 'disconnected'
       await load()
     } catch (e) { errorMsg = String(e) }
@@ -156,7 +153,7 @@
     loading = true
     resultKind = ''
     try {
-      await wailsCall('ResetSyncKey')
+      await backendCall('ResetSyncKey')
       resultMsg = 'key reset'
       await load()
     } catch (e) { errorMsg = String(e) }
@@ -242,41 +239,33 @@
     </div>
 
     <div class="sync-interval">
-      <label>
-        <span class="label-text">Sync Interval (minutes)</span>
-        <div class="interval-row">
-          <input type="number" bind:value={syncInterval} min="0" placeholder="0" />
-          <button class="btn btn-sm" on:click={saveInterval} disabled={loading}>Save</button>
-        </div>
-      </label>
+      <label class="field-label" for="sync-interval">Sync Interval (minutes)</label>
+      <div class="interval-row">
+        <input id="sync-interval" type="number" bind:value={syncInterval} min="0" placeholder="0" />
+        <button class="btn btn-sm" on:click={saveInterval} disabled={loading}>Save</button>
+      </div>
     </div>
 
     <div class="auto-sync-toggle">
       <label class="toggle-label">
         <input type="checkbox" bind:checked={autoSync} on:change={setAutoSync} disabled={loading} />
-        <span class="label-text">Auto-sync</span>
+        <span>Auto-sync</span>
       </label>
     </div>
   {:else}
     <div class="settings-card">
       <div class="sync-setup">
         <div class="form-group">
-          <label>
-            <span class="label-text">Server URL</span>
-            <input type="text" placeholder="https://example.com" bind:value={serverUrl} />
-          </label>
+          <label class="field-label" for="sync-url">Server URL</label>
+          <input id="sync-url" type="text" class="field-input" placeholder="https://example.com" bind:value={serverUrl} />
         </div>
         <div class="form-group">
-          <label>
-            <span class="label-text">Username</span>
-            <input type="text" bind:value={username} />
-          </label>
+          <label class="field-label" for="sync-user">Username</label>
+          <input id="sync-user" type="text" class="field-input" bind:value={username} />
         </div>
         <div class="form-group">
-          <label>
-            <span class="label-text">Password</span>
-            <input type="password" bind:value={password} />
-          </label>
+          <label class="field-label" for="sync-pass">Password</label>
+          <input id="sync-pass" type="password" class="field-input" bind:value={password} />
         </div>
         <div class="sync-setup-actions">
           <button class="btn" on:click={testConnection} disabled={loading || !serverUrl}>
@@ -331,34 +320,55 @@
   .settings-section h2 {
     margin: 0 0 0.25rem 0;
     font-size: 1.2rem;
-    color: var(--text, #e0e0e0);
+    color: #e0e0f0;
   }
   .section-desc {
-    color: var(--text-dim, #888);
+    color: #a0a0b8;
     font-size: 0.85rem;
     margin-bottom: 1.25rem;
     line-height: 1.4;
   }
   .settings-card {
-    background: var(--surface-alt, #1e1e30);
-    border: 1px solid var(--border, #2a2a3e);
+    background: #16213e;
+    border: 1px solid #0f3460;
     border-radius: 8px;
     padding: 1rem 1.25rem;
     margin-bottom: 1rem;
   }
+  .field-label {
+    display: block;
+    color: #a0a0b8;
+    font-size: 0.85rem;
+    margin-bottom: 0.35rem;
+  }
+  .field-input {
+    display: block;
+    width: 100%;
+    background: #0f3460;
+    border: 1px solid #1a3a5c;
+    color: #e0e0f0;
+    padding: 0.4rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    box-sizing: border-box;
+  }
+  .field-input:focus {
+    outline: none;
+    border-color: #4ecca3;
+  }
   .info-row {
     display: flex;
     padding: 0.4rem 0;
-    border-bottom: 1px solid var(--border, #2a2a3e);
+    border-bottom: 1px solid #0f3460;
     font-size: 0.9rem;
   }
   .info-row:last-child { border-bottom: none; }
   .info-label {
     width: 180px;
     min-width: 180px;
-    color: var(--text-dim, #888);
+    color: #a0a0b8;
   }
-  .info-value { color: var(--text, #e0e0e0); word-break: break-all; }
+  .info-value { color: #e0e0f0; word-break: break-all; }
   .info-value.mono { font-family: monospace; font-size: 0.85rem; }
   .info-value.error { color: #ff6b6b; }
   .status-ok { color: #34d399; font-weight: 600; }
@@ -379,6 +389,16 @@
   }
   .interval-row input {
     width: 100px;
+    background: #0f3460;
+    border: 1px solid #1a3a5c;
+    color: #e0e0f0;
+    padding: 0.35rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+  }
+  .interval-row input:focus {
+    outline: none;
+    border-color: #4ecca3;
   }
   .auto-sync-toggle {
     margin-bottom: 0;
@@ -389,11 +409,12 @@
     gap: 0.5rem;
     cursor: pointer;
     font-size: 0.9rem;
+    color: #e0e0f0;
   }
   .toggle-label input[type="checkbox"] {
     width: 16px;
     height: 16px;
-    accent-color: #6c5ce7;
+    accent-color: #4ecca3;
   }
   .sync-setup .form-group { margin-bottom: 1rem; }
   .sync-setup .form-group:last-of-type { margin-bottom: 0; }
@@ -441,6 +462,31 @@
     border-color: rgba(245, 158, 11, 0.3);
     color: #f59e0b;
   }
+  .btn {
+    background: #1a1a2e;
+    color: #e0e0f0;
+    border: 1px solid #1a3a5c;
+    padding: 0.4rem 0.75rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
+  .btn:hover:not(:disabled) { border-color: #4ecca3; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-sm { padding: 0.3rem 0.6rem; font-size: 0.8rem; }
+  .btn-primary {
+    background: #4ecca3;
+    color: #1a1a2e;
+    border-color: #4ecca3;
+    font-weight: 600;
+  }
+  .btn-primary:hover:not(:disabled) { background: #3dbb92; border-color: #3dbb92; }
+  .btn-danger {
+    background: #e94560;
+    color: #fff;
+    border-color: #e94560;
+  }
+  .btn-danger:hover:not(:disabled) { background: #d63851; border-color: #d63851; }
   .modal-overlay {
     position: fixed;
     inset: 0;
@@ -457,15 +503,15 @@
     font: inherit;
   }
   .modal {
-    background: var(--surface, #1e1e2e);
-    border: 1px solid var(--border, #2a2a3e);
-    border-radius: 10px;
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 8px;
     padding: 1.5rem;
     max-width: 420px;
     width: 90%;
     cursor: default;
   }
-  .modal h3 { margin: 0 0 0.75rem 0; }
-  .modal-desc { color: var(--text-dim, #888); font-size: 0.9rem; line-height: 1.5; margin-bottom: 1rem; }
+  .modal h3 { margin: 0 0 0.75rem 0; color: #e0e0f0; }
+  .modal-desc { color: #a0a0b8; font-size: 0.9rem; line-height: 1.5; margin-bottom: 1rem; }
   .modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
 </style>
