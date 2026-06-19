@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "verstak.files",
+  "name": "Files",
+  "version": "0.1.0",
+  "apiVersion": "0.1.0",
+  "description": "Minimal vault file navigator. Shows folders and files, opens files through Workbench openResource.",
+  "source": "official",
+  "icon": "folder",
+  "provides": [
+    "verstak/files/v1"
+  ],
+  "requires": [
+    "verstak/core/files/v1",
+    "verstak/core/workbench/v1"
+  ],
+  "permissions": [
+    "files.read",
+    "files.write",
+    "workbench.open",
+    "ui.register"
+  ],
+  "frontend": {
+    "entry": "frontend/dist/index.js"
+  },
+  "contributes": {
+    "workspaceItems": [
+      {
+        "id": "verstak.files.workspace",
+        "title": "Files",
+        "icon": "folder",
+        "component": "FilesView"
+      }
+    ]
+  }
+}

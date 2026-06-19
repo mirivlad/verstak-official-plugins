@@ -93,6 +93,57 @@ else
 fi
 
 echo ""
+echo "[frontend bundle execution]"
+if command -v node &>/dev/null; then
+  BUNDLE_FAILED=0
+  for plugin_dir in "$ROOT"/plugins/*/; do
+    plugin_id=$(basename "$plugin_dir")
+    manifest="$plugin_dir/plugin.json"
+    if [ ! -f "$manifest" ]; then continue; fi
+    # Check if plugin has frontend entry
+    entry=$(node -e "const m=require('$manifest');console.log(m.frontend&&m.frontend.entry||'')" 2>/dev/null)
+    if [ -z "$entry" ]; then continue; fi
+    bundle="$plugin_dir$entry"
+    if [ ! -f "$bundle" ]; then
+      echo "  ❌ $plugin_id: bundle not found at $entry"
+      BUNDLE_FAILED=1
+      continue
+    fi
+    # Execute bundle via new Function() and verify registration
+    node -e "
+      const fs = require('fs');
+      const content = fs.readFileSync('$bundle', 'utf8');
+      // Provide minimal globals
+      global.window = { VerstakPluginRegister: function(id, def) { global.__registered = id; } };
+      global.document = { getElementById: function() { return null; }, createElement: function() { return { style: {}, setAttribute: function(){}, appendChild: function(){} }; }, head: { appendChild: function(){} } };
+      try {
+        new Function(content)();
+        if (!global.__registered) {
+          console.log('ERROR: plugin did not call VerstakPluginRegister');
+          process.exit(1);
+        }
+        console.log('OK: ' + global.__registered);
+      } catch(e) {
+        console.log('ERROR: ' + e.message);
+        process.exit(1);
+      }
+    " 2>&1 | while read -r line; do
+      if [[ "$line" == ERROR:* ]]; then
+        echo "  ❌ $plugin_id: ${line#ERROR: }"
+        BUNDLE_FAILED=1
+      elif [[ "$line" == OK:* ]]; then
+        echo "  ✅ $plugin_id: ${line#OK: }"
+      fi
+    done
+  done
+  if [ "$BUNDLE_FAILED" -ne 0 ]; then
+    FAILED=1
+  fi
+else
+  echo "  ⚠️  node not available — skipping bundle execution"
+fi
+
+echo ""
 if [ "$FAILED" -eq 0 ]; then
   echo "✅ all checks passed"
 else

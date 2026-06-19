@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "id": "verstak.default-editor",
+  "name": "Default Editor",
+  "version": "0.1.0",
+  "apiVersion": "0.1.0",
+  "description": "Built-in text and markdown editor/viewer for Verstak. Provides openProviders for generic text, generic markdown, and notes-context markdown files.",
+  "source": "official",
+  "icon": "edit",
+  "provides": [
+    "verstak/default-editor/v1"
+  ],
+  "requires": [
+    "verstak/core/files/v1",
+    "verstak/core/workbench/v1"
+  ],
+  "permissions": [
+    "files.read",
+    "files.write",
+    "workbench.open"
+  ],
+  "frontend": {
+    "entry": "frontend/dist/index.js"
+  },
+  "contributes": {
+    "openProviders": [
+      {
+        "id": "verstak.default-editor.text",
+        "title": "Default Text Editor",
+        "priority": 50,
+        "component": "DefaultEditor",
+        "supports": [
+          {
+            "kind": "vault-file",
+            "extensions": [".txt", ".log", ".conf", ".ini", ".toml", ".yaml", ".yml", ".json", ".csv"],
+            "mime": ["text/plain", "application/json"],
+            "contexts": ["generic-text"]
+          }
+        ]
+      },
+      {
+        "id": "verstak.default-editor.markdown",
+        "title": "Default Markdown Editor",
+        "priority": 50,
+        "component": "DefaultEditor",
+        "supports": [
+          {
+            "kind": "vault-file",
+            "extensions": [".md", ".markdown"],
+            "contexts": ["generic-markdown"]
+          }
+        ]
+      },
+      {
+        "id": "verstak.default-editor.notes-markdown",
+        "title": "Default Notes Markdown Editor",
+        "priority": 50,
+        "component": "DefaultEditor",
+        "supports": [
+          {
+            "kind": "vault-file",
+            "extensions": [".md", ".markdown"],
+            "contexts": ["notes-markdown"]
+          }
+        ]
+      }
+    ]
+  }
+}

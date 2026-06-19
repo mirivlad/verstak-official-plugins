@@ -86,19 +86,13 @@
       {
         "id": "verstak.platform-test.markdown-diagnostic",
         "title": "Platform Test Markdown Diagnostic",
-        "priority": 100,
+        "priority": 10,
         "component": "MarkdownDiagnosticProvider",
         "supports": [
           {
             "kind": "vault-file",
             "extensions": [".md", ".markdown"],
             "contexts": ["generic-markdown", "notes-markdown"]
-          },
-          {
-            "kind": "vault-file",
-            "mime": ["text/plain"],
-            "extensions": [".txt", ".log"],
-            "contexts": ["generic-text"]
           }
         ]
       }
