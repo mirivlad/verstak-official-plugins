@@ -51,6 +51,10 @@ package_plugin() {
     mkdir -p "$dist_dir/frontend/dist"
     cp -r "$plugin_dir/frontend/dist/." "$dist_dir/frontend/dist/"
     echo "    └─ frontend/dist ($(find "$dist_dir/frontend/dist" -type f | wc -l) file(s))"
+  elif [ -f "$plugin_dir/frontend/src/index.js" ]; then
+    mkdir -p "$dist_dir/frontend/dist"
+    cp "$plugin_dir/frontend/src/index.js" "$dist_dir/frontend/dist/index.js"
+    echo "    └─ frontend/dist/index.js (from frontend/src/index.js)"
   fi
 
   # 3. backend binary

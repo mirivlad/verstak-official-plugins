@@ -104,6 +104,9 @@ if command -v node &>/dev/null; then
     entry=$(node -e "const m=require('$manifest');console.log(m.frontend&&m.frontend.entry||'')" 2>/dev/null)
     if [ -z "$entry" ]; then continue; fi
     bundle="$plugin_dir$entry"
+    if [ ! -f "$bundle" ] && [ "$entry" = "frontend/dist/index.js" ] && [ -f "$plugin_dir/frontend/src/index.js" ]; then
+      bundle="$plugin_dir/frontend/src/index.js"
+    fi
     if [ ! -f "$bundle" ]; then
       echo "  ❌ $plugin_id: bundle not found at $entry"
       BUNDLE_FAILED=1
