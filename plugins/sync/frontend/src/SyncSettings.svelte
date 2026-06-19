@@ -16,6 +16,14 @@
   let showResetKeyConfirm = false
   let connectionOk = null
 
+  function sanitizeError(msg) {
+    if (!msg) return 'Unknown error'
+    let s = String(msg)
+    s = s.replace(/<[^>]+>/g, '')
+    if (s.length > 200) s = s.substring(0, 200) + '...'
+    return s
+  }
+
   async function backendCall(method, ...args) {
     if (api && api.backend && typeof api.backend.call === 'function') {
       return await api.backend.call(method, ...args)
@@ -47,7 +55,7 @@
       resultMsg = 'connection ok'
     } catch (e) {
       connectionOk = false
-      resultMsg = 'connection failed: ' + String(e)
+      resultMsg = 'connection failed: ' + sanitizeError(e.message || e)
     }
     loading = false
   }
@@ -63,7 +71,7 @@
       password = ''
       await load()
     } catch (e) {
-      errorMsg = String(e)
+      errorMsg = sanitizeError(e.message || e)
     }
     loading = false
   }
@@ -93,7 +101,7 @@
       resultKind = warning ? 'warning' : ''
       await load()
     } catch (e) {
-      errorMsg = String(e)
+      errorMsg = sanitizeError(e.message || e)
     }
     loading = false
   }
@@ -107,7 +115,7 @@
       resultMsg = 'settings saved'
       resultKind = ''
     } catch (e) {
-      errorMsg = String(e)
+      errorMsg = sanitizeError(e.message || e)
     }
     loading = false
   }
@@ -123,7 +131,7 @@
       resultMsg = autoSync ? 'auto-sync enabled' : 'auto-sync disabled'
       resultKind = ''
     } catch (e) {
-      errorMsg = String(e)
+      errorMsg = sanitizeError(e.message || e)
     }
     loading = false
   }
@@ -140,7 +148,7 @@
       await backendCall('SyncDisconnect')
       resultMsg = 'disconnected'
       await load()
-    } catch (e) { errorMsg = String(e) }
+    } catch (e) { errorMsg = sanitizeError(e.message || e) }
     loading = false
   }
 
@@ -156,7 +164,7 @@
       await backendCall('ResetSyncKey')
       resultMsg = 'key reset'
       await load()
-    } catch (e) { errorMsg = String(e) }
+    } catch (e) { errorMsg = sanitizeError(e.message || e) }
     loading = false
   }
 
