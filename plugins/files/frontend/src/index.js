@@ -114,12 +114,54 @@
     return dot > 0 ? name.slice(dot + 1).toLowerCase() : '';
   }
 
+  var FILE_ICONS = {
+    folder: 'M3 5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v1H3V5Zm0 6h18v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7Z',
+    markdown: 'M5 3h10l4 4v14H5V3Zm9 1.5V8h3.5L14 4.5ZM8 11h8v2H8v-2Zm0 4h8v2H8v-2Z',
+    image: 'M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z',
+    video: 'M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z',
+    audio: 'M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z',
+    archive: 'M20.54 5.23l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM6.24 5h11.52l.81.97H5.44l.8-.97zM5 19V8h14v11H5zm8.5-8v-1.5h-3V11H8l4 4 4-4h-2.5z',
+    pdf: 'M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8.5 7.5c0 .83-.67 1.5-1.5 1.5H9v2H7.5V7H10c.83 0 1.5.67 1.5 1.5v1zm5 2c0 .83-.67 1.5-1.5 1.5h-2.5V7H15c.83 0 1.5.67 1.5 1.5v3zm4-3H19v1h1.5V11H19v2h-1.5V7h3v1.5zM9 9.5h1v-1H9v1zM5 6H3v14c0 1.1.9 2 2 2h14v-2H5V6zm10 5.5h1v-3h-1v3z',
+    document: 'M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z',
+    spreadsheet: 'M8 2h8l6 6v12c0 1.1-.9 2-2 2H8c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2zm7 1.5V8h4.5L15 3.5zM10 14l-2 4h1.5l.5-1h2l.5 1h1.5l-2-4H10zm.8 2L12 14.3 13.2 16h-2.4z',
+    presentation: 'M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11zm-6-3.5V13h-1.5v4h-1V13H8v-1.5h4V16.5zm1.5 0V13H15c.5 0 .75-.25.75-.5s-.25-.5-.75-.5h-1.5v-1.5H15c1.1 0 2 .9 2 2s-.9 2-2 2h-.5v1.5h-1z',
+    code: 'M22 21H2V3h20v18zM4 5v14h16V5H4zm3 4h10v2H7V9zm0 4h6v2H7v-2z',
+    database: 'M12 2C7.58 2 4 3.79 4 6v12c0 2.21 3.58 4 8 4s8-1.79 8-4V6c0-2.21-3.58-4-8-4zm0 2c3.87 0 6 1.5 6 2s-2.13 2-6 2-6-1.5-6-2 2.13-2 6-2zM4 13.5V10c0 .5 2.13 2 6 2v3.5c-2.14-.39-3.5-1.14-4-1.67z',
+    font: 'M10 4v4h-4v2h4v10h2V10h4V8h-4V4h-2z',
+    config: 'M6 2h9l5 5v15H6V2Zm8 1.5V8h4.5L14 3.5Z',
+    generic: 'M6 2h9l5 5v15H6V2Zm8 1.5V8h4.5L14 3.5Z'
+  };
+
+  var EXT_MAP = {
+    md: 'markdown', markdown: 'markdown',
+    jpg: 'image', jpeg: 'image', png: 'image', gif: 'image', webp: 'image', svg: 'image', bmp: 'image', ico: 'image',
+    mp4: 'video', webm: 'video', mkv: 'video', avi: 'video', mov: 'video',
+    mp3: 'audio', wav: 'audio', flac: 'audio', ogg: 'audio', m4a: 'audio', aac: 'audio',
+    zip: 'archive', rar: 'archive', '7z': 'archive', tar: 'archive', gz: 'archive', bz2: 'archive',
+    pdf: 'pdf',
+    doc: 'document', docx: 'document',
+    xls: 'spreadsheet', xlsx: 'spreadsheet', csv: 'spreadsheet', tsv: 'spreadsheet',
+    ppt: 'presentation', pptx: 'presentation',
+    js: 'code', jsx: 'code', mjs: 'code', cjs: 'code', ts: 'code', tsx: 'code',
+    py: 'code', go: 'code', rs: 'code',
+    c: 'code', cpp: 'code', h: 'code', hpp: 'code',
+    css: 'code', scss: 'code', sass: 'code', less: 'code',
+    html: 'code', htm: 'code', php: 'code',
+    java: 'code', swift: 'code', kotlin: 'code', rb: 'code',
+    sh: 'code', bash: 'code', zsh: 'code',
+    json: 'json', yaml: 'json', yml: 'json', toml: 'json',
+    xml: 'code',
+    sql: 'database', db: 'database', sqlite: 'database',
+    env: 'config', ini: 'config', cfg: 'config', conf: 'config',
+    ttf: 'font', otf: 'font', woff: 'font', woff2: 'font'
+  };
+
   function fileIcon(entry) {
-    if (entry.type === 'folder') return svgIcon('M3 5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v1H3V5Zm0 6h18v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7Z');
+    if (entry.type === 'folder') return svgIcon(FILE_ICONS.folder);
     var ext = (entry.extension || extension(entry.name)).toLowerCase();
-    if (ext === 'md' || ext === 'markdown') return svgIcon('M5 3h10l4 4v14H5V3Zm9 1.5V8h3.5L14 4.5ZM8 11h8v2H8v-2Zm0 4h8v2H8v-2Z');
-    if (ext === 'json' || ext === 'yaml' || ext === 'yml' || ext === 'toml') return '{ }';
-    return svgIcon('M6 2h9l5 5v15H6V2Zm8 1.5V8h4.5L14 3.5Z');
+    var category = EXT_MAP[ext] || 'generic';
+    if (category === 'json') return '{ }';
+    return svgIcon(FILE_ICONS[category] || FILE_ICONS.generic);
   }
 
   function formatSize(bytes) {
