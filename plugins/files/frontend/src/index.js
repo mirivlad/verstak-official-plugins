@@ -209,6 +209,7 @@
       var openBtn = el('button', { className: 'files-toolbar-btn', 'data-files-action': 'open' }, ['Open']);
       var renameBtn = el('button', { className: 'files-toolbar-btn', 'data-files-action': 'rename' }, ['Rename']);
       var trashBtn = el('button', { className: 'files-toolbar-btn', 'data-files-action': 'trash' }, ['Trash']);
+      var pasteBtn = el('button', { className: 'files-toolbar-btn', 'data-files-action': 'paste' }, ['Paste']);
       var filterInput = el('input', { className: 'files-filter', 'data-files-filter': '', placeholder: 'Filter current folder' });
       var sortSelect = el('select', { className: 'files-sort', 'data-files-sort': '' }, [
         el('option', { value: 'folder-name' }, ['Folders + name']),
@@ -218,7 +219,7 @@
         el('option', { value: 'size-desc' }, ['Size'])
       ]);
       toolbar.appendChild(breadcrumb);
-      [upBtn, refreshBtn, newFolderBtn, newMdBtn, newTextBtn, openBtn, renameBtn, trashBtn, filterInput, sortSelect].forEach(function (node) { toolbar.appendChild(node); });
+      [upBtn, refreshBtn, newFolderBtn, newMdBtn, newTextBtn, openBtn, renameBtn, trashBtn, pasteBtn, filterInput, sortSelect].forEach(function (node) { toolbar.appendChild(node); });
       containerEl.appendChild(toolbar);
 
       var listContainer = el('div', { className: 'files-list', 'data-files-list': '' });
@@ -252,6 +253,7 @@
         openBtn.disabled = !sel;
         renameBtn.disabled = !sel;
         trashBtn.disabled = !sel;
+        pasteBtn.disabled = !window.__filesClipboard;
       }
 
       function updateBreadcrumb() {
@@ -498,6 +500,7 @@
       openBtn.addEventListener('click', function () { openEntry(selectedEntry()); });
       renameBtn.addEventListener('click', function () { beginRename(); });
       trashBtn.addEventListener('click', function () { trashEntry(); });
+      pasteBtn.addEventListener('click', function () { pasteEntry(); });
       filterInput.addEventListener('input', function () { filterText = filterInput.value; renderList(); });
       sortSelect.addEventListener('change', function () { sortMode = sortSelect.value; renderList(); });
       createConfirm.addEventListener('click', confirmCreate);
@@ -546,6 +549,10 @@
           ctxMenu.appendChild(ctxItem('New Folder', '', function () { startCreate('folder'); }));
           ctxMenu.appendChild(ctxItem('New Markdown', '', function () { startCreate('markdown'); }));
           ctxMenu.appendChild(ctxItem('New Text', '', function () { startCreate('text'); }));
+          if (window.__filesClipboard) {
+            ctxMenu.appendChild(ctxSep());
+            ctxMenu.appendChild(ctxItem('Paste', '', function () { pasteEntry(); }));
+          }
         }
         ctxMenu.style.display = 'block';
         var mw = ctxMenu.offsetWidth;
@@ -595,14 +602,59 @@
 
       function cutEntry(entry) {
         if (!entry) return;
+        if (entry.type === 'folder') { console.log('[files] Cut for folders not yet supported'); return; }
         console.log('[files] Cut:', entry.relativePath);
         window.__filesClipboard = { action: 'cut', path: entry.relativePath, name: entry.name };
+        updateButtons();
       }
 
       function copyEntry(entry) {
         if (!entry) return;
+        if (entry.type === 'folder') { console.log('[files] Copy for folders not yet supported'); return; }
         console.log('[files] Copy:', entry.relativePath);
         window.__filesClipboard = { action: 'copy', path: entry.relativePath, name: entry.name };
+        updateButtons();
+      }
+
+      function pasteEntry() {
+        var clip = window.__filesClipboard;
+        if (!clip || !clip.path) return;
+        var from = clip.path;
+        var clipName = clip.name;
+        var dot = clipName.lastIndexOf('.');
+        var base = dot > 0 ? clipName.slice(0, dot) : clipName;
+        var ext = dot > 0 ? clipName.slice(dot) : '';
+        var maxAttempts = 100;
+
+        function tryName(n) {
+          var newName = n === 1 ? clipName : base + ' (' + n + ')' + ext;
+          var to = scopedPath(currentPath ? currentPath + '/' + newName : newName);
+          return api.files.metadata(to).then(function () {
+            if (n >= maxAttempts) {
+              console.error('[files] Paste failed: all ' + maxAttempts + ' name variations are taken');
+              return null;
+            }
+            return tryName(n + 1);
+          }, function () {
+            return api.files.readText(from).then(function (content) {
+              return api.files.writeText(to, content, { createIfMissing: true, overwrite: false });
+            }).then(function () {
+              if (clip.action === 'cut') {
+                return api.files.trash(from);
+              }
+            });
+          });
+        }
+
+        tryName(1).then(function (result) {
+          if (result !== null) {
+            if (clip.action === 'cut') window.__filesClipboard = null;
+            loadEntries();
+            console.log('[files] Pasted:', clip.action, from);
+          }
+        }).catch(function (err) {
+          console.error('[files] Paste failed:', err);
+        });
       }
 
       var onDocClick = function (e) {
