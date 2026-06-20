@@ -231,6 +231,9 @@
       var createMode = '';
       var renameTarget = null;
       var disposed = false;
+      var historyStack = [''];
+      var historyIndex = 0;
+      var navigatingHistory = false;
 
       function scopedPath(local) {
         local = cleanPath(local);
@@ -246,6 +249,8 @@
 
       var toolbar = el('div', { className: 'files-toolbar' });
       var breadcrumb = el('div', { className: 'files-breadcrumb' });
+      var backBtn = el('button', { className: 'files-toolbar-btn', 'data-files-action': 'back', title: 'Back (Alt+Left)' }, ['\u2190']);
+      var forwardBtn = el('button', { className: 'files-toolbar-btn', 'data-files-action': 'forward', title: 'Forward (Alt+Right)' }, ['\u2192']);
       var upBtn = el('button', { className: 'files-toolbar-btn', 'data-files-action': 'up', title: 'Up' }, ['Up']);
       var refreshBtn = el('button', { className: 'files-toolbar-btn', 'data-files-action': 'refresh', title: 'Refresh' }, ['Refresh']);
       var newFolderBtn = el('button', { className: 'files-toolbar-btn', 'data-files-action': 'new-folder' }, ['+ Folder']);
@@ -264,7 +269,7 @@
         el('option', { value: 'size-desc' }, ['Size'])
       ]);
       toolbar.appendChild(breadcrumb);
-      [upBtn, refreshBtn, newFolderBtn, newMdBtn, newTextBtn, openBtn, renameBtn, trashBtn, pasteBtn, filterInput, sortSelect].forEach(function (node) { toolbar.appendChild(node); });
+      [backBtn, forwardBtn, upBtn, refreshBtn, newFolderBtn, newMdBtn, newTextBtn, openBtn, renameBtn, trashBtn, pasteBtn, filterInput, sortSelect].forEach(function (node) { toolbar.appendChild(node); });
       containerEl.appendChild(toolbar);
 
       var listContainer = el('div', { className: 'files-list', 'data-files-list': '' });
@@ -305,6 +310,11 @@
         renameBtn.disabled = count !== 1;
         trashBtn.disabled = count === 0;
         pasteBtn.disabled = !window.__filesClipboard;
+      }
+
+      function updateHistoryButtons() {
+        backBtn.disabled = historyIndex <= 0;
+        forwardBtn.disabled = historyIndex >= historyStack.length - 1;
       }
 
       function updateBreadcrumb() {
@@ -480,10 +490,37 @@
       }
 
       function navigateTo(path) {
-        currentPath = cleanPath(path);
+        var newPath = cleanPath(path);
+        if (!navigatingHistory) {
+          if (historyIndex < historyStack.length - 1) {
+            historyStack = historyStack.slice(0, historyIndex + 1);
+          }
+          if (historyStack[historyStack.length - 1] !== newPath) {
+            historyStack.push(newPath);
+            historyIndex = historyStack.length - 1;
+          }
+        }
+        currentPath = newPath;
         cancelCreate();
         cancelRename();
+        updateHistoryButtons();
         loadEntries();
+      }
+
+      function goBack() {
+        if (historyIndex <= 0) return;
+        historyIndex--;
+        navigatingHistory = true;
+        navigateTo(historyStack[historyIndex]);
+        navigatingHistory = false;
+      }
+
+      function goForward() {
+        if (historyIndex >= historyStack.length - 1) return;
+        historyIndex++;
+        navigatingHistory = true;
+        navigateTo(historyStack[historyIndex]);
+        navigatingHistory = false;
       }
 
       function goUp() {
@@ -608,6 +645,8 @@
         }
       }
 
+      backBtn.addEventListener('click', goBack);
+      forwardBtn.addEventListener('click', goForward);
       refreshBtn.addEventListener('click', loadEntries);
       upBtn.addEventListener('click', goUp);
       newFolderBtn.addEventListener('click', function () { startCreate('folder'); });
@@ -929,6 +968,11 @@
           beginRename();
           return;
         }
+        if (key === 'ArrowLeft' && event.altKey) { event.preventDefault(); goBack(); return; }
+        if (key === 'ArrowRight' && event.altKey) { event.preventDefault(); goForward(); return; }
+        if (key === '[' && ctrl) { event.preventDefault(); goBack(); return; }
+        if (key === ']' && ctrl) { event.preventDefault(); goForward(); return; }
+
         if (key === 'a' && (ctrl || event.metaKey)) {
           event.preventDefault();
           var vis = visibleEntries();
@@ -970,6 +1014,7 @@
         }
       });
 
+      updateHistoryButtons();
       loadEntries();
 
       containerEl.__filesCleanup = function () {
