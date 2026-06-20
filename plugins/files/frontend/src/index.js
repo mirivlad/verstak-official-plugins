@@ -803,16 +803,128 @@
 
       containerEl.addEventListener('keydown', function (event) {
         if (event.target && ['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].indexOf(event.target.tagName) !== -1) return;
-        if (event.key === 'Enter') openEntry(selectedEntry());
-        if (event.key === 'Delete' || event.key === 'Backspace') trashEntry();
-        if (event.key === 'F2') beginRename();
-        if (event.key === 'a' && (event.ctrlKey || event.metaKey)) {
+
+        var ITEM_HEIGHT = 38;
+        var PAGE_ITEMS = 10;
+
+        function findCurrentIndex(visible) {
+          if (lastClickedPath) {
+            for (var i = 0; i < visible.length; i++) {
+              if (visible[i].relativePath === lastClickedPath) return i;
+            }
+          }
+          var selKeys = Object.keys(selectedPaths);
+          if (selKeys.length > 0) {
+            for (var j = 0; j < visible.length; j++) {
+              if (selectedPaths[visible[j].relativePath]) return j;
+            }
+          }
+          return 0;
+        }
+
+        function clamp(val, lo, hi) {
+          return val < lo ? lo : (val > hi ? hi : val);
+        }
+
+        function scrollToRow(idx) {
+          var rows = listContainer.querySelectorAll('.files-item');
+          if (rows[idx]) rows[idx].scrollIntoView({ block: 'nearest' });
+        }
+
+        function scrollToItem(idx) {
+          var rows = listContainer.querySelectorAll('.files-item');
+          if (rows[idx]) {
+            var row = rows[idx];
+            var offset = row.offsetTop - listContainer.offsetTop;
+            if (row.offsetTop < listContainer.scrollTop) {
+              listContainer.scrollTop = offset;
+            } else if (row.offsetTop + row.offsetHeight > listContainer.scrollTop + listContainer.clientHeight) {
+              listContainer.scrollTop = offset + row.offsetHeight - listContainer.clientHeight;
+            }
+          }
+        }
+
+        function navigateToIndex(targetIdx, extend) {
+          var visible = visibleEntries();
+          if (visible.length === 0) return;
+          targetIdx = clamp(targetIdx, 0, visible.length - 1);
+          if (extend) {
+            var anchorIdx = findCurrentIndex(visible);
+            var lo = Math.min(anchorIdx, targetIdx);
+            var hi = Math.max(anchorIdx, targetIdx);
+            for (var k = lo; k <= hi; k++) {
+              selectedPaths[visible[k].relativePath] = true;
+            }
+          } else {
+            selectedPaths = {};
+            selectedPaths[visible[targetIdx].relativePath] = true;
+            lastClickedPath = visible[targetIdx].relativePath;
+          }
+          renderList();
+          scrollToRow(targetIdx);
+        }
+
+        function scrollOnly(idx) {
+          var visible = visibleEntries();
+          if (visible.length === 0) return;
+          idx = clamp(idx, 0, visible.length - 1);
+          scrollToItem(idx);
+        }
+
+        var key = event.key;
+        var shift = event.shiftKey;
+        var ctrl = event.ctrlKey || event.metaKey;
+
+        if (key === 'Enter') {
+          openEntry(selectedEntry());
+          return;
+        }
+        if (key === 'Delete' || key === 'Backspace') {
+          trashEntry();
+          return;
+        }
+        if (key === 'F2') {
+          beginRename();
+          return;
+        }
+        if (key === 'a' && (ctrl || event.metaKey)) {
           event.preventDefault();
           var vis = visibleEntries();
           selectedPaths = {};
           vis.forEach(function (entry) { selectedPaths[entry.relativePath] = true; });
           lastClickedPath = vis.length > 0 ? vis[vis.length - 1].relativePath : '';
           renderList();
+          return;
+        }
+
+        if (key === 'ArrowDown' || key === 'ArrowUp' || key === 'Home' || key === 'End' || key === 'PageDown' || key === 'PageUp') {
+          event.preventDefault();
+        }
+
+        var visible = visibleEntries();
+        if (visible.length === 0) return;
+        var curIdx = findCurrentIndex(visible);
+
+        if (ctrl && (key === 'ArrowDown' || key === 'ArrowUp')) {
+          var scrollIdx = key === 'ArrowDown' ? clamp(curIdx + 1, 0, visible.length - 1) : clamp(curIdx - 1, 0, visible.length - 1);
+          scrollOnly(scrollIdx);
+          return;
+        }
+
+        if (key === 'ArrowDown') {
+          navigateToIndex(curIdx + 1, shift);
+        } else if (key === 'ArrowUp') {
+          navigateToIndex(curIdx - 1, shift);
+        } else if (key === 'Home') {
+          navigateToIndex(0, shift);
+        } else if (key === 'End') {
+          navigateToIndex(visible.length - 1, shift);
+        } else if (key === 'PageDown') {
+          var pageSize = listContainer.clientHeight ? Math.floor(listContainer.clientHeight / ITEM_HEIGHT) : PAGE_ITEMS;
+          navigateToIndex(curIdx + pageSize, shift);
+        } else if (key === 'PageUp') {
+          var pageSizeUp = listContainer.clientHeight ? Math.floor(listContainer.clientHeight / ITEM_HEIGHT) : PAGE_ITEMS;
+          navigateToIndex(curIdx - pageSizeUp, shift);
         }
       });
 
