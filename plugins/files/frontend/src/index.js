@@ -63,7 +63,9 @@
     '.files-modal-btn.confirm{background:#4ecca3;color:#111;border-color:#4ecca3}',
     '.files-modal-btn.confirm:hover{background:#3dbb92}',
     '.files-modal-btn.danger{background:#e74c3c;color:#fff;border-color:#e74c3c}',
-    '.files-modal-btn.danger:hover{background:#c0392b}'
+    '.files-modal-btn.danger:hover{background:#c0392b}',
+    '.files-dragging{opacity:.5}',
+    '.files-drag-over{outline:2px dashed #4ecca3;outline-offset:-2px;background:rgba(78,204,163,.08)}'
   ].join('\n');
 
   function el(tag, attrs, children) {
@@ -375,9 +377,26 @@
             'data-file-name': entry.name,
             'data-file-type': entry.type,
             'data-file-path': entry.relativePath,
+            draggable: 'true',
             tabindex: '0',
             onClick: function (e) { selectEntry(entry, e); },
-            onDblclick: function () { openEntry(entry); }
+            onDblclick: function () { openEntry(entry); },
+            onDragstart: function (e) {
+              var paths = [];
+              if (selectedPaths[entry.relativePath] && selectedCount() > 1) {
+                paths = Object.keys(selectedPaths);
+              } else {
+                selectedPaths = {};
+                selectedPaths[entry.relativePath] = true;
+                lastClickedPath = entry.relativePath;
+                renderList();
+                paths = [entry.relativePath];
+              }
+              e.dataTransfer.setData('application/files-paths', JSON.stringify(paths));
+              e.dataTransfer.effectAllowed = 'move';
+              row.classList.add('files-dragging');
+            },
+            onDragend: function () { row.classList.remove('files-dragging'); }
           }, [
             el('div', { className: 'files-namecell' }, [
               el('span', { className: 'files-item-icon', innerHTML: fileIcon(entry) }),
@@ -735,6 +754,50 @@
       listContainer.addEventListener('click', function (e) {
         if (!e.target.closest('.files-item')) {
           selectEntry(null);
+        }
+      });
+
+      function moveFiles(sourcePaths, targetDirPath) {
+        var promises = sourcePaths.filter(function (p) { return parentPath(p) !== targetDirPath; }).map(function (p) {
+          var name = baseName(p);
+          var to = targetDirPath ? targetDirPath + '/' + name : name;
+          return api.files.move(p, to, { overwrite: false });
+        });
+        if (promises.length === 0) return Promise.resolve();
+        return Promise.allSettled(promises).then(function () { loadEntries(); });
+      }
+
+      listContainer.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        var row = e.target.closest('.files-item');
+        if (row) {
+          row.classList.add('files-drag-over');
+        } else {
+          listContainer.classList.add('files-drag-over');
+        }
+      });
+
+      listContainer.addEventListener('dragleave', function (e) {
+        var row = e.target.closest('.files-item');
+        if (row) row.classList.remove('files-drag-over');
+        if (!row) listContainer.classList.remove('files-drag-over');
+      });
+
+      listContainer.addEventListener('drop', function (e) {
+        e.preventDefault();
+        listContainer.classList.remove('files-drag-over');
+        var rows = listContainer.querySelectorAll('.files-drag-over');
+        for (var i = 0; i < rows.length; i++) rows[i].classList.remove('files-drag-over');
+        var raw = e.dataTransfer.getData('application/files-paths');
+        if (!raw) return;
+        var sourcePaths;
+        try { sourcePaths = JSON.parse(raw); } catch (err) { return; }
+        if (!sourcePaths || !sourcePaths.length) return;
+        var row = e.target.closest('.files-item');
+        if (row && row.getAttribute('data-file-type') === 'folder') {
+        var targetRel = row.getAttribute('data-file-path');
+        moveFiles(sourcePaths, targetRel);
         }
       });
 
