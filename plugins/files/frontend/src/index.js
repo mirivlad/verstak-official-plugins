@@ -609,15 +609,31 @@
           cancelRename();
           return;
         }
+        if (/[\\/:*?"<>|\x00-\x1f]/.test(newName)) {
+          renameInput.placeholder = 'Invalid characters in name';
+          return;
+        }
+        if (newName === '.' || newName === '..' || newName[0] === ' ' || newName[newName.length - 1] === ' ' || newName[newName.length - 1] === '.') {
+          renameInput.placeholder = 'Invalid name';
+          return;
+        }
         var from = renameTarget.relativePath;
         var targetParent = parentPath(from);
         var to = targetParent ? targetParent + '/' + newName : newName;
-        api.files.move(from, to, { overwrite: false }).then(function () {
-          cancelRename();
-          loadEntries();
-        }).catch(function (err) {
-          renameInput.value = renameTarget.name;
-          renameInput.placeholder = 'Error: ' + ((err && err.message) ? err.message : String(err));
+        api.files.metadata(to).then(function () {
+          if (to.toLowerCase() === from.toLowerCase() && to !== from) {
+            renameInput.placeholder = 'Name differs only by case';
+            return;
+          }
+          renameInput.placeholder = 'A file with that name already exists';
+        }, function () {
+          api.files.move(from, to, { overwrite: false }).then(function () {
+            cancelRename();
+            loadEntries();
+          }).catch(function (err) {
+            renameInput.value = renameTarget.name;
+            renameInput.placeholder = 'Error: ' + ((err && err.message) ? err.message : String(err));
+          });
         });
       }
 
