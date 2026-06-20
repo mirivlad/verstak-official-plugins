@@ -713,7 +713,9 @@
           ctxMenu.appendChild(ctxItem('Duplicate', '', function () { duplicateEntry(entry); }));
           ctxMenu.appendChild(ctxSep());
           ctxMenu.appendChild(ctxItem('Cut', '', function () { cutEntry(entry); }));
-          ctxMenu.appendChild(ctxItem('Copy', '', function () { copyEntry(entry); }));
+          if (entry.type !== 'folder') {
+            ctxMenu.appendChild(ctxItem('Copy', '', function () { copyEntry(entry); }));
+          }
           ctxMenu.appendChild(ctxSep());
           ctxMenu.appendChild(ctxItem('Move to Trash', 'danger', function () { trashEntry(entry); }));
         } else {
@@ -773,9 +775,8 @@
 
       function cutEntry(entry) {
         if (!entry) return;
-        if (entry.type === 'folder') { console.log('[files] Cut for folders not yet supported'); return; }
         console.log('[files] Cut:', entry.relativePath);
-        window.__filesClipboard = { action: 'cut', path: entry.relativePath, name: entry.name };
+        window.__filesClipboard = { action: 'cut', path: entry.relativePath, name: entry.name, isFolder: entry.type === 'folder' };
         updateButtons();
       }
 
@@ -783,14 +784,16 @@
         if (!entry) return;
         if (entry.type === 'folder') { console.log('[files] Copy for folders not yet supported'); return; }
         console.log('[files] Copy:', entry.relativePath);
-        window.__filesClipboard = { action: 'copy', path: entry.relativePath, name: entry.name };
+        window.__filesClipboard = { action: 'copy', path: entry.relativePath, name: entry.name, isFolder: false };
         updateButtons();
       }
 
       function pasteEntry() {
         var clip = window.__filesClipboard;
         if (!clip || !clip.path) return;
-        var from = clip.path;
+        var fromRelative = clip.path;
+        var fromScoped = scopedPath(fromRelative);
+        var isFolder = clip.isFolder;
         var clipName = clip.name;
         var dot = clipName.lastIndexOf('.');
         var base = dot > 0 ? clipName.slice(0, dot) : clipName;
@@ -807,11 +810,16 @@
             }
             return tryName(n + 1);
           }, function () {
-            return api.files.readText(from).then(function (content) {
+            if (isFolder && clip.action === 'cut') {
+              return api.files.move(fromRelative, to, { overwrite: false }).then(function () {
+                return true;
+              });
+            }
+            return api.files.readText(fromScoped).then(function (content) {
               return api.files.writeText(to, content, { createIfMissing: true, overwrite: false });
             }).then(function () {
               if (clip.action === 'cut') {
-                return api.files.trash(from);
+                return api.files.trash(fromRelative);
               }
             });
           });
