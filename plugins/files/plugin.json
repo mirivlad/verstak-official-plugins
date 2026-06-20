@@ -4,7 +4,7 @@
   "name": "Files",
   "version": "0.1.0",
   "apiVersion": "0.1.0",
-  "description": "Minimal vault file navigator. Shows folders and files, opens files through Workbench openResource.",
+  "description": "Workspace-scoped vault file explorer with create, rename, trash, filtering, sorting, and Workbench openResource integration.",
   "source": "official",
   "icon": "folder",
   "provides": [
@@ -17,6 +17,7 @@
   "permissions": [
     "files.read",
     "files.write",
+    "files.delete",
     "workbench.open",
     "ui.register"
   ],
