@@ -605,12 +605,14 @@
         window.__filesClipboard = { action: 'copy', path: entry.relativePath, name: entry.name };
       }
 
-      document.addEventListener('click', function (e) {
+      var onDocClick = function (e) {
         if (!ctxMenu.contains(e.target)) hideCtxMenu();
-      });
-      document.addEventListener('keydown', function (e) {
+      };
+      var onDocKeydown = function (e) {
         if (e.key === 'Escape') hideCtxMenu();
-      });
+      };
+      document.addEventListener('click', onDocClick);
+      document.addEventListener('keydown', onDocKeydown);
 
       listContainer.addEventListener('contextmenu', function (e) {
         e.preventDefault();
@@ -634,6 +636,8 @@
 
       containerEl.__filesCleanup = function () {
         disposed = true;
+        document.removeEventListener('click', onDocClick);
+        document.removeEventListener('keydown', onDocKeydown);
         if (ctxMenu && ctxMenu.parentNode) ctxMenu.parentNode.removeChild(ctxMenu);
       };
     },
