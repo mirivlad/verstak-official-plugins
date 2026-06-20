@@ -46,7 +46,24 @@
     '.files-error-msg{font-size:.85rem;color:#aaa;max-width:420px;text-align:center}',
     '.files-panel{display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem;border-top:1px solid #16213e;flex-shrink:0;background:#12122a}',
     '.files-create-input,.files-rename-input{flex:1;min-width:160px}',
-    '@media(max-width:760px){.files-header,.files-item{grid-template-columns:minmax(130px,1fr) 70px 0 0 150px}.files-header span:nth-child(3),.files-header span:nth-child(4),.files-item-meta.hide-narrow{display:none}.files-toolbar{align-items:stretch}.files-filter,.files-sort{width:100%}}'
+    '@media(max-width:760px){.files-header,.files-item{grid-template-columns:minmax(130px,1fr) 70px 0 0 150px}.files-header span:nth-child(3),.files-header span:nth-child(4),.files-item-meta.hide-narrow{display:none}.files-toolbar{align-items:stretch}.files-filter,.files-sort{width:100%}}',
+    '.files-ctx-menu{position:fixed;z-index:9999;min-width:180px;background:#1a1a2e;border:1px solid #333;border-radius:6px;padding:6px 0;box-shadow:0 8px 24px rgba(0,0,0,.5);font-size:.84rem;color:#e0e0e0;user-select:none}',
+    '.files-ctx-menu-item{padding:6px 16px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:.5rem}',
+    '.files-ctx-menu-item:hover{background:#2a2a4e}',
+    '.files-ctx-menu-item.danger{color:#e74c3c}',
+    '.files-ctx-menu-item.danger:hover{background:#2a2a4e;color:#ff6b6b}',
+    '.files-ctx-menu-sep{height:1px;background:#333;margin:4px 8px}',
+    '.files-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:center;justify-content:center}',
+    '.files-modal{width:400px;max-width:90vw;padding:24px;background:#1a1a2e;border:1px solid #333;border-radius:12px;color:#e0e0e0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;box-shadow:0 12px 40px rgba(0,0,0,.5)}',
+    '.files-modal-title{font-size:.95rem;line-height:1.5;margin-bottom:20px;word-wrap:break-word}',
+    '.files-modal-actions{display:flex;justify-content:flex-end;gap:8px}',
+    '.files-modal-btn{font-size:.82rem;padding:.4rem 1rem;border:1px solid #333;border-radius:6px;cursor:pointer;font-family:inherit}',
+    '.files-modal-btn.cancel{background:#2a2a4e;color:#ccc;border-color:#444}',
+    '.files-modal-btn.cancel:hover{background:#3a3a5e}',
+    '.files-modal-btn.confirm{background:#4ecca3;color:#111;border-color:#4ecca3}',
+    '.files-modal-btn.confirm:hover{background:#3dbb92}',
+    '.files-modal-btn.danger{background:#e74c3c;color:#fff;border-color:#e74c3c}',
+    '.files-modal-btn.danger:hover{background:#c0392b}'
   ].join('\n');
 
   function el(tag, attrs, children) {
@@ -120,6 +137,34 @@
   function typeLabel(entry) {
     if (entry.type === 'folder') return 'folder';
     return (entry.extension || extension(entry.name) || 'file').toLowerCase();
+  }
+
+  function confirmModal(message, options) {
+    options = options || {};
+    var confirmText = options.confirmText || 'Confirm';
+    var cancelText = options.cancelText || 'Cancel';
+    var isDanger = !!options.danger;
+    return new Promise(function (resolve) {
+      var overlay = el('div', { className: 'files-modal-overlay' });
+      var modal = el('div', { className: 'files-modal' }, [
+        el('div', { className: 'files-modal-title', textContent: message }),
+        el('div', { className: 'files-modal-actions' }, [
+          el('button', { className: 'files-modal-btn cancel', textContent: cancelText, onClick: function () { cleanup(); resolve(false); } }),
+          el('button', { className: 'files-modal-btn confirm' + (isDanger ? ' danger' : ''), textContent: confirmText, onClick: function () { cleanup(); resolve(true); } })
+        ])
+      ]);
+      overlay.appendChild(modal);
+      document.body.appendChild(overlay);
+      overlay.querySelector('.files-modal-btn').focus();
+      function onKeydown(e) {
+        if (e.key === 'Escape') { cleanup(); resolve(false); }
+      }
+      document.addEventListener('keydown', onKeydown);
+      function cleanup() {
+        document.removeEventListener('keydown', onKeydown);
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      }
+    });
   }
 
   var FilesView = {
@@ -437,10 +482,12 @@
       function trashEntry(entry) {
         entry = entry || selectedEntry();
         if (!entry) return;
-        if (!window.confirm('Move "' + entry.name + '" to trash?')) return;
-        api.files.trash(entry.relativePath).then(function () {
-          loadEntries();
-        }).catch(function (err) { window.alert((err && err.message) ? err.message : String(err)); });
+        confirmModal('Move "' + entry.name + '" to trash?', { danger: true }).then(function (ok) {
+          if (!ok) return;
+          api.files.trash(entry.relativePath).then(function () {
+            loadEntries();
+          }).catch(function (err) { window.alert((err && err.message) ? err.message : String(err)); });
+        });
       }
 
       refreshBtn.addEventListener('click', loadEntries);
@@ -459,6 +506,123 @@
       renameCancel.addEventListener('click', cancelRename);
       createInput.addEventListener('keydown', function (event) { if (event.key === 'Enter') confirmCreate(); if (event.key === 'Escape') cancelCreate(); });
       renameInput.addEventListener('keydown', function (event) { if (event.key === 'Enter') confirmRename(); if (event.key === 'Escape') cancelRename(); });
+      /* --- Context menu --- */
+      var ctxMenu = el('div', { className: 'files-ctx-menu', style: { display: 'none' } });
+      document.body.appendChild(ctxMenu);
+
+      var ctxTarget = null;
+
+      function hideCtxMenu() {
+        ctxMenu.style.display = 'none';
+        ctxTarget = null;
+      }
+
+      function ctxItem(label, cls, onClick) {
+        return el('div', {
+          className: 'files-ctx-menu-item' + (cls ? ' ' + cls : ''),
+          onClick: function (e) { e.stopPropagation(); hideCtxMenu(); onClick(); }
+        }, [label]);
+      }
+
+      function ctxSep() {
+        return el('div', { className: 'files-ctx-menu-sep' });
+      }
+
+      function showCtxMenu(x, y, entry) {
+        ctxTarget = entry;
+        ctxMenu.innerHTML = '';
+        if (entry) {
+          var isFolder = entry.type === 'folder';
+          ctxMenu.appendChild(ctxItem(isFolder ? 'Open Folder' : 'Open', '', function () { openEntry(entry); }));
+          ctxMenu.appendChild(ctxSep());
+          ctxMenu.appendChild(ctxItem('Rename', '', function () { beginRename(entry); }));
+          ctxMenu.appendChild(ctxItem('Duplicate', '', function () { duplicateEntry(entry); }));
+          ctxMenu.appendChild(ctxSep());
+          ctxMenu.appendChild(ctxItem('Cut', '', function () { cutEntry(entry); }));
+          ctxMenu.appendChild(ctxItem('Copy', '', function () { copyEntry(entry); }));
+          ctxMenu.appendChild(ctxSep());
+          ctxMenu.appendChild(ctxItem('Move to Trash', 'danger', function () { trashEntry(entry); }));
+        } else {
+          ctxMenu.appendChild(ctxItem('New Folder', '', function () { startCreate('folder'); }));
+          ctxMenu.appendChild(ctxItem('New Markdown', '', function () { startCreate('markdown'); }));
+          ctxMenu.appendChild(ctxItem('New Text', '', function () { startCreate('text'); }));
+        }
+        ctxMenu.style.display = 'block';
+        var mw = ctxMenu.offsetWidth;
+        var mh = ctxMenu.offsetHeight;
+        var vw = window.innerWidth;
+        var vh = window.innerHeight;
+        if (x + mw > vw) x = vw - mw - 4;
+        if (y + mh > vh) y = vh - mh - 4;
+        if (x < 0) x = 0;
+        if (y < 0) y = 0;
+        ctxMenu.style.left = x + 'px';
+        ctxMenu.style.top = y + 'px';
+      }
+
+      function duplicateEntry(entry) {
+        if (!entry) return;
+        console.log('[files] Duplicate:', entry.relativePath);
+        var name = entry.name;
+        var dot = name.lastIndexOf('.');
+        var base = dot > 0 ? name.slice(0, dot) : name;
+        var ext = dot > 0 ? name.slice(dot) : '';
+        var from = scopedPath(currentPath ? currentPath + '/' + name : name);
+        var maxAttempts = 100;
+
+        function tryName(n) {
+          var newName = n === 1 ? base + ' (copy)' + ext : base + ' (copy ' + n + ')' + ext;
+          var to = scopedPath(currentPath ? currentPath + '/' + newName : newName);
+          return api.files.metadata(to).then(function () {
+            if (n >= maxAttempts) {
+              console.error('[files] Duplicate failed: all ' + maxAttempts + ' name variations are taken');
+              return null;
+            }
+            return tryName(n + 1);
+          }, function () {
+            return api.files.readText(from).then(function (content) {
+              return api.files.writeText(to, content, { createIfMissing: true, overwrite: false });
+            });
+          });
+        }
+
+        tryName(1).then(function (result) {
+          if (result !== null) loadEntries();
+        }).catch(function (err) {
+          console.error('[files] Duplicate failed:', err);
+        });
+      }
+
+      function cutEntry(entry) {
+        if (!entry) return;
+        console.log('[files] Cut:', entry.relativePath);
+        window.__filesClipboard = { action: 'cut', path: entry.relativePath, name: entry.name };
+      }
+
+      function copyEntry(entry) {
+        if (!entry) return;
+        console.log('[files] Copy:', entry.relativePath);
+        window.__filesClipboard = { action: 'copy', path: entry.relativePath, name: entry.name };
+      }
+
+      document.addEventListener('click', function (e) {
+        if (!ctxMenu.contains(e.target)) hideCtxMenu();
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') hideCtxMenu();
+      });
+
+      listContainer.addEventListener('contextmenu', function (e) {
+        e.preventDefault();
+        var row = e.target.closest('.files-item');
+        var entry = null;
+        if (row) {
+          var fp = row.getAttribute('data-file-path');
+          entry = entries.find(function (en) { return en.relativePath === fp; }) || null;
+        }
+        showCtxMenu(e.clientX, e.clientY, entry);
+      });
+
       containerEl.addEventListener('keydown', function (event) {
         if (event.target && ['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].indexOf(event.target.tagName) !== -1) return;
         if (event.key === 'Enter') openEntry(selectedEntry());
@@ -468,7 +632,10 @@
 
       loadEntries();
 
-      containerEl.__filesCleanup = function () { disposed = true; };
+      containerEl.__filesCleanup = function () {
+        disposed = true;
+        if (ctxMenu && ctxMenu.parentNode) ctxMenu.parentNode.removeChild(ctxMenu);
+      };
     },
 
     unmount: function (containerEl) {
