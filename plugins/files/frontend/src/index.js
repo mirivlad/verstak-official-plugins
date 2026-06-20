@@ -180,7 +180,8 @@
       var workspaceName = workspaceRoot || (workspaceNode && (workspaceNode.name || workspaceNode.title || workspaceNode.id)) || 'Workspace';
       var currentPath = '';
       var entries = [];
-      var selectedPath = '';
+      var selectedPaths = {};
+      var lastClickedPath = '';
       var filterText = '';
       var sortMode = 'folder-name';
       var createMode = '';
@@ -244,15 +245,21 @@
       containerEl.appendChild(renamePanel);
 
       function selectedEntry() {
-        return entries.find(function (entry) { return entry.relativePath === selectedPath; }) || null;
+        var keys = Object.keys(selectedPaths);
+        if (keys.length === 0) return null;
+        return entries.find(function (entry) { return entry.relativePath === keys[0]; }) || null;
+      }
+
+      function selectedCount() {
+        return Object.keys(selectedPaths).length;
       }
 
       function updateButtons() {
-        var sel = selectedEntry();
+        var count = selectedCount();
         upBtn.disabled = !currentPath;
-        openBtn.disabled = !sel;
-        renameBtn.disabled = !sel;
-        trashBtn.disabled = !sel;
+        openBtn.disabled = count !== 1;
+        renameBtn.disabled = count !== 1;
+        trashBtn.disabled = count === 0;
         pasteBtn.disabled = !window.__filesClipboard;
       }
 
@@ -305,8 +312,42 @@
         return out;
       }
 
-      function selectEntry(entry) {
-        selectedPath = entry ? entry.relativePath : '';
+      function selectEntry(entry, event) {
+        if (!entry) {
+          selectedPaths = {};
+          lastClickedPath = '';
+          renderList();
+          return;
+        }
+        var targetPath = entry.relativePath;
+        var visible = visibleEntries();
+
+        if (event && (event.ctrlKey || event.metaKey)) {
+          if (selectedPaths[targetPath]) {
+            delete selectedPaths[targetPath];
+          } else {
+            selectedPaths[targetPath] = true;
+          }
+          lastClickedPath = targetPath;
+        } else if (event && event.shiftKey && lastClickedPath) {
+          var lastIdx = -1;
+          var targetIdx = -1;
+          for (var i = 0; i < visible.length; i++) {
+            if (visible[i].relativePath === lastClickedPath) lastIdx = i;
+            if (visible[i].relativePath === targetPath) targetIdx = i;
+          }
+          if (lastIdx !== -1 && targetIdx !== -1) {
+            var lo = Math.min(lastIdx, targetIdx);
+            var hi = Math.max(lastIdx, targetIdx);
+            for (var j = lo; j <= hi; j++) {
+              selectedPaths[visible[j].relativePath] = true;
+            }
+          }
+        } else {
+          selectedPaths = {};
+          selectedPaths[targetPath] = true;
+          lastClickedPath = targetPath;
+        }
         renderList();
       }
 
@@ -330,12 +371,12 @@
 
         shown.forEach(function (entry) {
           var row = el('div', {
-            className: 'files-item' + (entry.relativePath === selectedPath ? ' selected' : ''),
+            className: 'files-item' + (selectedPaths[entry.relativePath] ? ' selected' : ''),
             'data-file-name': entry.name,
             'data-file-type': entry.type,
             'data-file-path': entry.relativePath,
             tabindex: '0',
-            onClick: function () { selectEntry(entry); },
+            onClick: function (e) { selectEntry(entry, e); },
             onDblclick: function () { openEntry(entry); }
           }, [
             el('div', { className: 'files-namecell' }, [
@@ -358,7 +399,8 @@
       }
 
       function loadEntries() {
-        selectedPath = '';
+        selectedPaths = {};
+        lastClickedPath = '';
         listContainer.innerHTML = '';
         listContainer.appendChild(el('div', { className: 'files-loading' }, ['Loading...']));
         updateBreadcrumb();
@@ -482,14 +524,27 @@
       }
 
       function trashEntry(entry) {
-        entry = entry || selectedEntry();
-        if (!entry) return;
-        confirmModal('Move "' + entry.name + '" to trash?', { danger: true }).then(function (ok) {
-          if (!ok) return;
-          api.files.trash(entry.relativePath).then(function () {
-            loadEntries();
-          }).catch(function (err) { window.alert((err && err.message) ? err.message : String(err)); });
-        });
+        var count = selectedCount();
+        if (entry) {
+          confirmModal('Move "' + entry.name + '" to trash?', { danger: true }).then(function (ok) {
+            if (!ok) return;
+            api.files.trash(entry.relativePath).then(function () {
+              loadEntries();
+            }).catch(function (err) { window.alert((err && err.message) ? err.message : String(err)); });
+          });
+        } else if (count > 1) {
+          confirmModal('Move ' + count + ' items to trash?', { danger: true }).then(function (ok) {
+            if (!ok) return;
+            var paths = Object.keys(selectedPaths);
+            Promise.allSettled(paths.map(function (p) { return api.files.trash(p); })).then(function () {
+              loadEntries();
+            });
+          });
+        } else {
+          var single = selectedEntry();
+          if (!single) return;
+          trashEntry(single);
+        }
       }
 
       refreshBtn.addEventListener('click', loadEntries);
@@ -677,11 +732,25 @@
         showCtxMenu(e.clientX, e.clientY, entry);
       });
 
+      listContainer.addEventListener('click', function (e) {
+        if (!e.target.closest('.files-item')) {
+          selectEntry(null);
+        }
+      });
+
       containerEl.addEventListener('keydown', function (event) {
         if (event.target && ['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].indexOf(event.target.tagName) !== -1) return;
         if (event.key === 'Enter') openEntry(selectedEntry());
         if (event.key === 'Delete' || event.key === 'Backspace') trashEntry();
         if (event.key === 'F2') beginRename();
+        if (event.key === 'a' && (event.ctrlKey || event.metaKey)) {
+          event.preventDefault();
+          var vis = visibleEntries();
+          selectedPaths = {};
+          vis.forEach(function (entry) { selectedPaths[entry.relativePath] = true; });
+          lastClickedPath = vis.length > 0 ? vis[vis.length - 1].relativePath : '';
+          renderList();
+        }
       });
 
       loadEntries();
