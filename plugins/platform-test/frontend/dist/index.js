@@ -458,12 +458,151 @@
         apiStatusList,
       ]);
 
+      /* ── Mouse Event Inspector ──────────────────────────────────── */
+      var mouseLog = [];
+      var mouseCapturing = false;
+      var mouseHandlers = [];
+      var mouseEventTypes = ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'auxclick'];
+      var mouseLogContainer = el('pre', {
+        className: 'pt-mouse-log',
+        style: {
+          background: '#0d0d1a',
+          color: '#4ecca3',
+          padding: '0.75rem',
+          borderRadius: '6px',
+          fontSize: '0.75rem',
+          fontFamily: 'monospace',
+          maxHeight: '300px',
+          overflow: 'auto',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-all',
+          margin: '0.5rem 0',
+          lineHeight: '1.5',
+        },
+      }, ['']);
+
+      var mouseCountSpan = span('pt-list-value', '0');
+
+      function renderMouseLog() {
+        if (mouseLog.length === 0) {
+          mouseLogContainer.textContent = '(no events captured)';
+          mouseCountSpan.textContent = '0';
+          return;
+        }
+        var lines = mouseLog.map(function (e, i) {
+          return '[' + (i + 1) + '] ' + e.type + '  button=' + e.button + '  buttons=' + e.buttons +
+            '  which=' + e.which + '  pointerType=' + e.pointerType +
+            '  defaultPrevented=' + e.defaultPrevented +
+            '  target=' + e.targetTag + (e.targetClass ? '.' + e.targetClass : '');
+        });
+        mouseLogContainer.textContent = lines.join('\n');
+        mouseCountSpan.textContent = String(mouseLog.length);
+        mouseLogContainer.scrollTop = mouseLogContainer.scrollHeight;
+      }
+
+      function onMouseEvent(e) {
+        mouseLog.push({
+          type: e.type,
+          button: e.button,
+          buttons: e.buttons,
+          which: e.which,
+          pointerType: e.pointerType || '',
+          defaultPrevented: e.defaultPrevented,
+          targetTag: e.target ? e.target.tagName : '',
+          targetClass: e.target ? (e.target.className || '') : '',
+          time: Date.now(),
+        });
+        if (mouseLog.length > 200) mouseLog.shift();
+        renderMouseLog();
+      }
+
+      function startMouseCapture() {
+        if (mouseCapturing) return;
+        mouseCapturing = true;
+        mouseEventTypes.forEach(function (type) {
+          var handler = function (e) { onMouseEvent(e); };
+          window.addEventListener(type, handler, true);
+          mouseHandlers.push({ type: type, handler: handler });
+        });
+        startStopBtn.textContent = '■ Stop Capture';
+        startStopBtn.setAttribute('data-mouse-capturing', 'true');
+        renderMouseLog();
+      }
+
+      function stopMouseCapture() {
+        if (!mouseCapturing) return;
+        mouseCapturing = false;
+        mouseHandlers.forEach(function (h) {
+          window.removeEventListener(h.type, h.handler, true);
+        });
+        mouseHandlers = [];
+        startStopBtn.textContent = '▶ Start Capture';
+        startStopBtn.setAttribute('data-mouse-capturing', 'false');
+      }
+
+      var startStopBtn = el('button', {
+        className: 'btn btn-primary',
+        style: { marginRight: '0.5rem' },
+        onClick: function () {
+          if (mouseCapturing) { stopMouseCapture(); } else { startMouseCapture(); }
+        },
+      }, ['▶ Start Capture']);
+
+      var clearBtn = el('button', {
+        className: 'btn btn-secondary',
+        style: { marginRight: '0.5rem' },
+        onClick: function () {
+          mouseLog = [];
+          renderMouseLog();
+        },
+      }, ['Clear']);
+
+      var copyBtn = el('button', {
+        className: 'btn btn-secondary',
+        onClick: function () {
+          var json = JSON.stringify(mouseLog, null, 2);
+          if (navigator.clipboard) {
+            navigator.clipboard.writeText(json).then(function () {
+              copyBtn.textContent = '✓ Copied!';
+              setTimeout(function () { copyBtn.textContent = 'Copy JSON'; }, 1500);
+            });
+          } else {
+            var ta = document.createElement('textarea');
+            ta.value = json;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            copyBtn.textContent = '✓ Copied!';
+            setTimeout(function () { copyBtn.textContent = 'Copy JSON'; }, 1500);
+          }
+        },
+      }, ['Copy JSON']);
+
+      trackCleanup(function () { stopMouseCapture(); });
+
+      var mouseCard = div('pt-card', [
+        el('h3', { className: 'pt-card-title' }, ['Mouse Event Inspector']),
+        el('p', { style: { margin: '0 0 0.5rem', color: '#a0a0b8', fontSize: '0.8rem' } }, [
+          'Captures ALL mouse/pointer events on window. Press back/forward buttons to see what WebKitGTK reports.',
+        ]),
+        el('div', { style: { display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' } }, [
+          startStopBtn,
+          clearBtn,
+          copyBtn,
+          span('pt-list-label', ' Events:'),
+          mouseCountSpan,
+        ]),
+        mouseLogContainer,
+      ]);
+
       /* ── Assemble ──────────────────────────────────────────────── */
       containerEl.appendChild(header);
       containerEl.appendChild(badgeRow);
       containerEl.appendChild(bridgeCard);
       containerEl.appendChild(testsCard);
       containerEl.appendChild(capsCard);
+      containerEl.appendChild(mouseCard);
       containerEl.appendChild(infoCard);
       containerEl.appendChild(apiCard);
     },

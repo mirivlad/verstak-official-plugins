@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "id": "verstak.notes",
+  "name": "Notes",
+  "version": "0.1.0",
+  "apiVersion": "0.1.0",
+  "description": "Workspace-scoped notes manager with create, rename, overview, and workbench integration.",
+  "source": "official",
+  "icon": "file-text",
+  "provides": [
+    "verstak/notes/v1"
+  ],
+  "requires": [
+    "verstak/core/files/v1",
+    "verstak/core/workbench/v1"
+  ],
+  "optionalRequires": [
+    "verstak/core/notes/v1"
+  ],
+  "permissions": [
+    "files.read",
+    "files.write",
+    "workbench.open",
+    "ui.register"
+  ],
+  "frontend": {
+    "entry": "frontend/src/index.js"
+  },
+  "contributes": {
+    "workspaceItems": [
+      {
+        "id": "verstak.notes.workspace",
+        "title": "Notes",
+        "icon": "file-text",
+        "component": "NotesView"
+      }
+    ]
+  }
+}

@@ -84,8 +84,12 @@
     return escapeHtml(s).replace(/"/g, '&quot;');
   }
 
-  function renderInline(text) {
+  function renderInline(text, isNotesContext) {
     var html = escapeHtml(text);
+    // Internal wiki links [[Title]] — only render in notes context
+    if (isNotesContext) {
+      html = html.replace(/\[\[([^\]]+)\]\]/g, '<a href="#" class="internal-link" data-note-link="$1">$1</a>');
+    }
     html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
     html = html.replace(/!\[([^\]]*)\]\((https?:\/\/[^)]+)\)/g, '<img alt="$1" src="$2">');
     html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+|mailto:[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
@@ -95,7 +99,7 @@
     return html;
   }
 
-  function renderMarkdown(text) {
+  function renderMarkdown(text, isNotesContext) {
     var lines = String(text || '').split(/\r?\n/);
     var out = [];
     var inCode = false;
@@ -113,14 +117,14 @@
     function closeTable() {
       if (!table.length) return;
       out.push('<table><tbody>' + table.map(function (row) {
-        return '<tr>' + row.map(function (cell) { return '<td>' + renderInline(cell.trim()) + '</td>'; }).join('') + '</tr>';
+        return '<tr>' + row.map(function (cell) { return '<td>' + renderInline(cell.trim(), isNotesContext) + '</td>'; }).join('') + '</tr>';
       }).join('') + '</tbody></table>');
       table = [];
     }
     function pushParagraph(line) {
       closeList();
       closeTable();
-      if (line.trim()) out.push('<p>' + renderInline(line) + '</p>');
+      if (line.trim()) out.push('<p>' + renderInline(line, isNotesContext) + '</p>');
     }
 
     lines.forEach(function (line) {
@@ -154,7 +158,7 @@
       if (heading) {
         closeList();
         closeTable();
-        out.push('<h' + heading[1].length + '>' + renderInline(heading[2]) + '</h' + heading[1].length + '>');
+        out.push('<h' + heading[1].length + '>' + renderInline(heading[2], isNotesContext) + '</h' + heading[1].length + '>');
         return;
       }
 
@@ -169,7 +173,7 @@
       if (quote) {
         closeList();
         closeTable();
-        out.push('<blockquote>' + renderInline(quote[1]) + '</blockquote>');
+        out.push('<blockquote>' + renderInline(quote[1], isNotesContext) + '</blockquote>');
         return;
       }
 
@@ -185,9 +189,9 @@
           listType = desired;
         }
         if (task) {
-          out.push('<li><input class="task" type="checkbox" disabled ' + (task[1].toLowerCase() === 'x' ? 'checked' : '') + '> ' + renderInline(task[2]) + '</li>');
+          out.push('<li><input class="task" type="checkbox" disabled ' + (task[1].toLowerCase() === 'x' ? 'checked' : '') + '> ' + renderInline(task[2], isNotesContext) + '</li>');
         } else {
-          out.push('<li>' + renderInline((ordered || unordered)[1]) + '</li>');
+          out.push('<li>' + renderInline((ordered || unordered)[1], isNotesContext) + '</li>');
         }
         return;
       }
@@ -337,7 +341,7 @@
       }
 
       function updatePreview() {
-        if (previewEl) previewEl.innerHTML = isMarkdown ? renderMarkdown(currentContent) : '<pre>' + escapeHtml(currentContent) + '</pre>';
+        if (previewEl) previewEl.innerHTML = isMarkdown ? renderMarkdown(currentContent, editorMode === 'notes-markdown') : '<pre>' + escapeHtml(currentContent) + '</pre>';
       }
 
       function syncFromTextarea() {
@@ -404,7 +408,15 @@
         if (!dirty || disposed) return Promise.resolve();
         saveState = 'saving';
         updateStatus();
-        return api.files.writeText(resourcePath, currentContent, { createIfMissing: false, overwrite: true }).then(function () {
+        var savePromise;
+        if (editorMode === 'notes-markdown') {
+          savePromise = api.backend.call('SaveNote', resourcePath, currentContent).then(function (errStr) {
+            if (errStr) throw new Error(errStr);
+          });
+        } else {
+          savePromise = api.files.writeText(resourcePath, currentContent, { createIfMissing: false, overwrite: true });
+        }
+        return savePromise.then(function () {
           if (disposed) return;
           savedContent = currentContent;
           dirty = false;
@@ -430,7 +442,16 @@
         if (dirty && !window.confirm('Discard unsaved changes and reload from disk?')) return;
         editorWrap.innerHTML = '';
         editorWrap.appendChild(el('div', { className: 'de-loading' }, ['Loading...']));
-        api.files.readText(resourcePath).then(function (content) {
+        var readPromise;
+        if (editorMode === 'notes-markdown') {
+          readPromise = api.backend.call('ReadNote', resourcePath).then(function (result) {
+            var content = Array.isArray(result) ? result[0] : result;
+            return content == null ? '' : content;
+          });
+        } else {
+          readPromise = api.files.readText(resourcePath);
+        }
+        readPromise.then(function (content) {
           if (disposed) return;
           currentContent = String(content == null ? '' : content);
           savedContent = currentContent;
@@ -484,6 +505,24 @@
       }
 
       reloadFromDisk();
+
+      containerEl.addEventListener('click', function (event) {
+        var link = event.target.closest('.internal-link');
+        if (!link) return;
+        event.preventDefault();
+        var noteTitle = link.getAttribute('data-note-link');
+        if (!noteTitle) return;
+        var parentPath = resourcePath;
+        var idx = parentPath.indexOf('/Notes/');
+        if (idx !== -1) {
+          parentPath = parentPath.substring(0, idx);
+        }
+        api.request.open({
+          path: parentPath + '/Notes/' + noteTitle + '.md',
+          mode: 'view',
+          context: { notesMode: true }
+        });
+      });
 
       containerEl.__deCleanup = function () {
         disposed = true;

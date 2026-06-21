@@ -17,7 +17,10 @@
   var STYLES = [
     '.files-root{display:flex;flex-direction:column;height:100%;min-height:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:#e0e0e0;background:#0d0d1a;outline:none}',
     '.files-toolbar{display:flex;align-items:center;gap:.45rem;padding:.5rem .75rem;border-bottom:1px solid #16213e;flex-shrink:0;background:#12122a;flex-wrap:wrap}',
-    '.files-toolbar-btn,.files-row-btn{font-size:.75rem;padding:.28rem .58rem;border:1px solid #333;border-radius:4px;background:#1a1a2e;color:#ccc;cursor:pointer}',
+    '.files-toolbar-btn,.files-row-btn{display:inline-flex;align-items:center;justify-content:center;border:1px solid #333;border-radius:4px;background:#1a1a2e;color:#ccc;cursor:pointer;line-height:1}',
+    '.files-toolbar-btn{width:2rem;height:2rem;padding:0}',
+    '.files-row-btn{width:1.75rem;height:1.75rem;padding:0}',
+    '.files-toolbar-btn svg,.files-row-btn svg{width:16px;height:16px;display:block;fill:currentColor}',
     '.files-toolbar-btn:hover,.files-row-btn:hover{background:#2a2a4e;border-color:#4ecca3}',
     '.files-toolbar-btn:disabled,.files-row-btn:disabled{opacity:.45;cursor:default;border-color:#333}',
     '.files-breadcrumb{display:flex;align-items:center;gap:.25rem;font-size:.8rem;color:#8b8ba8;min-width:160px;flex:1;overflow:hidden}',
@@ -27,7 +30,7 @@
     '.files-breadcrumb-sep{color:#555}',
     '.files-filter,.files-sort,.files-create-input,.files-rename-input{font-size:.78rem;padding:.32rem .5rem;border:1px solid #333;border-radius:4px;background:#0d0d1a;color:#e0e0e0;outline:none}',
     '.files-filter{width:11rem}',
-    '.files-sort{width:9.5rem}',
+    '.files-sort{width:9.5rem;appearance:none;background-color:#0d0d1a;background-image:linear-gradient(45deg,transparent 50%,#8b8ba8 50%),linear-gradient(135deg,#8b8ba8 50%,transparent 50%);background-position:calc(100% - 14px) 50%,calc(100% - 9px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:1.6rem}',
     '.files-filter:focus,.files-sort:focus,.files-create-input:focus,.files-rename-input:focus{border-color:#4ecca3}',
     '.files-list{flex:1;overflow:auto;min-height:0}',
     '.files-header,.files-item{display:grid;grid-template-columns:minmax(160px,1fr) 90px 90px 150px 220px;align-items:center;gap:.5rem;padding:.38rem .75rem;border-bottom:1px solid rgba(22,33,62,.55)}',
@@ -49,6 +52,7 @@
     '@media(max-width:760px){.files-header,.files-item{grid-template-columns:minmax(130px,1fr) 70px 0 0 150px}.files-header span:nth-child(3),.files-header span:nth-child(4),.files-item-meta.hide-narrow{display:none}.files-toolbar{align-items:stretch}.files-filter,.files-sort{width:100%}}',
     '.files-ctx-menu{position:fixed;z-index:9999;min-width:180px;background:#1a1a2e;border:1px solid #333;border-radius:6px;padding:6px 0;box-shadow:0 8px 24px rgba(0,0,0,.5);font-size:.84rem;color:#e0e0e0;user-select:none}',
     '.files-ctx-menu-item{padding:6px 16px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:.5rem}',
+    '.files-ctx-menu-item svg{width:14px;height:14px;fill:currentColor;opacity:.9}',
     '.files-ctx-menu-item:hover{background:#2a2a4e}',
     '.files-ctx-menu-item.danger{color:#e74c3c}',
     '.files-ctx-menu-item.danger:hover{background:#2a2a4e;color:#ff6b6b}',
@@ -91,6 +95,33 @@
 
   function svgIcon(path) {
     return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><path d="' + path + '" fill="currentColor"/></svg>';
+  }
+
+  var ACTION_ICONS = {
+    back: 'M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.42-1.41L7.83 13H20v-2z',
+    forward: 'M4 13h12.17l-5.59 5.59L12 20l8-8-8-8-1.42 1.41L16.17 11H4v2z',
+    up: 'M4 12l1.41 1.41L11 7.83V20h2V7.83l5.59 5.58L20 12 12 4l-8 8z',
+    refresh: 'M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z',
+    folderAdd: 'M20 6h-8.17l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-1 8h-3v3h-2v-3h-3v-2h3V9h2v3h3v2z',
+    markdownAdd: 'M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 8V4l5 5h-5zm-6 6h2v-3l2 3h1l2-3v3h2v-6h-2l-2.5 3.5L9 10H7v6z',
+    textAdd: 'M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 8V4l5 5h-5zM8 13h8v2H8v-2zm0 4h8v2H8v-2z',
+    open: 'M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7zM5 5h6V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6h-2v6H5V5z',
+    rename: 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z',
+    trash: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM8 9h8v10H8V9zm7.5-5-1-1h-5l-1 1H5v2h14V4z',
+    cut: 'M9.64 7.64c.23-.5.36-1.05.36-1.64 0-2.21-1.79-4-4-4S2 3.79 2 6s1.79 4 4 4c.59 0 1.14-.13 1.64-.36L10 12l-2.36 2.36C7.14 14.13 6.59 14 6 14c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4c0-.59-.13-1.14-.36-1.64L12 14l7 7h3L9.64 7.64zM6 8c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm0 12c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm6-8.5c-.28 0-.5.22-.5.5s.22.5.5.5.5-.22.5-.5-.22-.5-.5-.5zM19 3l-6 6 2 2 7-8h-3z',
+    copy: 'M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z',
+    paste: 'M19 2h-4.18C14.4.84 13.3 0 12 0S9.6.84 9.18 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm7 18H5V4h2v3h10V4h2v16z'
+  };
+
+  function iconButton(action, title, iconKey, onClick, extraClass) {
+    return el('button', {
+      className: (extraClass || 'files-toolbar-btn'),
+      'data-files-action': action,
+      title: title,
+      'aria-label': title,
+      innerHTML: svgIcon(ACTION_ICONS[iconKey || action] || ACTION_ICONS.open),
+      onClick: onClick
+    });
   }
 
   function cleanPath(path) {
@@ -222,7 +253,10 @@
       var workspaceNode = props && props.workspaceNode;
       var workspaceRoot = cleanPath(props && (props.workspaceRootPath || (workspaceNode && (workspaceNode.rootPath || workspaceNode.name || workspaceNode.id))) || '');
       var workspaceName = workspaceRoot || (workspaceNode && (workspaceNode.name || workspaceNode.title || workspaceNode.id)) || 'Workspace';
-      var currentPath = '';
+      window.__filesHistoryByWorkspace = window.__filesHistoryByWorkspace || {};
+      var historyKey = workspaceRoot || workspaceName;
+      var savedHistory = window.__filesHistoryByWorkspace[historyKey] || { stack: [''], index: 0, currentPath: '' };
+      var currentPath = cleanPath(savedHistory.currentPath || '');
       var entries = [];
       var selectedPaths = {};
       var lastClickedPath = '';
@@ -231,8 +265,12 @@
       var createMode = '';
       var renameTarget = null;
       var disposed = false;
-      var historyStack = [''];
-      var historyIndex = 0;
+      var historyStack = Array.isArray(savedHistory.stack) && savedHistory.stack.length ? savedHistory.stack.map(cleanPath) : [currentPath];
+      var historyIndex = Math.max(0, Math.min(Number(savedHistory.index) || 0, historyStack.length - 1));
+      if (historyStack[historyIndex] !== currentPath) {
+        historyStack = [currentPath];
+        historyIndex = 0;
+      }
       var navigatingHistory = false;
 
       function scopedPath(local) {
@@ -249,17 +287,19 @@
 
       var toolbar = el('div', { className: 'files-toolbar' });
       var breadcrumb = el('div', { className: 'files-breadcrumb' });
-      var backBtn = el('button', { className: 'files-toolbar-btn', 'data-files-action': 'back', title: 'Back (Alt+Left)' }, ['\u2190']);
-      var forwardBtn = el('button', { className: 'files-toolbar-btn', 'data-files-action': 'forward', title: 'Forward (Alt+Right)' }, ['\u2192']);
-      var upBtn = el('button', { className: 'files-toolbar-btn', 'data-files-action': 'up', title: 'Up' }, ['Up']);
-      var refreshBtn = el('button', { className: 'files-toolbar-btn', 'data-files-action': 'refresh', title: 'Refresh' }, ['Refresh']);
-      var newFolderBtn = el('button', { className: 'files-toolbar-btn', 'data-files-action': 'new-folder' }, ['+ Folder']);
-      var newMdBtn = el('button', { className: 'files-toolbar-btn', 'data-files-action': 'new-markdown' }, ['+ Markdown']);
-      var newTextBtn = el('button', { className: 'files-toolbar-btn', 'data-files-action': 'new-text' }, ['+ Text']);
-      var openBtn = el('button', { className: 'files-toolbar-btn', 'data-files-action': 'open' }, ['Open']);
-      var renameBtn = el('button', { className: 'files-toolbar-btn', 'data-files-action': 'rename' }, ['Rename']);
-      var trashBtn = el('button', { className: 'files-toolbar-btn', 'data-files-action': 'trash' }, ['Trash']);
-      var pasteBtn = el('button', { className: 'files-toolbar-btn', 'data-files-action': 'paste' }, ['Paste']);
+      var backBtn = iconButton('back', 'Back', 'back', goBack);
+      var forwardBtn = iconButton('forward', 'Forward', 'forward', goForward);
+      var upBtn = iconButton('up', 'Up', 'up', goUp);
+      var refreshBtn = iconButton('refresh', 'Refresh', 'refresh', loadEntries);
+      var newFolderBtn = iconButton('new-folder', 'New folder', 'folderAdd', function () { startCreate('folder'); });
+      var newMdBtn = iconButton('new-markdown', 'New markdown file', 'markdownAdd', function () { startCreate('markdown'); });
+      var newTextBtn = iconButton('new-text', 'New text file', 'textAdd', function () { startCreate('text'); });
+      var openBtn = iconButton('open', 'Open', 'open', function () { openEntry(selectedEntry()); });
+      var renameBtn = iconButton('rename', 'Rename', 'rename', function () { beginRename(); });
+      var trashBtn = iconButton('trash', 'Move to trash', 'trash', function () { trashEntry(); });
+      var cutBtn = iconButton('cut', 'Cut', 'cut', function () { cutSelection(); });
+      var copyBtn = iconButton('copy', 'Copy', 'copy', function () { copySelection(); });
+      var pasteBtn = iconButton('paste', 'Paste', 'paste', function () { pasteEntry(); });
       var filterInput = el('input', { className: 'files-filter', 'data-files-filter': '', placeholder: 'Filter current folder' });
       var sortSelect = el('select', { className: 'files-sort', 'data-files-sort': '' }, [
         el('option', { value: 'folder-name' }, ['Folders + name']),
@@ -269,7 +309,7 @@
         el('option', { value: 'size-desc' }, ['Size'])
       ]);
       toolbar.appendChild(breadcrumb);
-      [backBtn, forwardBtn, upBtn, refreshBtn, newFolderBtn, newMdBtn, newTextBtn, openBtn, renameBtn, trashBtn, pasteBtn, filterInput, sortSelect].forEach(function (node) { toolbar.appendChild(node); });
+      [backBtn, forwardBtn, upBtn, refreshBtn, newFolderBtn, newMdBtn, newTextBtn, openBtn, renameBtn, trashBtn, cutBtn, copyBtn, pasteBtn, filterInput, sortSelect].forEach(function (node) { toolbar.appendChild(node); });
       containerEl.appendChild(toolbar);
 
       var listContainer = el('div', { className: 'files-list', 'data-files-list': '' });
@@ -299,6 +339,12 @@
         return entries.find(function (entry) { return entry.relativePath === keys[0]; }) || null;
       }
 
+      function selectedEntries() {
+        return Object.keys(selectedPaths).map(function (path) {
+          return entries.find(function (entry) { return entry.relativePath === path; }) || null;
+        }).filter(Boolean);
+      }
+
       function selectedCount() {
         return Object.keys(selectedPaths).length;
       }
@@ -309,12 +355,22 @@
         openBtn.disabled = count !== 1;
         renameBtn.disabled = count !== 1;
         trashBtn.disabled = count === 0;
-        pasteBtn.disabled = !window.__filesClipboard;
+        cutBtn.disabled = count === 0;
+        copyBtn.disabled = count === 0;
+        pasteBtn.disabled = !(window.__filesClipboard && window.__filesClipboard.items && window.__filesClipboard.items.length);
       }
 
       function updateHistoryButtons() {
         backBtn.disabled = historyIndex <= 0;
         forwardBtn.disabled = historyIndex >= historyStack.length - 1;
+      }
+
+      function saveHistoryState() {
+        window.__filesHistoryByWorkspace[historyKey] = {
+          stack: historyStack.slice(),
+          index: historyIndex,
+          currentPath: currentPath
+        };
       }
 
       function updateBreadcrumb() {
@@ -458,10 +514,9 @@
             el('span', { className: 'files-item-meta hide-narrow' }, [entry.type === 'folder' ? '' : formatSize(entry.size)]),
             el('span', { className: 'files-item-meta hide-narrow' }, [formatDate(entry.modifiedAt)]),
             el('div', { className: 'files-row-actions' }, [
-              el('button', { className: 'files-row-btn', onClick: function (event) { event.stopPropagation(); openEntry(entry); } }, ['Open']),
-              el('button', { className: 'files-row-btn', onClick: function (event) { event.stopPropagation(); beginRename(entry); } }, ['Rename']),
-              el('button', { className: 'files-row-btn', onClick: function (event) { event.stopPropagation(); trashEntry(entry); } }, ['Trash']),
-              entry.type === 'folder' ? el('button', { className: 'files-row-btn', onClick: function (event) { event.stopPropagation(); navigateTo(localPath(entry.relativePath)); startCreate('markdown'); } }, ['New here']) : null
+              iconButton('row-open', 'Open', 'open', function (event) { event.stopPropagation(); openEntry(entry); }, 'files-row-btn'),
+              iconButton('row-rename', 'Rename', 'rename', function (event) { event.stopPropagation(); beginRename(entry); }, 'files-row-btn'),
+              iconButton('row-trash', 'Move to trash', 'trash', function (event) { event.stopPropagation(); trashEntry(entry); }, 'files-row-btn')
             ])
           ]);
           listContainer.appendChild(row);
@@ -504,6 +559,7 @@
         cancelCreate();
         cancelRename();
         updateHistoryButtons();
+        saveHistoryState();
         loadEntries();
       }
 
@@ -661,17 +717,6 @@
         }
       }
 
-      backBtn.addEventListener('click', goBack);
-      forwardBtn.addEventListener('click', goForward);
-      refreshBtn.addEventListener('click', loadEntries);
-      upBtn.addEventListener('click', goUp);
-      newFolderBtn.addEventListener('click', function () { startCreate('folder'); });
-      newMdBtn.addEventListener('click', function () { startCreate('markdown'); });
-      newTextBtn.addEventListener('click', function () { startCreate('text'); });
-      openBtn.addEventListener('click', function () { openEntry(selectedEntry()); });
-      renameBtn.addEventListener('click', function () { beginRename(); });
-      trashBtn.addEventListener('click', function () { trashEntry(); });
-      pasteBtn.addEventListener('click', function () { pasteEntry(); });
       filterInput.addEventListener('input', function () { filterText = filterInput.value; renderList(); });
       sortSelect.addEventListener('change', function () { sortMode = sortSelect.value; renderList(); });
       createConfirm.addEventListener('click', confirmCreate);
@@ -691,11 +736,15 @@
         ctxTarget = null;
       }
 
-      function ctxItem(label, cls, onClick) {
+      function ctxItem(label, cls, onClick, action, iconKey) {
         return el('div', {
           className: 'files-ctx-menu-item' + (cls ? ' ' + cls : ''),
+          'data-files-menu-action': action || '',
           onClick: function (e) { e.stopPropagation(); hideCtxMenu(); onClick(); }
-        }, [label]);
+        }, [
+          iconKey ? el('span', { innerHTML: svgIcon(ACTION_ICONS[iconKey] || ACTION_ICONS.open) }) : null,
+          label
+        ]);
       }
 
       function ctxSep() {
@@ -706,25 +755,77 @@
         ctxTarget = entry;
         ctxMenu.innerHTML = '';
         if (entry) {
+          if (!selectedPaths[entry.relativePath]) {
+            selectedPaths = {};
+            selectedPaths[entry.relativePath] = true;
+            lastClickedPath = entry.relativePath;
+            renderList();
+          }
           var isFolder = entry.type === 'folder';
-          ctxMenu.appendChild(ctxItem(isFolder ? 'Open Folder' : 'Open', '', function () { openEntry(entry); }));
-          ctxMenu.appendChild(ctxSep());
-          ctxMenu.appendChild(ctxItem('Rename', '', function () { beginRename(entry); }));
-          ctxMenu.appendChild(ctxItem('Duplicate', '', function () { duplicateEntry(entry); }));
-          ctxMenu.appendChild(ctxSep());
-          ctxMenu.appendChild(ctxItem('Cut', '', function () { cutEntry(entry); }));
-          if (entry.type !== 'folder') {
-            ctxMenu.appendChild(ctxItem('Copy', '', function () { copyEntry(entry); }));
+          ctxMenu.appendChild(ctxItem(isFolder ? 'Open Folder' : 'Open', '', function () { openEntry(entry); }, 'open', 'open'));
+          var entryLocalPath = localPath(entry.relativePath);
+          var isNotes = entryLocalPath === 'Notes' || entryLocalPath.split('/')[0] === 'Notes';
+          if (isNotes) {
+            ctxMenu.appendChild(ctxSep());
+            if (isFolder) {
+              ctxMenu.appendChild(ctxItem('Create Note', '', function () {
+                var title = prompt('Note title:');
+                if (!title) return;
+                api.backend.call('NormalizeNoteTitle', title).then(function (result) {
+                  var safeTitle = Array.isArray(result) ? result[0] : (typeof result === 'string' ? result : title);
+                  if (!safeTitle) safeTitle = title;
+                  return api.backend.call('CreateNote', scopedPath(entryLocalPath), safeTitle).then(function (cr) {
+                    var crErr = Array.isArray(cr) ? cr[1] : '';
+                    if (crErr) { window.alert(crErr); return; }
+                    loadEntries();
+                    var crValue = Array.isArray(cr) ? cr[0] : cr;
+                    var notePath = (crValue && crValue.path) ? crValue.path : '';
+                    if (notePath) {
+                      api.workbench.openResource({
+                        kind: 'vault-file',
+                        path: localPath(notePath),
+                        mode: 'edit',
+                        extension: '.md',
+                        context: { notesMode: true, sourcePluginId: 'verstak.files' }
+                      }).catch(function () {});
+                    }
+                  });
+                }).catch(function (err) { window.alert('Failed to create note: ' + (err.message || String(err))); });
+              }, 'create-note', 'markdownAdd'));
+              ctxMenu.appendChild(ctxItem('Open Overview', '', function () {
+                api.backend.call('EnsureOverview', scopedPath(entryLocalPath)).then(function (result) {
+                  var ovValue = Array.isArray(result) ? result[0] : result;
+                  var overviewPath = (ovValue && ovValue.path) ? ovValue.path : '';
+                  if (overviewPath) {
+                    api.workbench.openResource({
+                      kind: 'vault-file',
+                      path: localPath(overviewPath),
+                      mode: 'view',
+                      extension: '.md',
+                      context: { notesMode: true, sourcePluginId: 'verstak.files' }
+                    }).catch(function () {});
+                  }
+                }).catch(function (err) { window.alert('Failed to open overview: ' + (err.message || String(err))); });
+              }, 'open-overview', 'open'));
+            }
           }
           ctxMenu.appendChild(ctxSep());
-          ctxMenu.appendChild(ctxItem('Move to Trash', 'danger', function () { trashEntry(entry); }));
+          ctxMenu.appendChild(ctxItem('Rename', '', function () { beginRename(entry); }, 'rename', 'rename'));
+          if (entry.type !== 'folder') {
+            ctxMenu.appendChild(ctxItem('Duplicate', '', function () { duplicateEntry(entry); }, 'duplicate', 'copy'));
+          }
+          ctxMenu.appendChild(ctxSep());
+          ctxMenu.appendChild(ctxItem('Cut', '', function () { cutSelection(); }, 'cut', 'cut'));
+          ctxMenu.appendChild(ctxItem('Copy', '', function () { copySelection(); }, 'copy', 'copy'));
+          ctxMenu.appendChild(ctxSep());
+          ctxMenu.appendChild(ctxItem('Move to Trash', 'danger', function () { trashEntry(); }, 'trash', 'trash'));
         } else {
-          ctxMenu.appendChild(ctxItem('New Folder', '', function () { startCreate('folder'); }));
-          ctxMenu.appendChild(ctxItem('New Markdown', '', function () { startCreate('markdown'); }));
-          ctxMenu.appendChild(ctxItem('New Text', '', function () { startCreate('text'); }));
-          if (window.__filesClipboard) {
+          ctxMenu.appendChild(ctxItem('New Folder', '', function () { startCreate('folder'); }, 'new-folder', 'folderAdd'));
+          ctxMenu.appendChild(ctxItem('New Markdown', '', function () { startCreate('markdown'); }, 'new-markdown', 'markdownAdd'));
+          ctxMenu.appendChild(ctxItem('New Text', '', function () { startCreate('text'); }, 'new-text', 'textAdd'));
+          if (window.__filesClipboard && window.__filesClipboard.items && window.__filesClipboard.items.length) {
             ctxMenu.appendChild(ctxSep());
-            ctxMenu.appendChild(ctxItem('Paste', '', function () { pasteEntry(); }));
+            ctxMenu.appendChild(ctxItem('Paste', '', function () { pasteEntry(); }, 'paste', 'paste'));
           }
         }
         ctxMenu.style.display = 'block';
@@ -773,64 +874,73 @@
         });
       }
 
-      function cutEntry(entry) {
-        if (!entry) return;
-        console.log('[files] Cut:', entry.relativePath);
-        window.__filesClipboard = { action: 'cut', path: entry.relativePath, name: entry.name, isFolder: entry.type === 'folder' };
+      function clipboardItemsFromSelection() {
+        var selected = selectedEntries();
+        if (selected.length === 0) return [];
+        return selected.map(function (entry) {
+          return { path: entry.relativePath, name: entry.name, type: entry.type };
+        });
+      }
+
+      function setClipboard(action, items) {
+        if (!items || !items.length) return;
+        window.__filesClipboard = {
+          action: action,
+          workspaceRoot: workspaceRoot,
+          items: items
+        };
         updateButtons();
       }
 
-      function copyEntry(entry) {
-        if (!entry) return;
-        if (entry.type === 'folder') { console.log('[files] Copy for folders not yet supported'); return; }
-        console.log('[files] Copy:', entry.relativePath);
-        window.__filesClipboard = { action: 'copy', path: entry.relativePath, name: entry.name, isFolder: false };
-        updateButtons();
+      function cutSelection() {
+        setClipboard('cut', clipboardItemsFromSelection());
+      }
+
+      function copySelection() {
+        var items = clipboardItemsFromSelection().filter(function (item) { return item.type !== 'folder'; });
+        if (items.length === 0) return;
+        setClipboard('copy', items);
+      }
+
+      function uniqueDestinationName(name, occupied) {
+        if (!occupied[name]) return name;
+        var dot = name.lastIndexOf('.');
+        var base = dot > 0 ? name.slice(0, dot) : name;
+        var ext = dot > 0 ? name.slice(dot) : '';
+        for (var i = 2; i < 100; i += 1) {
+          var candidate = base + ' (' + i + ')' + ext;
+          if (!occupied[candidate]) return candidate;
+        }
+        return base + ' (' + Date.now() + ')' + ext;
       }
 
       function pasteEntry() {
         var clip = window.__filesClipboard;
-        if (!clip || !clip.path) return;
-        var fromRelative = clip.path;
-        var fromScoped = scopedPath(fromRelative);
-        var isFolder = clip.isFolder;
-        var clipName = clip.name;
-        var dot = clipName.lastIndexOf('.');
-        var base = dot > 0 ? clipName.slice(0, dot) : clipName;
-        var ext = dot > 0 ? clipName.slice(dot) : '';
-        var maxAttempts = 100;
-
-        function tryName(n) {
-          var newName = n === 1 ? clipName : base + ' (' + n + ')' + ext;
-          var to = scopedPath(currentPath ? currentPath + '/' + newName : newName);
-          return api.files.metadata(to).then(function () {
-            if (n >= maxAttempts) {
-              console.error('[files] Paste failed: all ' + maxAttempts + ' name variations are taken');
-              return null;
-            }
-            return tryName(n + 1);
-          }, function () {
-            if (isFolder && clip.action === 'cut') {
-              return api.files.move(fromRelative, to, { overwrite: false }).then(function () {
-                return true;
-              });
-            }
-            return api.files.readText(fromScoped).then(function (content) {
-              return api.files.writeText(to, content, { createIfMissing: true, overwrite: false });
-            }).then(function () {
-              if (clip.action === 'cut') {
-                return api.files.trash(fromRelative);
-              }
-            });
-          });
+        if (!clip || !clip.items || clip.items.length === 0) return;
+        if (clip.workspaceRoot && clip.workspaceRoot !== workspaceRoot) {
+          window.alert('Clipboard items belong to another workspace.');
+          return;
         }
+        var destinationDir = scopedPath(currentPath);
+        var occupied = {};
+        entries.forEach(function (entry) { occupied[entry.name] = true; });
 
-        tryName(1).then(function (result) {
-          if (result !== null) {
-            if (clip.action === 'cut') window.__filesClipboard = null;
-            loadEntries();
-            console.log('[files] Pasted:', clip.action, from);
+        var tasks = clip.items.map(function (item) {
+          var newName = uniqueDestinationName(item.name, occupied);
+          occupied[newName] = true;
+          var to = destinationDir ? destinationDir + '/' + newName : newName;
+          if (clip.action === 'cut') {
+            if (item.path === to || to.indexOf(item.path + '/') === 0) return Promise.resolve();
+            return api.files.move(item.path, to, { overwrite: false });
           }
+          return api.files.readText(item.path).then(function (content) {
+            return api.files.writeText(to, content, { createIfMissing: true, overwrite: false });
+          });
+        });
+
+        Promise.allSettled(tasks).then(function () {
+          if (clip.action === 'cut') window.__filesClipboard = null;
+          loadEntries();
         }).catch(function (err) {
           console.error('[files] Paste failed:', err);
         });
@@ -901,10 +1011,80 @@
         if (!sourcePaths || !sourcePaths.length) return;
         var row = e.target.closest('.files-item');
         if (row && row.getAttribute('data-file-type') === 'folder') {
-        var targetRel = row.getAttribute('data-file-path');
-        moveFiles(sourcePaths, targetRel);
+          moveFiles(sourcePaths, row.getAttribute('data-file-path'));
+        } else {
+          moveFiles(sourcePaths, scopedPath(currentPath));
         }
       });
+
+      var lastMouseHistoryAt = 0;
+      var lastMouseHistoryButton = 0;
+      function mouseHistoryButton(event) {
+        if (event.button === 3 || event.button === 8 || event.buttons === 8 || event.buttons === 128 || event.which === 8) return 'back';
+        if (event.button === 4 || event.button === 9 || event.buttons === 16 || event.buttons === 256 || event.which === 9) return 'forward';
+        return '';
+      }
+
+      function handleMouseHistory(event) {
+        var button = mouseHistoryButton(event);
+        if (!button) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        var now = Date.now();
+        if (button === lastMouseHistoryButton && now - lastMouseHistoryAt < 120) return;
+        lastMouseHistoryButton = button;
+        lastMouseHistoryAt = now;
+
+        try {
+          if (window.localStorage && window.localStorage.getItem('verstak-debug') === 'true') {
+            console.log('[debug] [Files] mouse history event', {
+              type: event.type,
+              direction: button,
+              button: event.button,
+              buttons: event.buttons,
+              which: event.which,
+              pointerType: event.pointerType || '',
+              currentPath: currentPath
+            });
+          }
+        } catch (err) {}
+
+        if (button === 'back') goBack();
+        else goForward();
+      }
+
+      function handleWindowHistoryKey(event) {
+        if (event.defaultPrevented) return;
+        if (event.target && ['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].indexOf(event.target.tagName) !== -1) return;
+
+        var key = event.key || '';
+        var ctrl = event.ctrlKey || event.metaKey;
+        var direction = '';
+        if (key === 'ArrowLeft' && event.altKey) direction = 'back';
+        else if (key === 'ArrowRight' && event.altKey) direction = 'forward';
+        else if (key === '[' && ctrl) direction = 'back';
+        else if (key === ']' && ctrl) direction = 'forward';
+        else if (key === 'BrowserBack' || key === 'XF86Back' || event.keyCode === 166) direction = 'back';
+        else if (key === 'BrowserForward' || key === 'XF86Forward' || event.keyCode === 167) direction = 'forward';
+        if (!direction) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+        if (direction === 'back') goBack();
+        else goForward();
+      }
+
+      containerEl.addEventListener('mousedown', handleMouseHistory, true);
+      containerEl.addEventListener('pointerdown', handleMouseHistory, true);
+      window.addEventListener('pointerdown', handleMouseHistory, true);
+      document.addEventListener('pointerdown', handleMouseHistory, true);
+      window.addEventListener('mousedown', handleMouseHistory, true);
+      document.addEventListener('mousedown', handleMouseHistory, true);
+      window.addEventListener('mouseup', handleMouseHistory, true);
+      window.addEventListener('auxclick', handleMouseHistory, true);
+      window.addEventListener('keydown', handleWindowHistoryKey);
 
       containerEl.addEventListener('keydown', function (event) {
         if (event.target && ['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].indexOf(event.target.tagName) !== -1) return;
@@ -1006,6 +1186,21 @@
           renderList();
           return;
         }
+        if (ctrl && key.toLowerCase() === 'x') {
+          event.preventDefault();
+          cutSelection();
+          return;
+        }
+        if (ctrl && key.toLowerCase() === 'c') {
+          event.preventDefault();
+          copySelection();
+          return;
+        }
+        if (ctrl && key.toLowerCase() === 'v') {
+          event.preventDefault();
+          pasteEntry();
+          return;
+        }
 
         if (key === 'ArrowDown' || key === 'ArrowUp' || key === 'Home' || key === 'End' || key === 'PageDown' || key === 'PageUp') {
           event.preventDefault();
@@ -1045,6 +1240,14 @@
         disposed = true;
         document.removeEventListener('click', onDocClick);
         document.removeEventListener('keydown', onDocKeydown);
+        window.removeEventListener('mousedown', handleMouseHistory, true);
+        window.removeEventListener('pointerdown', handleMouseHistory, true);
+        document.removeEventListener('pointerdown', handleMouseHistory, true);
+        containerEl.removeEventListener('pointerdown', handleMouseHistory, true);
+        document.removeEventListener('mousedown', handleMouseHistory, true);
+        window.removeEventListener('mouseup', handleMouseHistory, true);
+        window.removeEventListener('auxclick', handleMouseHistory, true);
+        window.removeEventListener('keydown', handleWindowHistoryKey);
         if (ctxMenu && ctxMenu.parentNode) ctxMenu.parentNode.removeChild(ctxMenu);
       };
     },
