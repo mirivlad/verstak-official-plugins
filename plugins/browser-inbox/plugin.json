@@ -19,6 +19,23 @@
     "entry": "frontend/src/index.js"
   },
   "contributes": {
+    "views": [
+      {
+        "id": "verstak.browser-inbox.view",
+        "title": "Browser Inbox",
+        "icon": "inbox",
+        "component": "BrowserInboxView"
+      }
+    ],
+    "sidebarItems": [
+      {
+        "id": "verstak.browser-inbox.sidebar",
+        "title": "Browser Inbox",
+        "icon": "inbox",
+        "view": "verstak.browser-inbox.view",
+        "position": 30
+      }
+    ],
     "workspaceItems": [
       {
         "id": "verstak.browser-inbox.workspace",

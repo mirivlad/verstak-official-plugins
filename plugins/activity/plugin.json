@@ -21,6 +21,23 @@
     "entry": "frontend/src/index.js"
   },
   "contributes": {
+    "views": [
+      {
+        "id": "verstak.activity.view",
+        "title": "Activity",
+        "icon": "activity",
+        "component": "ActivityView"
+      }
+    ],
+    "sidebarItems": [
+      {
+        "id": "verstak.activity.sidebar",
+        "title": "Activity",
+        "icon": "activity",
+        "view": "verstak.activity.view",
+        "position": 20
+      }
+    ],
     "workspaceItems": [
       {
         "id": "verstak.activity.workspace",
