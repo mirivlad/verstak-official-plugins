@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "verstak.browser-inbox",
+  "name": "Browser Inbox",
+  "version": "0.1.0",
+  "apiVersion": "0.1.0",
+  "description": "Workspace-scoped inbox for browser captures delivered through the local receiver event protocol.",
+  "source": "official",
+  "icon": "inbox",
+  "provides": [
+    "browser.inbox"
+  ],
+  "permissions": [
+    "events.subscribe",
+    "storage.namespace",
+    "ui.register"
+  ],
+  "frontend": {
+    "entry": "frontend/src/index.js"
+  },
+  "contributes": {
+    "workspaceItems": [
+      {
+        "id": "verstak.browser-inbox.workspace",
+        "title": "Browser Inbox",
+        "icon": "inbox",
+        "component": "BrowserInboxView"
+      }
+    ]
+  }
+}
