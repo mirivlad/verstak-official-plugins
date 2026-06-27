@@ -266,6 +266,23 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   if (!legacyProject.container.textContent.includes('Legacy project note')) throw new Error('legacy workspace activity was not rendered in matching workspace');
   if (legacyProject.container.textContent.includes('Legacy global capture')) throw new Error('legacy global activity leaked into workspace view');
 
+  const taggedGlobalApi = makeApi({
+    'events:global': [
+      {
+        activityId: 'global-project',
+        type: 'browser.capture.page',
+        title: 'Global project capture',
+        occurredAt: '2026-06-27T03:00:00Z',
+        sourcePluginId: 'verstak.browser-inbox',
+        workspaceRootPath: 'Project',
+      },
+    ],
+  });
+  const taggedGlobalProject = await mountWithApi(taggedGlobalApi, { workspaceNode: { name: 'Project' }, workspaceRootPath: 'Project' });
+  if (!taggedGlobalProject.container.textContent.includes('Global project capture')) throw new Error('workspace did not render workspace-tagged global activity');
+  const taggedGlobalClient = await mountWithApi(taggedGlobalApi, { workspaceNode: { name: 'ClientA' }, workspaceRootPath: 'ClientA' });
+  if (taggedGlobalClient.container.textContent.includes('Global project capture')) throw new Error('workspace-tagged global activity leaked into another workspace');
+
   console.log('activity plugin smoke passed');
 })().catch((err) => {
   console.error(err);

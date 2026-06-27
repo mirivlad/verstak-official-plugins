@@ -421,10 +421,13 @@
       }
       return api.settings.read().then(function (settings) {
         var scopedCaptures = normalizeStoredCaptures((settings || {})[scope.key], scope.key);
+        var globalCaptures = normalizeStoredCaptures((settings || {})[GLOBAL_KEY], GLOBAL_KEY).filter(function (item) {
+          return item.workspaceRootPath === scope.workspaceRoot;
+        });
         var legacyCaptures = normalizeStoredCaptures((settings || {})[LEGACY_KEY], LEGACY_KEY).filter(function (item) {
           return item.workspaceRootPath === scope.workspaceRoot;
         });
-        captures = sortCaptures(scopedCaptures.concat(legacyCaptures));
+        captures = sortCaptures(scopedCaptures.concat(globalCaptures, legacyCaptures));
         if (!selectedId && captures[0]) selectedId = captures[0].captureId;
       }).catch(function (err) {
         statusText = 'Could not load inbox: ' + (err && err.message ? err.message : String(err));

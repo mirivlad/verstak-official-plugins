@@ -387,10 +387,13 @@
       }
       return api.settings.read().then(function (settings) {
         var scopedEvents = normalizeStoredEvents((settings || {})[scope.key], scope.key);
+        var globalEvents = normalizeStoredEvents((settings || {})[GLOBAL_KEY], GLOBAL_KEY).filter(function (item) {
+          return item.workspaceRootPath === scope.workspaceRoot;
+        });
         var legacyEvents = normalizeStoredEvents((settings || {})[LEGACY_KEY], LEGACY_KEY).filter(function (item) {
           return item.workspaceRootPath === scope.workspaceRoot;
         });
-        events = sortEvents(scopedEvents.concat(legacyEvents));
+        events = sortEvents(scopedEvents.concat(globalEvents, legacyEvents));
       }).catch(function (err) {
         statusText = 'Could not load activity: ' + (err && err.message ? err.message : String(err));
         statusClass = 'error';

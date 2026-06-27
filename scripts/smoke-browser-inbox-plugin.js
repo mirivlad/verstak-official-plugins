@@ -312,6 +312,28 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
     throw new Error('legacy global capture leaked into workspace view');
   }
 
+  const taggedGlobalApi = makeApi({
+    'captures:global': [
+      {
+        captureId: 'global-project-capture',
+        capturedAt: '2026-06-27T03:00:00.000Z',
+        kind: 'page',
+        url: 'https://project.example.com/global',
+        title: 'Global Project Capture',
+        domain: 'project.example.com',
+        workspaceRootPath: 'Project',
+      },
+    ],
+  });
+  const taggedGlobalProject = await mountWithApi(taggedGlobalApi, { workspaceNode: { name: 'Project' }, workspaceRootPath: 'Project' });
+  if (!walk(taggedGlobalProject.container, (node) => node.getAttribute && node.getAttribute('data-browser-capture-id') === 'global-project-capture')) {
+    throw new Error('workspace did not render workspace-tagged global capture');
+  }
+  const taggedGlobalClient = await mountWithApi(taggedGlobalApi, { workspaceNode: { name: 'ClientA' }, workspaceRootPath: 'ClientA' });
+  if (walk(taggedGlobalClient.container, (node) => node.getAttribute && node.getAttribute('data-browser-capture-id') === 'global-project-capture')) {
+    throw new Error('workspace-tagged global capture leaked into another workspace');
+  }
+
   console.log('browser inbox plugin smoke passed');
 })().catch((err) => {
   console.error(err);
