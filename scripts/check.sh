@@ -114,6 +114,36 @@ else
 fi
 
 echo ""
+# Keep Files plugin as a raw file explorer; note workflows belong to Notes.
+echo "[files plugin note boundaries]"
+if [ "$HAS_PYTHON" -eq 1 ]; then
+  set +e
+  python3 -c "
+import os, re, sys
+
+path = '$ROOT/plugins/files/frontend/src/index.js'
+forbidden = re.compile(r'createNoteInFolder|ensureOverviewInFolder|Create Note|Open Overview')
+problems = []
+
+with open(path, encoding='utf-8') as f:
+    for lineno, line in enumerate(f, 1):
+        if forbidden.search(line):
+            problems.append(f'{os.path.relpath(path, \"$ROOT\")}:{lineno}: {line.strip()}')
+
+if problems:
+    for p in problems:
+        print('  FAIL ' + p)
+    sys.exit(1)
+print('  OK files plugin has no note creation or overview actions')
+"
+  STATUS=$?
+  set -e
+  report "files plugin note boundaries" "$STATUS"
+else
+  echo "  ⚠️  python3 not available — skipping files plugin note boundaries"
+fi
+
+echo ""
 # Ensure source manifests do not require ignored dist files for plain JS plugins.
 echo "[frontend entry source contract]"
 if [ "$HAS_PYTHON" -eq 1 ]; then
