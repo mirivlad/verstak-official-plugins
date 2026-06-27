@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "verstak.search",
+  "name": "Search",
+  "version": "0.1.0",
+  "apiVersion": "0.1.0",
+  "description": "Workspace-scoped vault text search provider.",
+  "source": "official",
+  "icon": "search",
+  "provides": [
+    "verstak/search/v1",
+    "search.provider"
+  ],
+  "requires": [
+    "verstak/core/files/v1",
+    "verstak/core/workbench/v1"
+  ],
+  "permissions": [
+    "files.read",
+    "workbench.open",
+    "ui.register"
+  ],
+  "frontend": {
+    "entry": "frontend/src/index.js"
+  },
+  "contributes": {
+    "workspaceItems": [
+      {
+        "id": "verstak.search.workspace",
+        "title": "Search",
+        "icon": "search",
+        "component": "SearchView"
+      }
+    ],
+    "searchProviders": [
+      {
+        "id": "verstak.search.vault-text",
+        "label": "Vault Text Search",
+        "handler": "searchVaultText"
+      }
+    ]
+  }
+}
