@@ -9,6 +9,7 @@
   var PLUGIN_ID = 'verstak.browser-inbox';
   var CAPTURE_EVENTS = ['browser.capture.page', 'browser.capture.selection', 'browser.capture.link'];
   var MAX_CAPTURES = 100;
+  var LEGACY_KEY = 'captures';
   var GLOBAL_KEY = 'captures:global';
   var WORKSPACE_PREFIX = 'captures:workspace:';
 
@@ -185,13 +186,20 @@
   }
 
   function sortCaptures(captureList) {
-    return captureList.slice().sort(function (a, b) {
+    var seen = {};
+    return captureList.filter(function (item) {
+      var key = item && item.captureId;
+      if (!key) return false;
+      if (seen[key]) return false;
+      seen[key] = true;
+      return true;
+    }).slice().sort(function (a, b) {
       return text(b.capturedAt || b.receivedAt).localeCompare(text(a.capturedAt || a.receivedAt));
     }).slice(0, MAX_CAPTURES);
   }
 
   function globalCaptureKeys(settings) {
-    var keys = [GLOBAL_KEY];
+    var keys = [LEGACY_KEY, GLOBAL_KEY];
     Object.keys(settings || {}).forEach(function (key) {
       if (key.indexOf(WORKSPACE_PREFIX) === 0 && keys.indexOf(key) === -1) keys.push(key);
     });
@@ -411,8 +419,12 @@
           statusClass = 'error';
         });
       }
-      return api.settings.read(scope.key).then(function (stored) {
-        captures = normalizeStoredCaptures(stored, scope.key);
+      return api.settings.read().then(function (settings) {
+        var scopedCaptures = normalizeStoredCaptures((settings || {})[scope.key], scope.key);
+        var legacyCaptures = normalizeStoredCaptures((settings || {})[LEGACY_KEY], LEGACY_KEY).filter(function (item) {
+          return item.workspaceRootPath === scope.workspaceRoot;
+        });
+        captures = sortCaptures(scopedCaptures.concat(legacyCaptures));
         if (!selectedId && captures[0]) selectedId = captures[0].captureId;
       }).catch(function (err) {
         statusText = 'Could not load inbox: ' + (err && err.message ? err.message : String(err));

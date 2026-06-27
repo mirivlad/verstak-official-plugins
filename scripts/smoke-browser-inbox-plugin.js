@@ -274,6 +274,44 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
     throw new Error('persisted capture was not rendered on mount');
   }
 
+  const legacyApi = makeApi({
+    captures: [
+      {
+        captureId: 'legacy-global-capture',
+        capturedAt: '2026-06-27T02:00:00.000Z',
+        kind: 'page',
+        url: 'https://legacy.example.com/',
+        title: 'Legacy Global Capture',
+        domain: 'legacy.example.com',
+      },
+      {
+        captureId: 'legacy-project-capture',
+        capturedAt: '2026-06-27T02:10:00.000Z',
+        kind: 'page',
+        url: 'https://project.example.com/',
+        title: 'Legacy Project Capture',
+        domain: 'project.example.com',
+        workspaceRootPath: 'Project',
+      },
+    ],
+  });
+  const legacyGlobal = await mountWithApi(legacyApi, {});
+  if (!walk(legacyGlobal.container, (node) => node.getAttribute && node.getAttribute('data-browser-capture-id') === 'legacy-global-capture')) {
+    throw new Error('legacy global capture was not rendered in global view');
+  }
+  if (!walk(legacyGlobal.container, (node) => node.getAttribute && node.getAttribute('data-browser-capture-id') === 'legacy-project-capture')) {
+    throw new Error('legacy workspace capture was not rendered in global view');
+  }
+  component.unmount && component.unmount(legacyGlobal.container);
+
+  const legacyProject = await mountWithApi(legacyApi, { workspaceNode: { name: 'Project' }, workspaceRootPath: 'Project' });
+  if (!walk(legacyProject.container, (node) => node.getAttribute && node.getAttribute('data-browser-capture-id') === 'legacy-project-capture')) {
+    throw new Error('legacy workspace capture was not rendered in matching workspace');
+  }
+  if (walk(legacyProject.container, (node) => node.getAttribute && node.getAttribute('data-browser-capture-id') === 'legacy-global-capture')) {
+    throw new Error('legacy global capture leaked into workspace view');
+  }
+
   console.log('browser inbox plugin smoke passed');
 })().catch((err) => {
   console.error(err);

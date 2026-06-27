@@ -238,6 +238,34 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   const persisted = await mountWithApi(persistedApi);
   if (!persisted.container.textContent.includes('Saved note')) throw new Error('persisted activity was not rendered');
 
+  const legacyApi = makeApi({
+    events: [
+      {
+        activityId: 'legacy-global',
+        type: 'browser.capture.page',
+        title: 'Legacy global capture',
+        occurredAt: '2026-06-27T02:00:00Z',
+        sourcePluginId: 'verstak.browser-inbox',
+      },
+      {
+        activityId: 'legacy-project',
+        type: 'note.saved',
+        title: 'Legacy project note',
+        occurredAt: '2026-06-27T02:10:00Z',
+        sourcePluginId: 'verstak.notes',
+        payload: { path: 'Project/Notes/Legacy.md' },
+      },
+    ],
+  });
+  const legacyGlobal = await mountWithApi(legacyApi, {});
+  if (!legacyGlobal.container.textContent.includes('Legacy global capture')) throw new Error('legacy global activity was not rendered in global view');
+  if (!legacyGlobal.container.textContent.includes('Legacy project note')) throw new Error('legacy workspace activity was not rendered in global view');
+  component.unmount && component.unmount(legacyGlobal.container);
+
+  const legacyProject = await mountWithApi(legacyApi, { workspaceNode: { name: 'Project' }, workspaceRootPath: 'Project' });
+  if (!legacyProject.container.textContent.includes('Legacy project note')) throw new Error('legacy workspace activity was not rendered in matching workspace');
+  if (legacyProject.container.textContent.includes('Legacy global capture')) throw new Error('legacy global activity leaked into workspace view');
+
   console.log('activity plugin smoke passed');
 })().catch((err) => {
   console.error(err);

@@ -8,6 +8,7 @@
 
   var PLUGIN_ID = 'verstak.activity';
   var MAX_EVENTS = 250;
+  var LEGACY_KEY = 'events';
   var GLOBAL_KEY = 'events:global';
   var WORKSPACE_PREFIX = 'events:workspace:';
   var ACTIVITY_EVENTS = [
@@ -197,7 +198,7 @@
         occurredAt: text(item.occurredAt || item.timestamp || item.receivedAt),
         receivedAt: text(item.receivedAt),
         sourcePluginId: text(item.sourcePluginId || item.pluginId),
-        workspaceRootPath: cleanWorkspace(item.workspaceRootPath || (item.payload && (item.payload.workspaceRootPath || item.payload.workspaceName))),
+        workspaceRootPath: cleanWorkspace(item.workspaceRootPath || workspaceFromPayload(item.payload || {})),
         _storageKey: storageKey || '',
         payload: item.payload && typeof item.payload === 'object' ? item.payload : {}
       };
@@ -221,13 +222,20 @@
   }
 
   function sortEvents(activityList) {
-    return activityList.slice().sort(function (a, b) {
+    var seen = {};
+    return activityList.filter(function (item) {
+      var key = item && item.activityId;
+      if (!key) return false;
+      if (seen[key]) return false;
+      seen[key] = true;
+      return true;
+    }).slice().sort(function (a, b) {
       return text(b.occurredAt || b.receivedAt).localeCompare(text(a.occurredAt || a.receivedAt));
     }).slice(0, MAX_EVENTS);
   }
 
   function globalEventKeys(settings) {
-    var keys = [GLOBAL_KEY];
+    var keys = [LEGACY_KEY, GLOBAL_KEY];
     Object.keys(settings || {}).forEach(function (key) {
       if (key.indexOf(WORKSPACE_PREFIX) === 0 && keys.indexOf(key) === -1) keys.push(key);
     });
@@ -377,8 +385,12 @@
           statusClass = 'error';
         });
       }
-      return api.settings.read(scope.key).then(function (stored) {
-        events = normalizeStoredEvents(stored, scope.key);
+      return api.settings.read().then(function (settings) {
+        var scopedEvents = normalizeStoredEvents((settings || {})[scope.key], scope.key);
+        var legacyEvents = normalizeStoredEvents((settings || {})[LEGACY_KEY], LEGACY_KEY).filter(function (item) {
+          return item.workspaceRootPath === scope.workspaceRoot;
+        });
+        events = sortEvents(scopedEvents.concat(legacyEvents));
       }).catch(function (err) {
         statusText = 'Could not load activity: ' + (err && err.message ? err.message : String(err));
         statusClass = 'error';
