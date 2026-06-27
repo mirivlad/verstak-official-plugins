@@ -9,7 +9,7 @@
 | # | Feature | Приоритет | Зависит от |
 |---|---------|-----------|------------|
 | 1 | Контекстное меню (правый клик) | 🔥 High | — |
-| 2 | Open External / Show in Explorer | 🔥 High | — |
+| 2 | Open External / Show in Explorer fallback | ✅ Done | — |
 | 3 | Кастомный ConfirmModal | 🔥 High | — |
 | 4 | Duplicate | 🔥 High | — |
 | 5 | Cut/Copy/Paste | 🔥 High | — |
@@ -38,13 +38,16 @@
 
 ---
 
-### Feature 2: Open External / Show in Explorer
+### Feature 2: Open External / Show in Explorer fallback
 
-**Описание:** Кнопки/пункты меню для открытия файла во внешнем приложении и показа папки в системном файловом менеджере.
+**Описание:** Пункты меню для будущего открытия файла во внешнем приложении и
+показа папки в системном файловом менеджере.
 
-**Архитектура:** В v1 использовались Wails методы `OpenFile`/`OpenFolder`. В v2 нужно договориться — либо через Go runtime (пока нет), либо через IPC/events.
+**Текущий v2 статус:** core/runtime API для внешнего открытия пока нет, поэтому
+пункты меню показывают fallback modal с vault-relative path и кнопкой `Copy Path`.
+Никаких v1 Wails мостов или прямых backend calls.
 
-На первом этапе: добавить пункты в контекстное меню, но если runtime не поддерживает — показывать путь к файлу (можно скопировать в буфер обмена).
+Полное внешнее открытие остается deferred до отдельного публичного v2 API.
 
 **Файлы:** `plugins/files/frontend/src/index.js`
 

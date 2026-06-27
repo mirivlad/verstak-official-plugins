@@ -108,6 +108,8 @@
     open: 'M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7zM5 5h6V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6h-2v6H5V5z',
     rename: 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z',
     trash: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM8 9h8v10H8V9zm7.5-5-1-1h-5l-1 1H5v2h14V4z',
+    external: 'M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7zM5 5h6V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6h-2v6H5V5z',
+    explorer: 'M3 5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v1H3V5Zm0 6h18v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7Z',
     cut: 'M9.64 7.64c.23-.5.36-1.05.36-1.64 0-2.21-1.79-4-4-4S2 3.79 2 6s1.79 4 4 4c.59 0 1.14-.13 1.64-.36L10 12l-2.36 2.36C7.14 14.13 6.59 14 6 14c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4c0-.59-.13-1.14-.36-1.64L12 14l7 7h3L9.64 7.64zM6 8c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm0 12c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm6-8.5c-.28 0-.5.22-.5.5s.22.5.5.5.5-.22.5-.5-.22-.5-.5-.5zM19 3l-6 6 2 2 7-8h-3z',
     copy: 'M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z',
     paste: 'M19 2h-4.18C14.4.84 13.3 0 12 0S9.6.84 9.18 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm7 18H5V4h2v3h10V4h2v16z'
@@ -244,6 +246,44 @@
         document.removeEventListener('keydown', onKeydown);
         if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
       }
+    });
+  }
+
+  function copyTextToClipboard(text) {
+    if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text);
+    }
+    if (document && document.createElement && document.body && document.execCommand) {
+      var input = document.createElement('textarea');
+      input.value = text;
+      input.setAttribute('readonly', 'readonly');
+      input.style.position = 'fixed';
+      input.style.left = '-9999px';
+      document.body.appendChild(input);
+      input.select();
+      try {
+        document.execCommand('copy');
+        return Promise.resolve();
+      } finally {
+        if (input.parentNode) input.parentNode.removeChild(input);
+      }
+    }
+    return Promise.reject(new Error('clipboard unavailable'));
+  }
+
+  function showExternalFallback(entry, mode) {
+    if (!entry) return;
+    var pathToShow = entry.relativePath;
+    if (mode === 'explorer' && entry.type !== 'folder') {
+      pathToShow = parentPath(entry.relativePath) || entry.relativePath;
+    }
+    var title = mode === 'explorer' ? 'Show in Explorer' : 'Open External';
+    var message = title + ' is not available in the current v2 runtime yet.\nVault-relative path:\n' + pathToShow;
+    confirmModal(message, { confirmText: 'Copy Path', cancelText: 'Close' }).then(function (copy) {
+      if (!copy) return;
+      copyTextToClipboard(pathToShow).catch(function (err) {
+        console.error('[files] copy path failed:', err);
+      });
     });
   }
 
@@ -768,6 +808,8 @@
           }
           var isFolder = entry.type === 'folder';
           ctxMenu.appendChild(ctxItem(isFolder ? 'Open Folder' : 'Open', '', function () { openEntry(entry); }, 'open', 'open'));
+          ctxMenu.appendChild(ctxItem('Open External', '', function () { showExternalFallback(entry, 'external'); }, 'open-external', 'external'));
+          ctxMenu.appendChild(ctxItem('Show in Explorer', '', function () { showExternalFallback(entry, 'explorer'); }, 'show-in-explorer', 'explorer'));
           ctxMenu.appendChild(ctxSep());
           ctxMenu.appendChild(ctxItem('Rename', '', function () { beginRename(entry); }, 'rename', 'rename'));
           if (entry.type !== 'folder') {
