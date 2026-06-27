@@ -115,6 +115,9 @@ if [ "$HAS_DEPS" -eq 0 ]; then
   echo "  ⚠️  some deps missing — will skip matching plugin parts"
 fi
 
+rm -rf "$ROOT/dist"
+mkdir -p "$ROOT/dist"
+
 for plugin_dir in "$ROOT"/plugins/*/; do
   [ -d "$plugin_dir" ] || continue
   plugin_name="$(basename "$plugin_dir")"
