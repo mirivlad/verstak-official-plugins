@@ -166,6 +166,21 @@
     }
     loading = false
   }
+
+  async function resetKey() {
+    loading = true
+    errorMsg = ''
+    resultMsg = ''
+    try {
+      await syncAPI().resetKey()
+      resultMsg = 'Sync key reset. Connect again to pair this device.'
+      resultKind = ''
+      await load()
+    } catch (e) {
+      errorMsg = sanitizeError(e.message || e)
+    }
+    loading = false
+  }
 </script>
 
 <div style="padding:1.5rem;max-width:500px;">
@@ -234,6 +249,7 @@
     <button style="background:#4ecca3;color:#1a1a2e;border:1px solid #4ecca3;padding:0.4rem 0.75rem;border-radius:4px;cursor:pointer;font-size:0.85rem;font-weight:600;" on:click={saveSettings} disabled={loading}>Save</button>
     {#if settings && settings.configured}
       <button style="background:#1a1a2e;color:#e0e0f0;border:1px solid #1a3a5c;padding:0.4rem 0.75rem;border-radius:4px;cursor:pointer;font-size:0.85rem;" on:click={runSyncNow} disabled={loading}>Sync Now</button>
+      <button style="background:#1a1a2e;color:#e0e0f0;border:1px solid #1a3a5c;padding:0.4rem 0.75rem;border-radius:4px;cursor:pointer;font-size:0.85rem;" on:click={resetKey} disabled={loading}>Reset Key</button>
       <button style="background:#e94560;color:#fff;border:1px solid #e94560;padding:0.4rem 0.75rem;border-radius:4px;cursor:pointer;font-size:0.85rem;" on:click={doDisconnect} disabled={loading}>Disconnect</button>
     {/if}
   </div>
