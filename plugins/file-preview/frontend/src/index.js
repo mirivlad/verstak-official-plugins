@@ -25,7 +25,6 @@
     '.fp-btn{font-size:.75rem;padding:.28rem .58rem;border:1px solid #333;border-radius:4px;background:#1a1a2e;color:#ccc;cursor:pointer}',
     '.fp-btn:hover{background:#2a2a4e;border-color:#4ecca3;color:#4ecca3}',
     '.fp-body{flex:1;min-height:0;overflow:auto;padding:1rem 1.2rem}',
-    '.fp-pre{margin:0;white-space:pre-wrap;font:13px/1.6 "SF Mono","Fira Code","Cascadia Code",Consolas,monospace;color:#d8d8e8}',
     '.fp-meta{display:grid;grid-template-columns:max-content 1fr;gap:.45rem .8rem;max-width:760px;font-size:.86rem}',
     '.fp-meta dt{color:#8b8ba8}.fp-meta dd{margin:0;color:#e0e0e0;word-break:break-word}',
     '.fp-kind{margin:0 0 1rem;color:#f0f0ff;font-size:1.1rem}',
@@ -111,15 +110,7 @@
       containerEl.appendChild(body);
 
       api.files.metadata(path).then(function (meta) {
-        if (IMAGE_EXTS.indexOf(ext) !== -1 || meta.isText === false) {
-          renderMeta(body, path, meta || {}, ext);
-          return;
-        }
-        return api.files.readText(path).then(function (text) {
-          body.className = 'fp-body';
-          body.innerHTML = '';
-          body.appendChild(el('pre', { className: 'fp-pre' }, [text]));
-        });
+        renderMeta(body, path, meta || {}, ext);
       }).catch(function (err) {
         body.className = 'fp-error';
         body.textContent = 'Preview error: ' + (err && err.message ? err.message : String(err));

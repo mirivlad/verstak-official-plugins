@@ -14,7 +14,6 @@ verstak-official-plugins/
     files/
     notes/
     markdown-editor/
-    markdown-preview/
     file-preview/
     activity/
     journal/
@@ -45,7 +44,7 @@ verstak-official-plugins/
 - `official.files` — файловый менеджер
 - `official.notes` — заметки
 - `official.markdown-editor` — редактор
-- `official.markdown-preview` — предпросмотр
+- `official.file-preview` — предпросмотр изображений/metadata
 - `official.activity` — активность
 - `official.browser-inbox` — браузерный inbox
 

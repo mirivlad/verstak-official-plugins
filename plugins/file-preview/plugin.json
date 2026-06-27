@@ -4,7 +4,7 @@
   "name": "File Preview",
   "version": "0.1.0",
   "apiVersion": "0.1.0",
-  "description": "Read-only preview provider for text-like and image vault files.",
+  "description": "Read-only image metadata preview provider for vault files.",
   "source": "official",
   "icon": "eye",
   "provides": [
@@ -24,22 +24,8 @@
   "contributes": {
     "openProviders": [
       {
-        "id": "verstak.file-preview.text",
-        "title": "File Preview",
-        "priority": 80,
-        "component": "FilePreview",
-        "supports": [
-          {
-            "kind": "vault-file",
-            "extensions": [".txt", ".log", ".conf", ".ini", ".toml", ".yaml", ".yml", ".json", ".csv", ".xml", ".html", ".css", ".js", ".ts"],
-            "contexts": ["generic-text"],
-            "modes": ["view"]
-          }
-        ]
-      },
-      {
         "id": "verstak.file-preview.image",
-        "title": "Image File Preview",
+        "title": "Image Preview",
         "priority": 80,
         "component": "FilePreview",
         "supports": [

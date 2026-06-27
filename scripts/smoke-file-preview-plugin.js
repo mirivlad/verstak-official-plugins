@@ -121,24 +121,6 @@ async function flush() {
   const document = makeDocument();
   const component = loadComponent(document);
 
-  const textContainer = new FakeNode('div');
-  const readPaths = [];
-  component.mount(textContainer, {
-    request: { path: 'Docs/app.log', extension: '.log', mode: 'view' },
-  }, {
-    files: {
-      metadata: async () => ({ type: 'file', size: 11, isText: true, modifiedAt: '2026-06-27T00:00:00Z' }),
-      readText: async (relativePath) => {
-        readPaths.push(relativePath);
-        return 'hello log';
-      },
-      openExternal: async () => undefined,
-    },
-  });
-  await flush();
-  if (readPaths[0] !== 'Docs/app.log') throw new Error('text preview did not read text file');
-  if (!textContainer.textContent.includes('hello log')) throw new Error('text preview did not render file text');
-
   const imageContainer = new FakeNode('div');
   const opened = [];
   component.mount(imageContainer, {
@@ -146,7 +128,7 @@ async function flush() {
   }, {
     files: {
       metadata: async () => ({ type: 'file', size: 2048, isText: false, modifiedAt: '2026-06-27T00:00:00Z' }),
-      readText: async () => { throw new Error('image preview should not read bytes through readText'); },
+      readText: async () => { throw new Error('file preview should not read text content'); },
       openExternal: async (relativePath) => { opened.push(relativePath); },
     },
   });
