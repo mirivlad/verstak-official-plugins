@@ -12,6 +12,7 @@
     'js', 'jsx', 'mjs', 'cjs', 'ts', 'tsx', 'py', 'go', 'rs', 'java', 'kt',
     'swift', 'rb', 'php', 'c', 'cpp', 'h', 'hpp', 'sh', 'bash', 'zsh', 'sql'
   ];
+  var SEARCH_DEBOUNCE_MS = 300;
   var MAX_FILES = 500;
   var MAX_RESULTS = 100;
 
@@ -82,6 +83,13 @@
     return entry && entry.type === 'file' && TEXT_EXTS.indexOf(extension(entry)) !== -1;
   }
 
+  function pathMatches(entry, query) {
+    var needle = String(query || '').toLowerCase();
+    var path = String((entry && entry.relativePath) || '').toLowerCase();
+    var name = String((entry && entry.name) || '').toLowerCase();
+    return path.indexOf(needle) !== -1 || name.indexOf(needle) !== -1;
+  }
+
   function lineNumber(text, index) {
     return text.slice(0, index).split('\n').length;
   }
@@ -99,13 +107,28 @@
     if (idx === -1) return null;
     return {
       path: path,
+      type: 'file',
+      matchType: 'Content match',
+      openable: true,
       line: lineNumber(text, idx),
       snippet: snippet(text, idx, query.length)
     };
   }
 
-  async function collectFiles(api, rootPath) {
-    var files = [];
+  function scanPath(entry) {
+    var isFolder = entry.type === 'folder';
+    return {
+      path: entry.relativePath,
+      type: entry.type,
+      matchType: isFolder ? 'Folder name' : 'File name',
+      openable: !isFolder,
+      line: 0,
+      snippet: isFolder ? 'Folder name/path match' : 'File name/path match'
+    };
+  }
+
+  async function collectEntries(api, rootPath) {
+    var found = [];
     var folders = [cleanPath(rootPath)];
     var visited = 0;
     while (folders.length && visited < MAX_FILES) {
@@ -115,25 +138,27 @@
       for (var i = 0; i < entries.length; i++) {
         var entry = entries[i];
         if (!entry || !entry.relativePath) continue;
+        found.push(entry);
         if (entry.type === 'folder') {
           folders.push(entry.relativePath);
-          continue;
         }
-        if (isTextFile(entry)) files.push(entry);
         visited += 1;
         if (visited >= MAX_FILES) break;
       }
     }
-    return files;
+    return found;
   }
 
   async function runSearch(api, rootPath, query) {
     query = String(query || '').trim();
     if (query.length < 2) return [];
-    var files = await collectFiles(api, rootPath);
+    var entries = await collectEntries(api, rootPath);
     var results = [];
-    for (var i = 0; i < files.length && results.length < MAX_RESULTS; i++) {
-      var path = files[i].relativePath;
+    for (var i = 0; i < entries.length && results.length < MAX_RESULTS; i++) {
+      var entry = entries[i];
+      var path = entry.relativePath;
+      if (pathMatches(entry, query)) results.push(scanPath(entry));
+      if (!isTextFile(entry) || results.length >= MAX_RESULTS) continue;
       try {
         var text = await api.files.readText(path);
         var match = scanText(path, String(text || ''), query);
@@ -150,6 +175,8 @@
       injectStyles();
       var rootPath = cleanPath(props && (props.workspaceRootPath || props.workspaceName));
       var state = { query: '', searching: false, results: [], status: 'Enter at least 2 characters.', error: '' };
+      var searchTimer = null;
+      var searchSeq = 0;
 
       function render() {
         containerEl.innerHTML = '';
@@ -159,10 +186,13 @@
         var input = el('input', {
           className: 'search-input',
           type: 'search',
-          placeholder: 'Search text files',
+          placeholder: 'Search files, folders, text',
           value: state.query,
           'data-search-input': 'query',
-          onInput: function (event) { state.query = event.target.value; }
+          onInput: function (event) {
+            state.query = event.target.value;
+            scheduleSearch();
+          }
         });
         var button = el('button', {
           className: 'search-btn',
@@ -189,9 +219,9 @@
             el('div', {}, [
               el('div', { className: 'search-path' }, [result.path]),
               el('div', { className: 'search-snippet' }, [result.snippet]),
-              el('div', { className: 'search-meta' }, ['Line ' + result.line])
+              el('div', { className: 'search-meta' }, [result.matchType + (result.line ? ' - Line ' + result.line : '')])
             ]),
-            el('button', {
+            result.openable ? el('button', {
               className: 'search-btn',
               textContent: 'Open',
               'data-search-open': result.path,
@@ -202,12 +232,34 @@
                   mode: 'view'
                 }).catch(function (err) { console.error('[search] openResource:', err); });
               }
-            })
+            }) : null
           ]));
         });
       }
 
+      function scheduleSearch() {
+        if (searchTimer) {
+          clearTimeout(searchTimer);
+          searchTimer = null;
+        }
+        searchSeq += 1;
+        var query = String(state.query || '').trim();
+        if (query.length < 2) {
+          state.searching = false;
+          state.results = [];
+          state.status = 'Enter at least 2 characters.';
+          state.error = '';
+          render();
+          return;
+        }
+        searchTimer = setTimeout(search, SEARCH_DEBOUNCE_MS);
+      }
+
       async function search() {
+        if (searchTimer) {
+          clearTimeout(searchTimer);
+          searchTimer = null;
+        }
         state.query = String(state.query || '').trim();
         if (state.query.length < 2) {
           state.results = [];
@@ -219,22 +271,34 @@
         state.searching = true;
         state.error = '';
         state.status = 'Searching...';
+        var seq = searchSeq + 1;
+        searchSeq = seq;
         render();
         try {
-          state.results = await runSearch(api, rootPath, state.query);
+          var results = await runSearch(api, rootPath, state.query);
+          if (seq !== searchSeq) return;
+          state.results = results;
           state.status = state.results.length + ' result' + (state.results.length === 1 ? '' : 's');
         } catch (err) {
+          if (seq !== searchSeq) return;
           state.results = [];
           state.error = err && err.message ? err.message : String(err);
         } finally {
+          if (seq !== searchSeq) return;
           state.searching = false;
           render();
         }
       }
 
       render();
+      containerEl.__verstakSearchCleanup = function () {
+        if (searchTimer) clearTimeout(searchTimer);
+        searchSeq += 1;
+      };
     },
     unmount: function (containerEl) {
+      if (containerEl.__verstakSearchCleanup) containerEl.__verstakSearchCleanup();
+      delete containerEl.__verstakSearchCleanup;
       containerEl.innerHTML = '';
     }
   };

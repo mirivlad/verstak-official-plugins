@@ -120,6 +120,11 @@ async function flush() {
   }
 }
 
+async function wait(ms) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+  await flush();
+}
+
 (async () => {
   const document = makeDocument();
   const component = loadComponent(document);
@@ -130,6 +135,7 @@ async function flush() {
         if (relativeDir === 'Project') {
           return [
             { name: 'Docs', relativePath: 'Project/Docs', type: 'folder' },
+            { name: 'Target Assets', relativePath: 'Project/Target Assets', type: 'folder' },
             { name: 'image.png', relativePath: 'Project/image.png', type: 'file', extension: 'png' },
           ];
         }
@@ -158,13 +164,36 @@ async function flush() {
   component.mount(container, { workspaceRootPath: 'Project' }, api);
   await flush();
 
-  const input = walk(container, (node) => node.getAttribute && node.getAttribute('data-search-input') === 'query');
-  if (!input) throw new Error('query input not found');
+  function queryInput() {
+    const input = walk(container, (node) => node.getAttribute && node.getAttribute('data-search-input') === 'query');
+    if (!input) throw new Error('query input not found');
+    return input;
+  }
+
+  let input = queryInput();
   input.value = 'target';
   input.dispatchEvent('input');
+  await wait(360);
+
+  if (!container.textContent.includes('Project/Docs/case.md')) throw new Error('typing should search file contents');
+  if (!container.textContent.includes('Target phrase is here')) throw new Error('typing should render content snippet');
+  if (!container.textContent.includes('Project/Target Assets')) throw new Error('typing should search folder paths');
+  if (!container.textContent.includes('Content match')) throw new Error('content result type was not rendered');
+  if (!container.textContent.includes('Folder name')) throw new Error('folder result type was not rendered');
+
+  input = queryInput();
+  input.value = 'image';
+  input.dispatchEvent('input');
+  await wait(360);
+
+  if (!container.textContent.includes('Project/image.png')) throw new Error('binary file path match should be rendered');
+  if (!container.textContent.includes('File name')) throw new Error('file name result type was not rendered');
 
   const button = walk(container, (node) => node.getAttribute && node.getAttribute('data-search-action') === 'run');
   if (!button) throw new Error('search button not found');
+  input = queryInput();
+  input.value = 'target';
+  input.dispatchEvent('input');
   button.click();
   await flush();
 
