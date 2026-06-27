@@ -196,7 +196,9 @@ function loadFilesComponent(document) {
 }
 
 function makeApi() {
+  const externalCalls = [];
   return {
+    externalCalls,
     files: {
       list: async () => [
         {
@@ -214,6 +216,8 @@ function makeApi() {
       createFolder: async () => undefined,
       move: async () => undefined,
       trash: async () => undefined,
+      openExternal: async (relativePath) => { externalCalls.push({ action: 'open', path: relativePath }); },
+      showInFolder: async (relativePath) => { externalCalls.push({ action: 'show', path: relativePath }); },
     },
     workbench: {
       openResource: async () => ({ status: 'opened' }),
@@ -229,7 +233,8 @@ async function flush() {
   const document = makeDocument();
   const { component, clipboard } = loadFilesComponent(document);
   const container = new FakeNode('div');
-  component.mount(container, {}, makeApi());
+  const api = makeApi();
+  component.mount(container, {}, api);
   await flush();
 
   const row = walk(container, (node) => node.getAttribute && node.getAttribute('data-file-path') === 'Docs/readme.md');
@@ -245,12 +250,21 @@ async function flush() {
   if (!showInExplorer) throw new Error('Show in Explorer menu item not found');
 
   openExternal.click();
-  const copyButton = walk(document.body, (node) => node.tagName === 'BUTTON' && node.textContent === 'Copy Path');
-  if (!copyButton) throw new Error('external fallback did not show Copy Path action');
-  copyButton.click();
   await flush();
-  if (clipboard.written[0] !== 'Docs/readme.md') {
-    throw new Error(`expected copied path Docs/readme.md, got ${clipboard.written[0] || '<none>'}`);
+  if (!api.externalCalls.some((call) => call.action === 'open' && call.path === 'Docs/readme.md')) {
+    throw new Error(`expected openExternal call for Docs/readme.md, got ${JSON.stringify(api.externalCalls)}`);
+  }
+  if (walk(document.body, (node) => node.tagName === 'BUTTON' && node.textContent === 'Copy Path')) {
+    throw new Error('external fallback should not show Copy Path after successful API call');
+  }
+
+  showInExplorer.click();
+  await flush();
+  if (!api.externalCalls.some((call) => call.action === 'show' && call.path === 'Docs/readme.md')) {
+    throw new Error(`expected showInFolder call for Docs/readme.md, got ${JSON.stringify(api.externalCalls)}`);
+  }
+  if (clipboard.written.length !== 0) {
+    throw new Error(`expected no copied path after successful external API calls, got ${clipboard.written.join(', ')}`);
   }
 
   console.log('files frontend smoke passed');

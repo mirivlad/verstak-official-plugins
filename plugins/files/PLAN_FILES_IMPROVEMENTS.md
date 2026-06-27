@@ -9,7 +9,7 @@
 | # | Feature | Приоритет | Зависит от |
 |---|---------|-----------|------------|
 | 1 | Контекстное меню (правый клик) | 🔥 High | — |
-| 2 | Open External / Show in Explorer fallback | ✅ Done | — |
+| 2 | Open External / Show in Explorer | ✅ Done | `files.openExternal` |
 | 3 | Кастомный ConfirmModal | 🔥 High | — |
 | 4 | Duplicate | 🔥 High | — |
 | 5 | Cut/Copy/Paste | 🔥 High | — |
@@ -38,16 +38,15 @@
 
 ---
 
-### Feature 2: Open External / Show in Explorer fallback
+### Feature 2: Open External / Show in Explorer
 
-**Описание:** Пункты меню для будущего открытия файла во внешнем приложении и
-показа папки в системном файловом менеджере.
+**Описание:** Пункты меню для открытия файла во внешнем приложении и показа
+файла/папки в системном файловом менеджере.
 
-**Текущий v2 статус:** core/runtime API для внешнего открытия пока нет, поэтому
-пункты меню показывают fallback modal с vault-relative path и кнопкой `Copy Path`.
-Никаких v1 Wails мостов или прямых backend calls.
-
-Полное внешнее открытие остается deferred до отдельного публичного v2 API.
+**Текущий v2 статус:** плагин использует публичные методы
+`api.files.openExternal(relativePath)` и `api.files.showInFolder(relativePath)`,
+guarded by `files.openExternal`. Fallback modal с vault-relative path и кнопкой
+`Copy Path` показывается только если API недоступен или вернул ошибку.
 
 **Файлы:** `plugins/files/frontend/src/index.js`
 

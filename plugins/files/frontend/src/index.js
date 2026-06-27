@@ -271,14 +271,14 @@
     return Promise.reject(new Error('clipboard unavailable'));
   }
 
-  function showExternalFallback(entry, mode) {
+  function showExternalFallback(entry, mode, reason) {
     if (!entry) return;
     var pathToShow = entry.relativePath;
     if (mode === 'explorer' && entry.type !== 'folder') {
       pathToShow = parentPath(entry.relativePath) || entry.relativePath;
     }
     var title = mode === 'explorer' ? 'Show in Explorer' : 'Open External';
-    var message = title + ' is not available in the current v2 runtime yet.\nVault-relative path:\n' + pathToShow;
+    var message = title + ' failed.\n' + (reason ? String(reason) + '\n' : '') + 'Vault-relative path:\n' + pathToShow;
     confirmModal(message, { confirmText: 'Copy Path', cancelText: 'Close' }).then(function (copy) {
       if (!copy) return;
       copyTextToClipboard(pathToShow).catch(function (err) {
@@ -796,6 +796,19 @@
         return el('div', { className: 'files-ctx-menu-sep' });
       }
 
+      function openExternalEntry(entry, mode) {
+        if (!entry) return;
+        var filesApi = api && api.files;
+        var action = mode === 'explorer' ? filesApi && filesApi.showInFolder : filesApi && filesApi.openExternal;
+        if (typeof action !== 'function') {
+          showExternalFallback(entry, mode, 'files external-open API is unavailable.');
+          return;
+        }
+        action(entry.relativePath).catch(function (err) {
+          showExternalFallback(entry, mode, err && err.message ? err.message : err);
+        });
+      }
+
       function showCtxMenu(x, y, entry) {
         ctxTarget = entry;
         ctxMenu.innerHTML = '';
@@ -808,8 +821,8 @@
           }
           var isFolder = entry.type === 'folder';
           ctxMenu.appendChild(ctxItem(isFolder ? 'Open Folder' : 'Open', '', function () { openEntry(entry); }, 'open', 'open'));
-          ctxMenu.appendChild(ctxItem('Open External', '', function () { showExternalFallback(entry, 'external'); }, 'open-external', 'external'));
-          ctxMenu.appendChild(ctxItem('Show in Explorer', '', function () { showExternalFallback(entry, 'explorer'); }, 'show-in-explorer', 'explorer'));
+          ctxMenu.appendChild(ctxItem('Open External', '', function () { openExternalEntry(entry, 'external'); }, 'open-external', 'external'));
+          ctxMenu.appendChild(ctxItem('Show in Explorer', '', function () { openExternalEntry(entry, 'explorer'); }, 'show-in-explorer', 'explorer'));
           ctxMenu.appendChild(ctxSep());
           ctxMenu.appendChild(ctxItem('Rename', '', function () { beginRename(entry); }, 'rename', 'rename'));
           if (entry.type !== 'folder') {

@@ -18,6 +18,7 @@
     "files.read",
     "files.write",
     "files.delete",
+    "files.openExternal",
     "workbench.open",
     "ui.register"
   ],
