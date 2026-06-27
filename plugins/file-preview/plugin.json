@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "id": "verstak.file-preview",
+  "name": "File Preview",
+  "version": "0.1.0",
+  "apiVersion": "0.1.0",
+  "description": "Read-only preview provider for text-like and image vault files.",
+  "source": "official",
+  "icon": "eye",
+  "provides": [
+    "verstak/file-preview/v1"
+  ],
+  "requires": [
+    "verstak/core/files/v1",
+    "verstak/core/workbench/v1"
+  ],
+  "permissions": [
+    "files.read",
+    "files.openExternal"
+  ],
+  "frontend": {
+    "entry": "frontend/src/index.js"
+  },
+  "contributes": {
+    "openProviders": [
+      {
+        "id": "verstak.file-preview.text",
+        "title": "File Preview",
+        "priority": 80,
+        "component": "FilePreview",
+        "supports": [
+          {
+            "kind": "vault-file",
+            "extensions": [".txt", ".log", ".conf", ".ini", ".toml", ".yaml", ".yml", ".json", ".csv", ".xml", ".html", ".css", ".js", ".ts"],
+            "contexts": ["generic-text"],
+            "modes": ["view"]
+          }
+        ]
+      },
+      {
+        "id": "verstak.file-preview.image",
+        "title": "Image File Preview",
+        "priority": 80,
+        "component": "FilePreview",
+        "supports": [
+          {
+            "kind": "vault-file",
+            "extensions": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".ico"],
+            "modes": ["view"]
+          }
+        ]
+      }
+    ]
+  }
+}
