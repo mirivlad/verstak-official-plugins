@@ -170,6 +170,16 @@ function makeApi(options = {}) {
         entries.set(toRelativePath, entry);
         entries.delete(fromRelativePath);
       },
+      trash: async (relativePath) => {
+        if (!entries.has(relativePath)) throw new Error(`not-found: ${relativePath}`);
+        entries.delete(relativePath);
+        return {
+          originalPath: relativePath,
+          trashPath: `.verstak/trash/files/mock/${path.basename(relativePath)}`,
+          trashId: 'mock',
+          deletedAt: new Date().toISOString(),
+        };
+      },
     },
     workbench: {
       openResource: async (request) => {
@@ -227,6 +237,18 @@ async function mountNotes(api) {
   }
   if (!createApi.opened.some((request) => request.path === 'Project/Notes/First_Note.md')) {
     throw new Error('create note did not open the newly created file');
+  }
+
+  const trashButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-note-action') === 'trash');
+  if (!trashButton) throw new Error('trash note button not found');
+  trashButton.click();
+  await flush();
+  const trashConfirm = walk(document.body, (node) => node.getAttribute && node.getAttribute('data-notes-confirm-trash') !== undefined);
+  if (!trashConfirm) throw new Error('trash confirmation button not found');
+  trashConfirm.click();
+  await flush();
+  if (createApi.entries.has('Project/Notes/First_Note.md')) {
+    throw new Error('trash note did not remove the markdown file from active entries');
   }
 
   console.log('notes plugin smoke passed');

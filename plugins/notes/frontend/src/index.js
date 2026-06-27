@@ -50,6 +50,8 @@
     '.notes-modal-btn.cancel:hover{background:#3a3a5e}',
     '.notes-modal-btn.confirm{background:#4ecca3;color:#111;border-color:#4ecca3}',
     '.notes-modal-btn.confirm:hover{background:#3dbb92}',
+    '.notes-modal-btn.danger{background:#7a2a35;color:#fff;border-color:#b84a5a}',
+    '.notes-modal-btn.danger:hover{background:#963545}',
     '.notes-status{font-size:.72rem;color:#8b8ba8;padding:.15rem .5rem;white-space:nowrap}',
     '.notes-status.success{color:#4ecca3}',
     '.notes-status.error{color:#e74c3c}',
@@ -88,7 +90,8 @@
     add: 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z',
     rename: 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z',
     open: 'M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7zM5 5h6V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6h-2v6H5V5z',
-    search: 'M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z'
+    search: 'M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z',
+    trash: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM8 9h8v10H8V9zm7.5-5-1-1h-5l-1 1H5v2h14V4z'
   };
 
   function iconSvg(name) {
@@ -336,8 +339,16 @@
               el('button', {
                 className: 'notes-item-btn',
                 title: 'Rename',
+                'data-note-action': 'rename',
                 innerHTML: iconSvg('rename'),
                 onClick: function (e) { e.stopPropagation(); beginRename(note); }
+              }),
+              el('button', {
+                className: 'notes-item-btn',
+                title: 'Move to Trash',
+                'data-note-action': 'trash',
+                innerHTML: iconSvg('trash'),
+                onClick: function (e) { e.stopPropagation(); confirmTrashNote(note); }
               })
             ])
           ]);
@@ -460,6 +471,24 @@
         });
       }
 
+      // ─── Trash ──────────────────────────────────────────────
+
+      function confirmTrashNote(note) {
+        if (!note) return;
+        showTrashModal(note).then(function (confirmed) {
+          if (!confirmed || disposed) return;
+          setStatus('Moving note to trash...', 'loading');
+          api.files.trash(note.path).then(function () {
+            if (disposed) return;
+            if (selectedPath === note.path) selectedPath = '';
+            setStatus('Note moved to trash', 'success');
+            loadNotes();
+          }).catch(function (err) {
+            setStatus('Error: ' + (err.message || err), 'error');
+          });
+        });
+      }
+
       // ─── Conflict Modal ─────────────────────────────────────
 
       function showConflictModal(title, existingPath) {
@@ -476,6 +505,28 @@
         ]);
         overlay.appendChild(modal);
         document.body.appendChild(overlay);
+      }
+
+      function showTrashModal(note) {
+        return new Promise(function (resolve) {
+          var overlay = el('div', { className: 'notes-modal-overlay' });
+          function close(value) {
+            overlay.remove();
+            resolve(value);
+          }
+          var modal = el('div', { className: 'notes-modal' }, [
+            el('div', { className: 'notes-modal-title' }, ['Move Note to Trash']),
+            el('div', { className: 'notes-modal-msg' }, [
+              'Move "' + (note.title || fileName(note.path)) + '" to trash?'
+            ]),
+            el('div', { className: 'notes-modal-actions' }, [
+              el('button', { className: 'notes-modal-btn cancel', textContent: 'Cancel', onClick: function () { close(false); } }),
+              el('button', { className: 'notes-modal-btn danger', 'data-notes-confirm-trash': '', textContent: 'Move to Trash', onClick: function () { close(true); } })
+            ])
+          ]);
+          overlay.appendChild(modal);
+          document.body.appendChild(overlay);
+        });
       }
 
       // ─── Event Wiring ───────────────────────────────────────
