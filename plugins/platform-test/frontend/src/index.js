@@ -132,7 +132,7 @@
       });
       var openNotesWorkbenchButton = makeWorkbenchButton('pt-open-workbench-notes', 'Open Notes Diagnostic', {
         kind: 'vault-file',
-        path: 'Notes/Overview.md',
+        path: 'Notes/example.md',
         extension: '.md',
         context: {
           sourceView: 'notes',

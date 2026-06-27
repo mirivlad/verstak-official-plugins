@@ -85,11 +85,12 @@ if [ "$HAS_PYTHON" -eq 1 ]; then
 import os, re, sys
 
 root = '$ROOT/plugins'
-forbidden = re.compile(r\"api\\.backend\\.call|api\\.request\\.open|window(?:\\.go|\\[['\\\"]go['\\\"]\\])\")
+forbidden = re.compile(r\"api\\.backend\\.call|api\\.request\\.open|window(?:\\.go|\\[['\\\"]go['\\\"]\\])|Notes/Overview\\.md\")
 problems = []
 
 for dirpath, _, filenames in os.walk(root):
-    if '/node_modules/' in dirpath:
+    normalized_dir = dirpath.replace(os.sep, '/')
+    if '/node_modules' in normalized_dir or '/frontend/dist' in normalized_dir:
         continue
     for filename in filenames:
         if not filename.endswith(('.js', '.svelte', '.ts')):
