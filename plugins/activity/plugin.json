@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "id": "verstak.activity",
+  "name": "Activity",
+  "version": "0.1.0",
+  "apiVersion": "0.1.0",
+  "description": "Workspace-scoped activity log for public plugin events.",
+  "source": "official",
+  "icon": "activity",
+  "provides": [
+    "activity.log",
+    "activity.provider",
+    "activity.reconstruction"
+  ],
+  "permissions": [
+    "events.subscribe",
+    "storage.namespace",
+    "ui.register"
+  ],
+  "frontend": {
+    "entry": "frontend/src/index.js"
+  },
+  "contributes": {
+    "workspaceItems": [
+      {
+        "id": "verstak.activity.workspace",
+        "title": "Activity",
+        "icon": "activity",
+        "component": "ActivityView"
+      }
+    ],
+    "activityProviders": [
+      {
+        "id": "verstak.activity.log",
+        "events": [
+          "file.opened",
+          "file.changed",
+          "note.saved",
+          "action.started",
+          "browser.capture.received",
+          "case.selected",
+          "browser.capture.page",
+          "browser.capture.selection",
+          "browser.capture.link"
+        ],
+        "handler": "recordActivityEvent"
+      }
+    ]
+  }
+}
