@@ -9,6 +9,8 @@
   var PLUGIN_ID = 'verstak.browser-inbox';
   var CAPTURE_EVENTS = ['browser.capture.page', 'browser.capture.selection', 'browser.capture.link'];
   var MAX_CAPTURES = 100;
+  var GLOBAL_KEY = 'captures:global';
+  var WORKSPACE_PREFIX = 'captures:workspace:';
 
   function injectStyles() {
     if (document.getElementById('browser-inbox-style-injected')) return;
@@ -76,6 +78,37 @@
     return String(value == null ? '' : value);
   }
 
+  function encodeKey(value) {
+    return encodeURIComponent(text(value).trim());
+  }
+
+  function cleanWorkspace(value) {
+    return text(value).trim().replace(/^\/+|\/+$/g, '');
+  }
+
+  function workspaceFromProps(props) {
+    var node = props && props.workspaceNode;
+    return cleanWorkspace((props && (props.workspaceRootPath || props.workspaceName || props.workspaceNodeId))
+      || (node && (node.rootPath || node.name || node.id)));
+  }
+
+  function workspaceFromPayload(payload) {
+    return cleanWorkspace(payload && (payload.workspaceRootPath || payload.workspaceName || payload.workspaceNodeId));
+  }
+
+  function scopeFromProps(props) {
+    var workspaceRoot = workspaceFromProps(props);
+    if (!workspaceRoot) {
+      return { mode: 'global', key: GLOBAL_KEY, label: 'All workspaces', workspaceRoot: '' };
+    }
+    return {
+      mode: 'workspace',
+      key: WORKSPACE_PREFIX + encodeKey(workspaceRoot),
+      label: workspaceRoot,
+      workspaceRoot: workspaceRoot
+    };
+  }
+
   function cleanKind(value) {
     value = text(value).trim();
     return value === 'selection' || value === 'link' || value === 'page' ? value : 'page';
@@ -90,7 +123,7 @@
     return event.payload;
   }
 
-  function captureFromEvent(event) {
+  function captureFromEvent(event, scope) {
     var payload = eventPayload(event);
     var captureId = text(payload.captureId).trim();
     if (!captureId) {
@@ -106,11 +139,12 @@
       domain: text(payload.domain).trim(),
       text: text(payload.text).trim(),
       source: text(payload.source).trim(),
-      browserName: text(payload.browserName).trim()
+      browserName: text(payload.browserName).trim(),
+      workspaceRootPath: workspaceFromPayload(payload) || (scope && scope.workspaceRoot) || ''
     };
   }
 
-  function normalizeStoredCaptures(value) {
+  function normalizeStoredCaptures(value, storageKey) {
     if (!Array.isArray(value)) return [];
     return value.filter(function (item) {
       return item && typeof item === 'object' && item.captureId;
@@ -125,9 +159,43 @@
         domain: text(item.domain),
         text: text(item.text),
         source: text(item.source),
-        browserName: text(item.browserName)
+        browserName: text(item.browserName),
+        workspaceRootPath: cleanWorkspace(item.workspaceRootPath),
+        _storageKey: storageKey || ''
       };
     }).slice(0, MAX_CAPTURES);
+  }
+
+  function storageCaptures(captureList) {
+    return captureList.map(function (item) {
+      return {
+        captureId: item.captureId,
+        capturedAt: item.capturedAt,
+        receivedAt: item.receivedAt,
+        kind: item.kind,
+        url: item.url,
+        title: item.title,
+        domain: item.domain,
+        text: item.text,
+        source: item.source,
+        browserName: item.browserName,
+        workspaceRootPath: item.workspaceRootPath
+      };
+    });
+  }
+
+  function sortCaptures(captureList) {
+    return captureList.slice().sort(function (a, b) {
+      return text(b.capturedAt || b.receivedAt).localeCompare(text(a.capturedAt || a.receivedAt));
+    }).slice(0, MAX_CAPTURES);
+  }
+
+  function globalCaptureKeys(settings) {
+    var keys = [GLOBAL_KEY];
+    Object.keys(settings || {}).forEach(function (key) {
+      if (key.indexOf(WORKSPACE_PREFIX) === 0 && keys.indexOf(key) === -1) keys.push(key);
+    });
+    return keys;
   }
 
   function formatDate(value) {
@@ -145,6 +213,7 @@
     containerEl.className = 'browser-inbox-root';
     containerEl.setAttribute('data-plugin-id', PLUGIN_ID);
 
+    var scope = scopeFromProps(props || {});
     var captures = [];
     var selectedId = '';
     var statusText = 'Connecting to receiver events...';
@@ -153,7 +222,7 @@
     var unsubscribers = [];
 
     var toolbar = el('div', { className: 'browser-inbox-toolbar' });
-    var titleEl = el('span', { className: 'browser-inbox-title', textContent: 'Browser Inbox' });
+    var titleEl = el('span', { className: 'browser-inbox-title', textContent: scope.mode === 'global' ? 'Browser Inbox' : 'Browser Inbox · ' + scope.label });
     var countEl = el('span', { className: 'browser-inbox-count' });
     var statusEl = el('span', { className: 'browser-inbox-status' });
     var clearBtn = el('button', {
@@ -161,6 +230,10 @@
       'data-browser-inbox-action': 'clear',
       textContent: 'Clear',
       onClick: function () {
+        if (scope.mode === 'global') {
+          clearGlobal().then(render);
+          return;
+        }
         captures = [];
         selectedId = '';
         persist().then(render);
@@ -182,8 +255,33 @@
 
     function persist() {
       if (!api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve();
-      return api.settings.write('captures', captures).catch(function (err) {
+      var toStore = scope.mode === 'global'
+        ? captures.filter(function (item) { return !item._storageKey || item._storageKey === GLOBAL_KEY; })
+        : captures;
+      return api.settings.write(scope.key, storageCaptures(toStore)).catch(function (err) {
         statusText = 'Could not save inbox: ' + (err && err.message ? err.message : String(err));
+        statusClass = 'error';
+      });
+    }
+
+    function clearGlobal() {
+      if (!api || !api.settings || typeof api.settings.read !== 'function' || typeof api.settings.write !== 'function') {
+        captures = [];
+        selectedId = '';
+        return Promise.resolve();
+      }
+      return api.settings.read().then(function (settings) {
+        var keys = globalCaptureKeys(settings || {});
+        captures = [];
+        selectedId = '';
+        return Promise.all(keys.map(function (key) {
+          return api.settings.write(key, []);
+        }));
+      }).then(function () {
+        statusText = 'Inbox cleared';
+        statusClass = '';
+      }).catch(function (err) {
+        statusText = 'Could not clear inbox: ' + (err && err.message ? err.message : String(err));
         statusClass = 'error';
       });
     }
@@ -200,7 +298,8 @@
         return item.captureId === capture.captureId;
       });
       if (existing) return Promise.resolve();
-      captures = [capture].concat(captures).slice(0, MAX_CAPTURES);
+      capture._storageKey = scope.key;
+      captures = sortCaptures([capture].concat(captures));
       selectedId = capture.captureId;
       statusText = 'Capture received';
       statusClass = '';
@@ -212,7 +311,16 @@
         return item.captureId !== captureId;
       });
       if (selectedId === captureId) selectedId = captures[0] ? captures[0].captureId : '';
-      return persist().then(render);
+      if (scope.mode !== 'global') return persist().then(render);
+      if (!api || !api.settings || typeof api.settings.read !== 'function' || typeof api.settings.write !== 'function') return persist().then(render);
+      return api.settings.read().then(function (settings) {
+        return Promise.all(globalCaptureKeys(settings || {}).map(function (key) {
+          var next = normalizeStoredCaptures((settings || {})[key], key).filter(function (item) {
+            return item.captureId !== captureId;
+          });
+          return api.settings.write(key, storageCaptures(next));
+        }));
+      }).then(render);
     }
 
     function renderList() {
@@ -290,8 +398,21 @@
 
     function loadStored() {
       if (!api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve();
-      return api.settings.read('captures').then(function (stored) {
-        captures = normalizeStoredCaptures(stored);
+      if (scope.mode === 'global') {
+        return api.settings.read().then(function (settings) {
+          var all = [];
+          globalCaptureKeys(settings || {}).forEach(function (key) {
+            all = all.concat(normalizeStoredCaptures((settings || {})[key], key));
+          });
+          captures = sortCaptures(all);
+          if (!selectedId && captures[0]) selectedId = captures[0].captureId;
+        }).catch(function (err) {
+          statusText = 'Could not load inbox: ' + (err && err.message ? err.message : String(err));
+          statusClass = 'error';
+        });
+      }
+      return api.settings.read(scope.key).then(function (stored) {
+        captures = normalizeStoredCaptures(stored, scope.key);
         if (!selectedId && captures[0]) selectedId = captures[0].captureId;
       }).catch(function (err) {
         statusText = 'Could not load inbox: ' + (err && err.message ? err.message : String(err));
@@ -303,12 +424,14 @@
       if (!api || !api.events || typeof api.events.subscribe !== 'function') return Promise.resolve();
       return Promise.all(CAPTURE_EVENTS.map(function (eventName) {
         return api.events.subscribe(eventName, function (event) {
-          return addCapture(captureFromEvent(event));
+          var eventWorkspace = workspaceFromPayload(eventPayload(event));
+          if (scope.mode === 'workspace' && eventWorkspace && eventWorkspace !== scope.workspaceRoot) return Promise.resolve();
+          return addCapture(captureFromEvent(event, scope));
         }).then(function (unsubscribe) {
           if (typeof unsubscribe === 'function') unsubscribers.push(unsubscribe);
         });
       })).then(function () {
-        statusText = 'Receiver ready';
+        statusText = scope.mode === 'global' ? 'Receiver ready for all workspaces' : 'Receiver ready for workspace';
         statusClass = '';
       }).catch(function (err) {
         statusText = 'Receiver unavailable: ' + (err && err.message ? err.message : String(err));

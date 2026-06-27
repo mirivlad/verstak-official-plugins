@@ -154,8 +154,8 @@ function makeApi(initialSettings = {}) {
         return { ...settings };
       },
     },
-    getStoredCaptures() {
-      return settings.captures || [];
+    getStoredCaptures(key = 'captures') {
+      return settings[key] || [];
     },
   };
 }
@@ -164,10 +164,10 @@ async function flush() {
   for (let i = 0; i < 8; i += 1) await Promise.resolve();
 }
 
-async function mountWithApi(api, document = makeDocument()) {
+async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, workspaceRootPath: 'Project' }, document = makeDocument()) {
   const component = loadComponent(document);
   const container = new FakeNode('div');
-  component.mount(container, { workspaceNode: { name: 'Project' } }, api);
+  component.mount(container, props, api);
   await flush();
   return { component, container, document };
 }
@@ -196,9 +196,13 @@ async function mountWithApi(api, document = makeDocument()) {
   });
   await flush();
 
-  const captures = api.getStoredCaptures();
+  const projectKey = 'captures:workspace:Project';
+  const clientKey = 'captures:workspace:ClientA';
+  const globalKey = 'captures:global';
+  const captures = api.getStoredCaptures(projectKey);
   if (captures.length !== 1) throw new Error(`expected one stored capture, got ${captures.length}`);
   if (captures[0].captureId !== 'capture-1') throw new Error('stored capture id mismatch');
+  if (api.getStoredCaptures(globalKey).length !== 0) throw new Error('workspace capture leaked into global storage');
 
   const row = walk(container, (node) => node.getAttribute && node.getAttribute('data-browser-capture-id') === 'capture-1');
   if (!row) throw new Error('capture row was not rendered');
@@ -220,18 +224,51 @@ async function mountWithApi(api, document = makeDocument()) {
     },
   });
   await flush();
-  if (api.getStoredCaptures().length !== 1) throw new Error('duplicate capture was stored');
+  if (api.getStoredCaptures(projectKey).length !== 1) throw new Error('duplicate capture was stored');
+
+  const clientView = await mountWithApi(api, { workspaceNode: { name: 'ClientA' }, workspaceRootPath: 'ClientA' });
+  if (walk(clientView.container, (node) => node.getAttribute && node.getAttribute('data-browser-capture-id') === 'capture-1')) {
+    throw new Error('Project capture leaked into ClientA workspace view');
+  }
+  await api.handlers['browser.capture.page']({
+    name: 'browser.capture.page',
+    timestamp: '2026-06-27T00:10:00Z',
+    payload: {
+      captureId: 'capture-2',
+      capturedAt: '2026-06-27T00:10:00.000Z',
+      kind: 'page',
+      url: 'https://client.example.com/',
+      title: 'Client Page',
+      domain: 'client.example.com',
+      workspaceRootPath: 'ClientA',
+    },
+  });
+  await flush();
+  if (api.getStoredCaptures(clientKey).length !== 1) throw new Error('ClientA capture was not stored under ClientA workspace key');
+  if (!walk(clientView.container, (node) => node.getAttribute && node.getAttribute('data-browser-capture-id') === 'capture-2')) {
+    throw new Error('ClientA capture was not rendered');
+  }
+  component.unmount && component.unmount(clientView.container);
+
+  const globalView = await mountWithApi(api, {});
+  if (!walk(globalView.container, (node) => node.getAttribute && node.getAttribute('data-browser-capture-id') === 'capture-1')) {
+    throw new Error('global browser inbox did not aggregate Project capture');
+  }
+  if (!walk(globalView.container, (node) => node.getAttribute && node.getAttribute('data-browser-capture-id') === 'capture-2')) {
+    throw new Error('global browser inbox did not aggregate ClientA capture');
+  }
+  component.unmount && component.unmount(globalView.container);
 
   const clearButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-action') === 'clear');
   if (!clearButton) throw new Error('clear button not found');
   clearButton.click();
   await flush();
-  if (api.getStoredCaptures().length !== 0) throw new Error('clear action did not empty stored captures');
+  if (api.getStoredCaptures(projectKey).length !== 0) throw new Error('clear action did not empty stored captures');
 
   component.unmount && component.unmount(container);
-  if (api.unsubscribed.length !== 3) throw new Error('component did not unsubscribe all capture handlers');
+  if (api.unsubscribed.length !== 9) throw new Error('component did not unsubscribe all capture handlers');
 
-  const persistedApi = makeApi({ captures: [captures[0]] });
+  const persistedApi = makeApi({ 'captures:workspace:Project': [captures[0]] });
   const persisted = await mountWithApi(persistedApi);
   if (!walk(persisted.container, (node) => node.getAttribute && node.getAttribute('data-browser-capture-id') === 'capture-1')) {
     throw new Error('persisted capture was not rendered on mount');

@@ -8,6 +8,8 @@
 
   var PLUGIN_ID = 'verstak.activity';
   var MAX_EVENTS = 250;
+  var GLOBAL_KEY = 'events:global';
+  var WORKSPACE_PREFIX = 'events:workspace:';
   var ACTIVITY_EVENTS = [
     'file.opened',
     'file.changed',
@@ -77,6 +79,41 @@
     return String(value == null ? '' : value);
   }
 
+  function encodeKey(value) {
+    return encodeURIComponent(text(value).trim());
+  }
+
+  function cleanWorkspace(value) {
+    return text(value).trim().replace(/^\/+|\/+$/g, '');
+  }
+
+  function workspaceFromProps(props) {
+    var node = props && props.workspaceNode;
+    return cleanWorkspace((props && (props.workspaceRootPath || props.workspaceName || props.workspaceNodeId))
+      || (node && (node.rootPath || node.name || node.id)));
+  }
+
+  function workspaceFromPayload(payload) {
+    var explicit = cleanWorkspace(payload && (payload.workspaceRootPath || payload.workspaceName || payload.workspaceNodeId));
+    if (explicit) return explicit;
+    var path = cleanWorkspace(payload && payload.path);
+    if (!path || path.indexOf('/') === -1) return '';
+    return cleanWorkspace(path.split('/')[0]);
+  }
+
+  function scopeFromProps(props) {
+    var workspaceRoot = workspaceFromProps(props);
+    if (!workspaceRoot) {
+      return { mode: 'global', key: GLOBAL_KEY, label: 'All workspaces', workspaceRoot: '' };
+    }
+    return {
+      mode: 'workspace',
+      key: WORKSPACE_PREFIX + encodeKey(workspaceRoot),
+      label: workspaceRoot,
+      workspaceRoot: workspaceRoot
+    };
+  }
+
   function activityId() {
     return 'activity-' + Date.now() + '-' + Math.random().toString(36).slice(2);
   }
@@ -117,8 +154,9 @@
     ]);
   }
 
-  function eventToActivity(event) {
+  function eventToActivity(event, scope) {
     var payload = eventPayload(event);
+    var workspaceRoot = workspaceFromPayload(payload) || (scope && scope.workspaceRoot) || '';
     return {
       activityId: activityId(),
       type: text(event && event.name).trim() || 'activity.event',
@@ -127,11 +165,12 @@
       occurredAt: text(payload.occurredAt || payload.capturedAt || (event && event.timestamp) || new Date().toISOString()),
       receivedAt: new Date().toISOString(),
       sourcePluginId: text((event && event.pluginId) || payload.pluginId || payload.sourcePluginId),
+      workspaceRootPath: workspaceRoot,
       payload: payload
     };
   }
 
-  function manualActivity() {
+  function manualActivity(scope) {
     return {
       activityId: activityId(),
       type: 'activity.manual',
@@ -140,11 +179,12 @@
       occurredAt: new Date().toISOString(),
       receivedAt: new Date().toISOString(),
       sourcePluginId: PLUGIN_ID,
+      workspaceRootPath: (scope && scope.workspaceRoot) || '',
       payload: {}
     };
   }
 
-  function normalizeStoredEvents(value) {
+  function normalizeStoredEvents(value, storageKey) {
     if (!Array.isArray(value)) return [];
     return value.filter(function (item) {
       return item && typeof item === 'object' && item.activityId;
@@ -157,9 +197,41 @@
         occurredAt: text(item.occurredAt || item.timestamp || item.receivedAt),
         receivedAt: text(item.receivedAt),
         sourcePluginId: text(item.sourcePluginId || item.pluginId),
+        workspaceRootPath: cleanWorkspace(item.workspaceRootPath || (item.payload && (item.payload.workspaceRootPath || item.payload.workspaceName))),
+        _storageKey: storageKey || '',
         payload: item.payload && typeof item.payload === 'object' ? item.payload : {}
       };
     }).slice(0, MAX_EVENTS);
+  }
+
+  function storageEvents(activityList) {
+    return activityList.map(function (item) {
+      return {
+        activityId: item.activityId,
+        type: item.type,
+        title: item.title,
+        summary: item.summary,
+        occurredAt: item.occurredAt,
+        receivedAt: item.receivedAt,
+        sourcePluginId: item.sourcePluginId,
+        workspaceRootPath: item.workspaceRootPath,
+        payload: item.payload || {}
+      };
+    });
+  }
+
+  function sortEvents(activityList) {
+    return activityList.slice().sort(function (a, b) {
+      return text(b.occurredAt || b.receivedAt).localeCompare(text(a.occurredAt || a.receivedAt));
+    }).slice(0, MAX_EVENTS);
+  }
+
+  function globalEventKeys(settings) {
+    var keys = [GLOBAL_KEY];
+    Object.keys(settings || {}).forEach(function (key) {
+      if (key.indexOf(WORKSPACE_PREFIX) === 0 && keys.indexOf(key) === -1) keys.push(key);
+    });
+    return keys;
   }
 
   function formatDate(value) {
@@ -177,6 +249,7 @@
     containerEl.className = 'activity-root';
     containerEl.setAttribute('data-plugin-id', PLUGIN_ID);
 
+    var scope = scopeFromProps(props || {});
     var events = [];
     var statusText = 'Loading activity...';
     var statusClass = '';
@@ -184,7 +257,7 @@
     var unsubscribers = [];
 
     var toolbar = el('div', { className: 'activity-toolbar' });
-    var titleEl = el('span', { className: 'activity-title', textContent: 'Activity' });
+    var titleEl = el('span', { className: 'activity-title', textContent: scope.mode === 'global' ? 'Activity' : 'Activity · ' + scope.label });
     var countEl = el('span', { className: 'activity-count' });
     var statusEl = el('span', { className: 'activity-status' });
     var manualBtn = el('button', {
@@ -192,7 +265,7 @@
       'data-activity-action': 'manual',
       textContent: 'Record',
       onClick: function () {
-        addActivity(manualActivity());
+        addActivity(manualActivity(scope));
       }
     });
     var clearBtn = el('button', {
@@ -200,6 +273,10 @@
       'data-activity-action': 'clear',
       textContent: 'Clear',
       onClick: function () {
+        if (scope.mode === 'global') {
+          clearGlobal().then(render);
+          return;
+        }
         events = [];
         persist().then(render);
       }
@@ -217,14 +294,38 @@
 
     function persist() {
       if (!api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve();
-      return api.settings.write('events', events).catch(function (err) {
+      var toStore = scope.mode === 'global'
+        ? events.filter(function (item) { return !item._storageKey || item._storageKey === GLOBAL_KEY; })
+        : events;
+      return api.settings.write(scope.key, storageEvents(toStore)).catch(function (err) {
         statusText = 'Could not save activity: ' + (err && err.message ? err.message : String(err));
         statusClass = 'error';
       });
     }
 
+    function clearGlobal() {
+      if (!api || !api.settings || typeof api.settings.read !== 'function' || typeof api.settings.write !== 'function') {
+        events = [];
+        return Promise.resolve();
+      }
+      return api.settings.read().then(function (settings) {
+        var keys = globalEventKeys(settings || {});
+        events = [];
+        return Promise.all(keys.map(function (key) {
+          return api.settings.write(key, []);
+        }));
+      }).then(function () {
+        statusText = 'Activity cleared';
+        statusClass = '';
+      }).catch(function (err) {
+        statusText = 'Could not clear activity: ' + (err && err.message ? err.message : String(err));
+        statusClass = 'error';
+      });
+    }
+
     function addActivity(activity) {
-      events = [activity].concat(events).slice(0, MAX_EVENTS);
+      activity._storageKey = scope.key;
+      events = sortEvents([activity].concat(events));
       statusText = 'Activity recorded';
       statusClass = '';
       return persist().then(render);
@@ -264,8 +365,20 @@
 
     function loadStored() {
       if (!api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve();
-      return api.settings.read('events').then(function (stored) {
-        events = normalizeStoredEvents(stored);
+      if (scope.mode === 'global') {
+        return api.settings.read().then(function (settings) {
+          var all = [];
+          globalEventKeys(settings || {}).forEach(function (key) {
+            all = all.concat(normalizeStoredEvents((settings || {})[key], key));
+          });
+          events = sortEvents(all);
+        }).catch(function (err) {
+          statusText = 'Could not load activity: ' + (err && err.message ? err.message : String(err));
+          statusClass = 'error';
+        });
+      }
+      return api.settings.read(scope.key).then(function (stored) {
+        events = normalizeStoredEvents(stored, scope.key);
       }).catch(function (err) {
         statusText = 'Could not load activity: ' + (err && err.message ? err.message : String(err));
         statusClass = 'error';
@@ -276,12 +389,14 @@
       if (!api || !api.events || typeof api.events.subscribe !== 'function') return Promise.resolve();
       return Promise.all(ACTIVITY_EVENTS.map(function (eventName) {
         return api.events.subscribe(eventName, function (event) {
-          return addActivity(eventToActivity(event));
+          var eventWorkspace = workspaceFromPayload(eventPayload(event));
+          if (scope.mode === 'workspace' && eventWorkspace && eventWorkspace !== scope.workspaceRoot) return Promise.resolve();
+          return addActivity(eventToActivity(event, scope));
         }).then(function (unsubscribe) {
           if (typeof unsubscribe === 'function') unsubscribers.push(unsubscribe);
         });
       })).then(function () {
-        statusText = 'Listening for activity';
+        statusText = scope.mode === 'global' ? 'Listening for all activity' : 'Listening for workspace activity';
         statusClass = '';
       }).catch(function (err) {
         statusText = 'Activity subscriptions unavailable: ' + (err && err.message ? err.message : String(err));

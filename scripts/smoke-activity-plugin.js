@@ -136,8 +136,8 @@ function makeApi(initialSettings = {}) {
         };
       },
     },
-    storedEvents() {
-      return settings.events || [];
+    storedEvents(key = 'events') {
+      return settings[key] || [];
     },
   };
 }
@@ -146,10 +146,10 @@ async function flush() {
   for (let i = 0; i < 10; i += 1) await Promise.resolve();
 }
 
-async function mountWithApi(api, document = makeDocument()) {
+async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, workspaceRootPath: 'Project' }, document = makeDocument()) {
   const component = loadComponent(document);
   const container = new FakeNode('div');
-  component.mount(container, { workspaceNode: { name: 'Project' } }, api);
+  component.mount(container, props, api);
   await flush();
   return { component, container, document };
 }
@@ -176,31 +176,57 @@ async function mountWithApi(api, document = makeDocument()) {
   });
   await flush();
 
-  const stored = api.storedEvents();
+  const projectKey = 'events:workspace:Project';
+  const clientKey = 'events:workspace:ClientA';
+  const globalKey = 'events:global';
+  const stored = api.storedEvents(projectKey);
   if (stored.length !== 1) throw new Error(`expected one stored activity event, got ${stored.length}`);
   if (stored[0].type !== 'browser.capture.selection') throw new Error('stored event type mismatch');
   if (stored[0].sourcePluginId !== 'verstak.browser-inbox') throw new Error('stored event source plugin mismatch');
+  if (api.storedEvents(globalKey).length !== 0) throw new Error('workspace activity leaked into global storage');
   if (!container.textContent.includes('Example Article')) throw new Error('browser capture title was not rendered');
   if (!container.textContent.includes('browser.capture.selection')) throw new Error('event type was not rendered');
+
+  const clientView = await mountWithApi(api, { workspaceNode: { name: 'ClientA' }, workspaceRootPath: 'ClientA' });
+  if (clientView.container.textContent.includes('Example Article')) throw new Error('Project activity leaked into ClientA workspace view');
+  await api.handlers['note.saved']({
+    name: 'note.saved',
+    pluginId: 'verstak.notes',
+    timestamp: '2026-06-27T00:10:00Z',
+    payload: {
+      title: 'Client note',
+      path: 'ClientA/Notes/Client.md',
+      workspaceRootPath: 'ClientA',
+    },
+  });
+  await flush();
+  if (api.storedEvents(clientKey).length !== 1) throw new Error('ClientA activity was not stored under ClientA workspace key');
+  if (!clientView.container.textContent.includes('Client note')) throw new Error('ClientA activity was not rendered');
+  component.unmount && component.unmount(clientView.container);
+
+  const globalView = await mountWithApi(api, {});
+  if (!globalView.container.textContent.includes('Example Article')) throw new Error('global activity did not aggregate Project activity');
+  if (!globalView.container.textContent.includes('Client note')) throw new Error('global activity did not aggregate ClientA activity');
+  component.unmount && component.unmount(globalView.container);
 
   const manualButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-activity-action') === 'manual');
   if (!manualButton) throw new Error('manual activity button not found');
   manualButton.click();
   await flush();
-  if (api.storedEvents().length !== 2) throw new Error('manual activity was not stored');
+  if (api.storedEvents(projectKey).length !== 2) throw new Error('manual activity was not stored');
   if (!container.textContent.includes('Manual activity')) throw new Error('manual activity was not rendered');
 
   const clearButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-activity-action') === 'clear');
   if (!clearButton) throw new Error('clear activity button not found');
   clearButton.click();
   await flush();
-  if (api.storedEvents().length !== 0) throw new Error('clear action did not remove activity events');
+  if (api.storedEvents(projectKey).length !== 0) throw new Error('clear action did not remove activity events');
 
   component.unmount && component.unmount(container);
-  if (api.unsubscribed.length !== 9) throw new Error(`expected 9 unsubscribers, got ${api.unsubscribed.length}`);
+  if (api.unsubscribed.length !== 27) throw new Error(`expected 27 unsubscribers, got ${api.unsubscribed.length}`);
 
   const persistedApi = makeApi({
-    events: [{
+    'events:workspace:Project': [{
       activityId: 'persisted-1',
       type: 'note.saved',
       title: 'Saved note',
