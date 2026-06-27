@@ -213,6 +213,8 @@ if command -v node &>/dev/null; then
   report "platform-test frontend components mount" $?
   node "$ROOT/scripts/smoke-notes-plugin.js"
   report "notes frontend behavior" $?
+  node "$ROOT/scripts/smoke-markdown-preview-plugin.js"
+  report "markdown-preview frontend behavior" $?
   node "$ROOT/scripts/smoke-files-plugin.js"
   report "files frontend behavior" $?
   node "$ROOT/scripts/smoke-browser-inbox-plugin.js"

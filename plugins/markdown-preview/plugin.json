@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "id": "verstak.markdown-preview",
+  "name": "Markdown Preview",
+  "version": "0.1.0",
+  "apiVersion": "0.1.0",
+  "description": "Read-only Markdown preview provider for vault Markdown files.",
+  "source": "official",
+  "icon": "eye",
+  "provides": [
+    "verstak/markdown-preview/v1"
+  ],
+  "requires": [
+    "verstak/core/files/v1",
+    "verstak/core/workbench/v1"
+  ],
+  "permissions": [
+    "files.read"
+  ],
+  "frontend": {
+    "entry": "frontend/src/index.js"
+  },
+  "contributes": {
+    "openProviders": [
+      {
+        "id": "verstak.markdown-preview.generic",
+        "title": "Markdown Preview",
+        "priority": 80,
+        "component": "MarkdownPreview",
+        "supports": [
+          {
+            "kind": "vault-file",
+            "extensions": [".md", ".markdown"],
+            "contexts": ["generic-markdown"],
+            "modes": ["view"]
+          }
+        ]
+      },
+      {
+        "id": "verstak.markdown-preview.notes",
+        "title": "Notes Markdown Preview",
+        "priority": 80,
+        "component": "MarkdownPreview",
+        "supports": [
+          {
+            "kind": "vault-file",
+            "extensions": [".md", ".markdown"],
+            "contexts": ["notes-markdown"],
+            "modes": ["view"]
+          }
+        ]
+      }
+    ]
+  }
+}
