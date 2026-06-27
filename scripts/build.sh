@@ -36,6 +36,7 @@ package_plugin() {
   local plugin_dir="$1"
   local plugin_name="$2"
   local dist_dir="$ROOT/dist/$plugin_name"
+  local copied_plain_source=0
 
   echo "  → packaging dist/$plugin_name"
   rm -rf "$dist_dir"
@@ -47,14 +48,35 @@ package_plugin() {
   fi
 
   # 2. frontend/dist/
-  if [ -d "$plugin_dir/frontend/dist" ]; then
+  if [ ! -f "$plugin_dir/frontend/package.json" ] && [ -f "$plugin_dir/frontend/src/index.js" ]; then
+    mkdir -p "$dist_dir/frontend/dist"
+    cp "$plugin_dir/frontend/src/index.js" "$dist_dir/frontend/dist/index.js"
+    copied_plain_source=1
+    echo "    └─ frontend/dist/index.js (from frontend/src/index.js)"
+  elif [ -d "$plugin_dir/frontend/dist" ]; then
     mkdir -p "$dist_dir/frontend/dist"
     cp -r "$plugin_dir/frontend/dist/." "$dist_dir/frontend/dist/"
     echo "    └─ frontend/dist ($(find "$dist_dir/frontend/dist" -type f | wc -l) file(s))"
-  elif [ -f "$plugin_dir/frontend/src/index.js" ]; then
-    mkdir -p "$dist_dir/frontend/dist"
-    cp "$plugin_dir/frontend/src/index.js" "$dist_dir/frontend/dist/index.js"
-    echo "    └─ frontend/dist/index.js (from frontend/src/index.js)"
+  fi
+
+  if [ "$copied_plain_source" -eq 1 ] && [ -f "$dist_dir/plugin.json" ]; then
+    if command -v python3 &>/dev/null; then
+      python3 -c "
+import json
+path = '$dist_dir/plugin.json'
+with open(path, encoding='utf-8') as f:
+    manifest = json.load(f)
+frontend = manifest.setdefault('frontend', {})
+frontend['entry'] = 'frontend/dist/index.js'
+with open(path, 'w', encoding='utf-8') as f:
+    json.dump(manifest, f, ensure_ascii=False, indent=2)
+    f.write('\n')
+"
+      echo "    └─ plugin.json frontend.entry -> frontend/dist/index.js"
+    else
+      echo "    ❌ python3 required to rewrite packaged plugin.json for plain JS frontend"
+      return 1
+    fi
   fi
 
   # 3. backend binary
@@ -88,6 +110,7 @@ HAS_DEPS=1
 if ! command -v node &>/dev/null; then echo "  ❌ node: not found"; HAS_DEPS=0; else echo "  ✅ node $(node --version)"; fi
 if ! command -v npm &>/dev/null; then echo "  ❌ npm: not found"; HAS_DEPS=0; fi
 if ! command -v go &>/dev/null; then echo "  ❌ go: not found"; HAS_DEPS=0; else echo "  ✅ go $(go version | grep -oP 'go\S+')"; fi
+if ! command -v python3 &>/dev/null; then echo "  ❌ python3: not found"; HAS_DEPS=0; else echo "  ✅ python3 $(python3 --version | awk '{print $2}')"; fi
 if [ "$HAS_DEPS" -eq 0 ]; then
   echo "  ⚠️  some deps missing — will skip matching plugin parts"
 fi

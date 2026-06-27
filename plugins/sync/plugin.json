@@ -7,7 +7,7 @@
   "source": "official",
   "provides": ["verstak/sync/v1", "verstak/sync.status/v1"],
   "requires": ["verstak/core/files/v1"],
-  "permissions": ["files.read", "files.write", "network.remote", "settings.read", "settings.write", "ui.register"],
+  "permissions": ["files.read", "files.write", "network.remote", "storage.namespace", "sync.participate", "ui.register"],
   "frontend": { "entry": "frontend/dist/index.js" },
   "contributes": {
     "settingsPanels": [{ "id": "verstak.sync.settings", "title": "Sync", "component": "SyncSettings" }],

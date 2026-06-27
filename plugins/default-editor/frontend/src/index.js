@@ -84,6 +84,29 @@
     return escapeHtml(s).replace(/"/g, '&quot;');
   }
 
+  function cleanPath(path) {
+    return String(path || '').split('/').filter(Boolean).join('/');
+  }
+
+  function normalizeNoteFilename(title) {
+    var value = String(title == null ? '' : title).trim();
+    if (/\.markdown$/i.test(value) && value.length > 9) value = value.slice(0, -9);
+    else if (/\.md$/i.test(value) && value.length > 3) value = value.slice(0, -3);
+    if (!value) throw new Error('note title must not be empty');
+    value = value.replace(/\s+/g, '_');
+    value = value.replace(/[\u2012\u2013\u2014\u2015\u2212]/g, '-');
+    value = value.replace(/[<>:"/\\|?*\x00-\x1f\x7f]/g, '');
+    var out = '';
+    for (var i = 0; i < value.length; i++) {
+      var ch = value.charAt(i);
+      if (/[A-Za-z0-9._-]/.test(ch) || /[\p{L}\p{N}]/u.test(ch)) out += ch;
+      else if (/\S/.test(ch)) out += '_';
+    }
+    out = out.replace(/[_.-]+/g, '_').replace(/^[._\-\s]+|[._\-\s]+$/g, '');
+    if (!out) throw new Error('note title normalizes to an empty filename');
+    return out + '.md';
+  }
+
   function renderInline(text, isNotesContext) {
     var html = escapeHtml(text);
     // Internal wiki links [[Title]] — only render in notes context
@@ -408,14 +431,7 @@
         if (!dirty || disposed) return Promise.resolve();
         saveState = 'saving';
         updateStatus();
-        var savePromise;
-        if (editorMode === 'notes-markdown') {
-          savePromise = api.backend.call('SaveNote', resourcePath, currentContent).then(function (errStr) {
-            if (errStr) throw new Error(errStr);
-          });
-        } else {
-          savePromise = api.files.writeText(resourcePath, currentContent, { createIfMissing: false, overwrite: true });
-        }
+        var savePromise = api.files.writeText(resourcePath, currentContent, { createIfMissing: false, overwrite: true });
         return savePromise.then(function () {
           if (disposed) return;
           savedContent = currentContent;
@@ -442,15 +458,7 @@
         if (dirty && !window.confirm('Discard unsaved changes and reload from disk?')) return;
         editorWrap.innerHTML = '';
         editorWrap.appendChild(el('div', { className: 'de-loading' }, ['Loading...']));
-        var readPromise;
-        if (editorMode === 'notes-markdown') {
-          readPromise = api.backend.call('ReadNote', resourcePath).then(function (result) {
-            var content = Array.isArray(result) ? result[0] : result;
-            return content == null ? '' : content;
-          });
-        } else {
-          readPromise = api.files.readText(resourcePath);
-        }
+        var readPromise = api.files.readText(resourcePath);
         readPromise.then(function (content) {
           if (disposed) return;
           currentContent = String(content == null ? '' : content);
@@ -512,15 +520,23 @@
         event.preventDefault();
         var noteTitle = link.getAttribute('data-note-link');
         if (!noteTitle) return;
-        var parentPath = resourcePath;
-        var idx = parentPath.indexOf('/Notes/');
-        if (idx !== -1) {
-          parentPath = parentPath.substring(0, idx);
-        }
-        api.request.open({
-          path: parentPath + '/Notes/' + noteTitle + '.md',
+        var currentPath = cleanPath(resourcePath);
+        var notesIdx = currentPath.indexOf('/Notes/');
+        var notesRoot = notesIdx === -1 ? 'Notes' : currentPath.slice(0, notesIdx) + '/Notes';
+        var targetPath = cleanPath(notesRoot + '/' + normalizeNoteFilename(noteTitle));
+        api.workbench.openResource({
+          kind: 'vault-file',
+          path: targetPath,
           mode: 'view',
-          context: { notesMode: true }
+          extension: '.md',
+          context: {
+            sourcePluginId: 'verstak.default-editor',
+            sourceView: 'editor',
+            isInsideNotesFolder: true,
+            notesMode: true
+          }
+        }).catch(function (err) {
+          console.error('[default-editor] open internal link:', err);
         });
       });
 

@@ -10,11 +10,11 @@
 plugin-name/
   plugin.json           — обязательный manifest
   frontend/
-    package.json        — npm проект (Svelte)
+    package.json        — опционально, npm проект (Svelte/Vite)
     src/
-      index.js          — entry point
+      index.js          — source entry point для plain JS plugins
       ...
-    dist/               — сборка frontend (npm run build)
+    dist/               — ignored build output для npm frontend plugins
       index.js
       style.css
   backend/              — опционально (Go sidecar)
@@ -33,7 +33,7 @@ plugin-name/
 ```
 dist/
   plugin-name/
-    plugin.json           — копируется из корня исходного плагина
+    plugin.json           — manifest для runtime package
     frontend/
       dist/               — только собранные файлы (копируется содержимое)
         index.js
@@ -46,7 +46,11 @@ dist/
 
 ### plugin.json
 
-Копируется как из корня исходного плагина. Содержит:
+Исходный `plugin.json` копируется в package. Если plain JS plugin в исходниках
+указывает `frontend.entry` на `frontend/src/index.js`, `build.sh` переписывает
+это поле в packaged manifest на `frontend/dist/index.js`.
+
+Содержит:
 
 | Поле | Назначение в dist |
 |---|---|
@@ -59,7 +63,14 @@ dist/
 
 ### frontend/dist
 
-Содержимое `frontend/dist/` копируется в `dist/<plugin-name>/frontend/dist/`. Это результат `npm run build` — скомпилированные JS/CSS без map-файлов и dev-зависимостей.
+Для plugins с `frontend/package.json` содержимое `frontend/dist/` копируется в
+`dist/<plugin-name>/frontend/dist/`. Это результат `npm run build` —
+скомпилированные JS/CSS без map-файлов и dev-зависимостей.
+
+Для plain JS plugins без `frontend/package.json` `build.sh` всегда копирует
+tracked `frontend/src/index.js` в `dist/<plugin-name>/frontend/dist/index.js`.
+Ignored source-side `frontend/dist/` не используется для таких plugins, чтобы
+локальные stale build artifacts не попадали в package.
 
 ### backend binary
 
@@ -95,24 +106,22 @@ cd ~/git/verstak2/verstak-official-plugins
 `build.sh` для каждого плагина в `plugins/`:
 
 1. Проверяет `plugin.json` (JSON validation).
-2. Собирает frontend: `npm install && npm run build`.
+2. Собирает frontend для plugins с `frontend/package.json`: `npm install && npm run build`.
 3. Собирает backend: `go build -o <plugin-name> .`.
-4. Упаковывает в `dist/<plugin-name>/` через `package_plugin()`.
+4. Упаковывает в `dist/<plugin-name>/` через `package_plugin()`. Plain JS
+   frontend берётся из `frontend/src/index.js`, packaged manifest получает
+   `frontend.entry = "frontend/dist/index.js"`.
 
 ### Сборка конкретного плагина
 
 ```bash
-cd ~/git/verstak2/verstak-official-plugins/plugins/platform-test
-# Frontend
-cd frontend && npm install && npm run build
-# Backend (если есть)
-cd ../backend && go build -o platform-test .
-# Package
-mkdir -p ../../dist/platform-test
-cp plugin.json ../../dist/platform-test/
-cp -r frontend/dist/. ../../dist/platform-test/frontend/dist/
-cp backend/platform-test ../../dist/platform-test/backend/
+cd ~/git/verstak2/verstak-official-plugins
+./scripts/build.sh
 ```
+
+`build.sh` intentionally packages all official plugins because packaging includes
+manifest rewriting for plain JS plugins. Do not hand-copy `plugin.json` for a
+plain JS plugin without applying the same `frontend.entry` rewrite.
 
 ### Backend build details
 

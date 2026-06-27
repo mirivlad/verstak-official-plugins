@@ -25,11 +25,9 @@
     return s
   }
 
-  async function backendCall(method, ...args) {
-    if (api?.backend && typeof api.backend.call === 'function') {
-      return await api.backend.call(method, ...args)
-    }
-    throw new Error('Plugin API backend.call not available')
+  function syncAPI() {
+    if (!api?.sync) throw new Error('Plugin API sync namespace not available')
+    return api.sync
   }
 
   async function load() {
@@ -45,7 +43,7 @@
       }
     } catch (_) {}
     try {
-      settings = await backendCall('SyncStatus')
+      settings = await syncAPI().status()
       if (settings) {
         if (settings.serverUrl) serverUrl = settings.serverUrl
         if (settings.syncInterval != null) syncInterval = settings.syncInterval
@@ -65,9 +63,10 @@
     errorMsg = ''
     resultMsg = ''
     try {
-      if (api?.settings?.write) {
-        await api.settings.write({ serverUrl, username, autoSync, syncInterval })
+      if (api?.settings?.writeAll) {
+        await api.settings.writeAll({ serverUrl, username, autoSync, syncInterval })
       }
+      await syncAPI().setInterval(autoSync ? syncInterval : 0)
       resultMsg = 'Settings saved.'
       resultKind = ''
     } catch (e) {
@@ -83,7 +82,7 @@
     connectionOk = null
     errorMsg = ''
     try {
-      await backendCall('SyncTestConnection', serverUrl, username, password)
+      await syncAPI().testConnection(serverUrl, username, password)
       connectionOk = true
       connectionResult = 'Connection successful.'
     } catch (e) {
@@ -99,7 +98,7 @@
     errorMsg = ''
     connectionResult = ''
     try {
-      await backendCall('SyncConfigure', serverUrl, username, password)
+      await syncAPI().configure(serverUrl, username, password)
       connectionResult = 'Connected successfully.'
       connectionOk = true
       username = ''
@@ -125,7 +124,7 @@
     errorMsg = ''
     resultMsg = ''
     try {
-      const r = await backendCall('SyncNow')
+      const r = await syncAPI().now()
       const summary = 'Pushed ' + (r?.pushed || 0) + ', pulled ' + (r?.pulled || 0)
       const warning = syncResultWarning(r)
       resultMsg = warning ? summary + ' · ' + warning : summary
@@ -157,7 +156,7 @@
     errorMsg = ''
     resultMsg = ''
     try {
-      await backendCall('SyncDisconnect')
+      await syncAPI().disconnect()
       resultMsg = 'Disconnected from server.'
       resultKind = ''
       settings = null
@@ -184,18 +183,18 @@
     <h3 style="margin:0 0 0.75rem;color:#e0e0f0;font-size:0.95rem;">Server</h3>
 
     <div style="margin-bottom:0.75rem;">
-      <label style="display:block;color:#a0a0b8;font-size:0.85rem;margin-bottom:0.35rem;">Server URL</label>
-      <input type="text" style={INPUT_STYLE} on:focus={e => e.target.style.cssText = INPUT_FOCUS_STYLE} on:blur={e => e.target.style.cssText = INPUT_STYLE} bind:value={serverUrl} placeholder="https://example.com" />
+      <label for="sync-server-url" style="display:block;color:#a0a0b8;font-size:0.85rem;margin-bottom:0.35rem;">Server URL</label>
+      <input id="sync-server-url" type="text" style={INPUT_STYLE} on:focus={e => e.target.style.cssText = INPUT_FOCUS_STYLE} on:blur={e => e.target.style.cssText = INPUT_STYLE} bind:value={serverUrl} placeholder="https://example.com" />
     </div>
 
     <div style="margin-bottom:0.75rem;">
-      <label style="display:block;color:#a0a0b8;font-size:0.85rem;margin-bottom:0.35rem;">Username</label>
-      <input type="text" style={INPUT_STYLE} on:focus={e => e.target.style.cssText = INPUT_FOCUS_STYLE} on:blur={e => e.target.style.cssText = INPUT_STYLE} bind:value={username} />
+      <label for="sync-username" style="display:block;color:#a0a0b8;font-size:0.85rem;margin-bottom:0.35rem;">Username</label>
+      <input id="sync-username" type="text" style={INPUT_STYLE} on:focus={e => e.target.style.cssText = INPUT_FOCUS_STYLE} on:blur={e => e.target.style.cssText = INPUT_STYLE} bind:value={username} />
     </div>
 
     <div style="margin-bottom:0.75rem;">
-      <label style="display:block;color:#a0a0b8;font-size:0.85rem;margin-bottom:0.35rem;">Password</label>
-      <input type="password" style={INPUT_STYLE} on:focus={e => e.target.style.cssText = INPUT_FOCUS_STYLE} on:blur={e => e.target.style.cssText = INPUT_STYLE} bind:value={password} />
+      <label for="sync-password" style="display:block;color:#a0a0b8;font-size:0.85rem;margin-bottom:0.35rem;">Password</label>
+      <input id="sync-password" type="password" style={INPUT_STYLE} on:focus={e => e.target.style.cssText = INPUT_FOCUS_STYLE} on:blur={e => e.target.style.cssText = INPUT_STYLE} bind:value={password} />
     </div>
 
     <div style="display:flex;gap:0.5rem;margin-top:1rem;">
@@ -217,9 +216,9 @@
     </div>
 
     <div style="margin-bottom:0.75rem;">
-      <label style="display:block;color:#a0a0b8;font-size:0.85rem;margin-bottom:0.35rem;">Sync interval</label>
+      <label for="sync-interval" style="display:block;color:#a0a0b8;font-size:0.85rem;margin-bottom:0.35rem;">Sync interval</label>
       <div style="display:flex;align-items:center;gap:0.5rem;">
-        <input type="number" min="1" max="1440" bind:value={syncInterval} on:change={saveInterval} style="width:100px;background:#0f3460;border:1px solid #1a3a5c;color:#e0e0f0;padding:8px 10px;border-radius:4px;font-size:0.85rem;height:36px;" />
+        <input id="sync-interval" type="number" min="1" max="1440" bind:value={syncInterval} on:change={saveInterval} style="width:100px;background:#0f3460;border:1px solid #1a3a5c;color:#e0e0f0;padding:8px 10px;border-radius:4px;font-size:0.85rem;height:36px;" />
         <span style="color:#a0a0b8;font-size:0.85rem;">minutes</span>
       </div>
     </div>

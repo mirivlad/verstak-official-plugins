@@ -25,7 +25,6 @@
     '.notes-list{flex:1;overflow:auto;min-height:0}',
     '.notes-item{display:flex;align-items:center;gap:.5rem;padding:.45rem .75rem;border-bottom:1px solid rgba(22,33,62,.55);cursor:pointer;font-size:.85rem}',
     '.notes-item:hover{background:#17172d}',
-    '.notes-item.overview{background:#111126;border-left:2px solid #4ecca3}',
     '.notes-item.selected{background:#1a2a3a}',
     '.notes-item-icon{width:1.25rem;height:1.25rem;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:#8b8ba8}',
     '.notes-item-icon svg{width:16px;height:16px;display:block;fill:currentColor}',
@@ -101,6 +100,58 @@
     return parts[parts.length - 1] || '';
   }
 
+  function cleanPath(path) {
+    return String(path || '').split('/').filter(Boolean).join('/');
+  }
+
+  function parentPath(path) {
+    path = cleanPath(path);
+    var idx = path.lastIndexOf('/');
+    return idx === -1 ? '' : path.slice(0, idx);
+  }
+
+  function notesFolderPath(parent) {
+    parent = cleanPath(parent);
+    return parent ? parent + '/Notes' : 'Notes';
+  }
+
+  function titleFromFilename(filename) {
+    filename = String(filename || '').trim();
+    if (/\.markdown$/i.test(filename)) filename = filename.slice(0, -9);
+    else if (/\.md$/i.test(filename)) filename = filename.slice(0, -3);
+    return filename.replace(/_/g, ' ').trim();
+  }
+
+  function normalizeNoteFilename(title) {
+    var original = String(title == null ? '' : title);
+    var value = original.trim();
+    if (/\.markdown$/i.test(value) && value.length > 9) value = value.slice(0, -9);
+    else if (/\.md$/i.test(value) && value.length > 3) value = value.slice(0, -3);
+    if (!value) throw new Error('note title must not be empty');
+    value = value.replace(/\s+/g, '_');
+    value = value.replace(/[\u2012\u2013\u2014\u2015\u2212]/g, '-');
+    value = value.replace(/[<>:"/\\|?*\x00-\x1f\x7f]/g, '');
+    var out = '';
+    for (var i = 0; i < value.length; i++) {
+      var ch = value.charAt(i);
+      if (/[A-Za-z0-9._-]/.test(ch) || /[\p{L}\p{N}]/u.test(ch)) out += ch;
+      else if (/\S/.test(ch)) out += '_';
+    }
+    out = out.replace(/[_.-]+/g, '_').replace(/^[._\-\s]+|[._\-\s]+$/g, '');
+    if (!out) throw new Error('note title normalizes to an empty filename');
+    return out + '.md';
+  }
+
+  function isConflictError(err) {
+    var msg = (err && err.message) ? err.message : String(err || '');
+    return /conflict|already exists|exists/i.test(msg);
+  }
+
+  function isNotFoundError(err) {
+    var msg = (err && err.message) ? err.message : String(err || '');
+    return /not.?found|does not exist|no such/i.test(msg);
+  }
+
   var NotesView = {
     mount: function (containerEl, props, api) {
       injectStyles();
@@ -122,17 +173,80 @@
         return workspaceRoot || '';
       }
 
-      // ─── Backend bridge ──────────────────────────────────────
-      // Uses api.backend.call() from VerstakPluginAPI — the official bridge.
-      // Direct window.go.api.App access is NOT allowed per platform rules.
+      function noteFromEntry(parent, entry) {
+        return {
+          title: titleFromFilename(entry.name),
+          filename: entry.name,
+          path: entry.relativePath,
+          parentPath: cleanPath(parent)
+        };
+      }
+
+      function sortNotes(list) {
+        return list.sort(function (a, b) {
+          return String(a.title || '').toLowerCase().localeCompare(String(b.title || '').toLowerCase());
+        });
+      }
+
+      function listNotes(parent) {
+        return api.files.list(notesFolderPath(parent)).then(function (entries) {
+          return sortNotes((entries || []).filter(function (entry) {
+            return entry.type === 'file' && /\.(md|markdown)$/i.test(entry.name || '');
+          }).map(function (entry) {
+            return noteFromEntry(parent, entry);
+          }));
+        }).catch(function (err) {
+          if (isNotFoundError(err)) return [];
+          throw err;
+        });
+      }
+
+      function ensureNotesFolder(parent) {
+        return api.files.createFolder(notesFolderPath(parent)).catch(function (err) {
+          if (!isConflictError(err)) throw err;
+        });
+      }
+
+      function createNote(parent, title) {
+        var trimmedTitle = String(title || '').trim();
+        if (!trimmedTitle) return Promise.reject(new Error('note title must not be empty'));
+        var path = notesFolderPath(parent) + '/' + normalizeNoteFilename(trimmedTitle);
+        return ensureNotesFolder(parent).then(function () {
+          return api.files.writeText(path, '# ' + trimmedTitle + '\n', {
+            createIfMissing: true,
+            overwrite: false
+          }).then(function () {
+            return { path: path };
+          }).catch(function (writeErr) {
+            if (isConflictError(writeErr)) return { path: path, conflict: true };
+            throw writeErr;
+          });
+        });
+      }
+
+      function renameNote(notePath, newTitle) {
+        var trimmedTitle = String(newTitle || '').trim();
+        if (!trimmedTitle) return Promise.reject(new Error('note title must not be empty'));
+        var newPath = parentPath(notePath) + '/' + normalizeNoteFilename(trimmedTitle);
+        if (newPath === notePath) return Promise.resolve({ path: notePath });
+        return api.files.metadata(newPath).then(function () {
+          return { path: newPath, conflict: true };
+        }).catch(function (err) {
+          if (!isNotFoundError(err)) throw err;
+          return api.files.move(notePath, newPath, { overwrite: false }).then(function () {
+            return { path: newPath };
+          }).catch(function (moveErr) {
+            if (isConflictError(moveErr)) return { path: newPath, conflict: true };
+            throw moveErr;
+          });
+        });
+      }
 
       // ─── UI Elements ────────────────────────────────────────
 
       var toolbar = el('div', { className: 'notes-toolbar' });
-      var overviewBtn = el('button', { className: 'notes-btn primary', 'data-action': 'overview', innerHTML: iconSvg('overview') + ' Overview' });
       var createBtn = el('button', { className: 'notes-btn', 'data-action': 'create', innerHTML: iconSvg('add') + ' New Note' });
       var statusEl = el('span', { className: 'notes-status' });
-      toolbar.appendChild(overviewBtn);
       toolbar.appendChild(createBtn);
       toolbar.appendChild(el('span', { style: { flex: '1' } }));
       toolbar.appendChild(statusEl);
@@ -186,14 +300,9 @@
         listContainer.appendChild(el('div', { className: 'notes-empty' }, ['Loading...']));
 
         var parent = notesParent();
-        api.backend.call('ListNotes', parent).then(function (result) {
+        listNotes(parent).then(function (result) {
           if (disposed) return;
-          var unpack = unpackResult(result);
-          if (unpack.error) {
-            renderEmpty('Could not load notes: ' + unpack.error);
-            return;
-          }
-          notes = unpack.value || [];
+          notes = result || [];
           renderList();
         }).catch(function (err) {
           if (disposed) return;
@@ -209,13 +318,13 @@
         }
         notes.forEach(function (note) {
           var row = el('div', {
-            className: 'notes-item' + (note.isOverview ? ' overview' : '') + (note.path === selectedPath ? ' selected' : ''),
+            className: 'notes-item' + (note.path === selectedPath ? ' selected' : ''),
             'data-note-path': note.path,
             'data-note-title': note.title,
             onClick: function () { selectNote(note); },
             onDblclick: function () { openNote(note); }
           }, [
-            el('span', { className: 'notes-item-icon', innerHTML: note.isOverview ? iconSvg('overview') : iconSvg('note') }),
+            el('span', { className: 'notes-item-icon', innerHTML: iconSvg('note') }),
             el('span', { className: 'notes-item-name', textContent: note.title || fileName(note.path), title: note.title || note.path }),
             el('span', { className: 'notes-item-actions' }, [
               el('button', {
@@ -224,12 +333,12 @@
                 innerHTML: iconSvg('open'),
                 onClick: function (e) { e.stopPropagation(); openNote(note); }
               }),
-              !note.isOverview ? el('button', {
+              el('button', {
                 className: 'notes-item-btn',
                 title: 'Rename',
                 innerHTML: iconSvg('rename'),
                 onClick: function (e) { e.stopPropagation(); beginRename(note); }
-              }) : null
+              })
             ])
           ]);
           listContainer.appendChild(row);
@@ -239,7 +348,7 @@
       function renderEmpty(msg) {
         listContainer.innerHTML = '';
         listContainer.appendChild(el('div', { className: 'notes-empty' }, [
-          el('div', {}, [iconSvg('note')]),
+          el('div', { innerHTML: iconSvg('note') }),
           el('div', {}, [msg]),
           el('div', { className: 'notes-empty-hint' }, ['Click "New Note" to create one'])
         ]));
@@ -268,40 +377,6 @@
         }).catch(function (err) { console.error('[notes] openResource:', err); });
       }
 
-      function openOverview() {
-        setStatus('Opening overview...', 'loading');
-        var parent = notesParent();
-        api.backend.call('EnsureOverview', parent).then(function (result) {
-          if (disposed) return;
-          var unpack = unpackResult(result);
-          if (unpack.error) {
-            setStatus('Error: ' + unpack.error, 'error');
-            return;
-          }
-          var overviewPath = (unpack.value && unpack.value.path) || '';
-          if (!overviewPath) {
-            setStatus('Failed to get overview path', 'error');
-            return;
-          }
-          loadNotes();
-          api.workbench.openResource({
-            kind: 'vault-file',
-            path: overviewPath,
-            mode: 'view',
-            extension: '.md',
-            context: {
-              sourcePluginId: 'verstak.notes',
-              sourceView: 'notes',
-              isInsideNotesFolder: true,
-              notesMode: true,
-              notesScopePath: notesParent()
-            }
-          }).catch(function (err) { setStatus('Error opening overview: ' + (err.message || err), 'error'); });
-        }).catch(function (err) {
-          setStatus('Error: ' + (err.message || err), 'error');
-        });
-      }
-
       // ─── Create ────────────────────────────────────────────
 
       function showCreate() {
@@ -319,14 +394,9 @@
         if (!title) return;
         setStatus('Creating note...', 'loading');
         var parent = notesParent();
-        api.backend.call('CreateNote', parent, title).then(function (result) {
+        createNote(parent, title).then(function (data) {
           if (disposed) return;
-          var unpack = unpackResult(result);
-          if (unpack.error) {
-            setStatus('Error: ' + unpack.error, 'error');
-            return;
-          }
-          var data = unpack.value || {};
+          data = data || {};
           if (data.conflict) {
             showConflictModal(title, data.path);
             return;
@@ -375,14 +445,9 @@
         var newTitle = renameInput.value.trim();
         if (!newTitle) return;
         setStatus('Renaming...', 'loading');
-        api.backend.call('RenameNote', renameTarget.path, newTitle).then(function (result) {
+        renameNote(renameTarget.path, newTitle).then(function (data) {
           if (disposed) return;
-          var unpack = unpackResult(result);
-          if (unpack.error) {
-            setStatus('Error: ' + unpack.error, 'error');
-            return;
-          }
-          var data = unpack.value || {};
+          data = data || {};
           if (data.conflict) {
             showConflictModal(newTitle, data.path);
             return;
@@ -415,7 +480,6 @@
 
       // ─── Event Wiring ───────────────────────────────────────
 
-      overviewBtn.addEventListener('click', openOverview);
       createBtn.addEventListener('click', showCreate);
       createConfirm.addEventListener('click', confirmCreate);
       createCancel.addEventListener('click', hideCreate);
@@ -447,16 +511,6 @@
       containerEl.innerHTML = '';
     }
   };
-
-  function unpackResult(result) {
-    if (Array.isArray(result) && result.length === 2) {
-      return { value: result[0], error: result[1] || '' };
-    }
-    if (result && result.value !== undefined && result.error !== undefined) {
-      return result;
-    }
-    return { value: result, error: '' };
-  }
 
   window.VerstakPluginRegister('verstak.notes', {
     components: { NotesView: NotesView }

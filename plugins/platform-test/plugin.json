@@ -34,7 +34,7 @@
     "workbench.open"
   ],
   "frontend": {
-    "entry": "frontend/dist/index.js"
+    "entry": "frontend/src/index.js"
   },
   "contributes": {
     "views": [

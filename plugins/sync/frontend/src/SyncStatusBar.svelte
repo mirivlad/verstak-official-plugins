@@ -6,16 +6,6 @@
   let status = 'disabled'
   let interval
 
-  function wailsCall(method, ...args) {
-    try {
-      if (window['go'] && window['go']['main'] && window['go']['main']['App']) {
-        const fn = window['go']['main']['App'][method]
-        if (typeof fn === 'function') return fn(...args)
-      }
-    } catch (e) { console.error('Wails error:', method, e) }
-    return Promise.reject(new Error('Wails not connected: ' + method))
-  }
-
   async function loadStatus() {
     try {
       const s = await api?.settings?.read?.()
@@ -25,7 +15,7 @@
       }
     } catch (_) {}
     try {
-      const s = await wailsCall('SyncStatus')
+      const s = await api?.sync?.status?.()
       if (s?.statusLabel) {
         status = s.statusLabel
       } else if (s?.configured === false) {

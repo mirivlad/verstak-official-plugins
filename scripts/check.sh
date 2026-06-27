@@ -24,49 +24,141 @@ if [ "$HAS_PYTHON" -eq 1 ]; then
   echo "[manifest validation]"
   SDK_SCHEMA="$ROOT/../verstak-sdk/schemas/manifest.json"
   if [ -f "$SDK_SCHEMA" ]; then
+    set +e
     python3 -c "
-import json, glob
+import json, glob, os, sys
+from jsonschema import Draft202012Validator
 
 skipped = []
 problems = []
 
+with open('$SDK_SCHEMA') as f:
+    schema = json.load(f)
+
+validator = Draft202012Validator(schema)
+
 for plugin_dir in glob.glob('$ROOT/plugins/*/'):
     manifest_path = plugin_dir + 'plugin.json'
+    plugin_name = os.path.basename(os.path.dirname(manifest_path))
     try:
         with open(manifest_path) as f:
             manifest = json.load(f)
     except FileNotFoundError:
-        skipped.append(plugin_dir.split('/')[-2])
+        skipped.append(plugin_name)
         continue
     except json.JSONDecodeError as e:
-        problems.append(plugin_dir.split('/')[-2] + ': invalid JSON — ' + str(e))
+        problems.append(plugin_name + ': invalid JSON - ' + str(e))
         continue
 
-    checks = {
-        'id': isinstance(manifest.get('id'), str) and '.' in manifest['id'],
-        'version': isinstance(manifest.get('version'), str),
-        'schemaVersion': manifest.get('schemaVersion') == 1,
-        'provides': isinstance(manifest.get('provides'), list),
-        'requires': isinstance(manifest.get('requires'), list),
-    }
-    for check, ok in checks.items():
-        if not ok:
-            problems.append(manifest.get('id', plugin_dir.split('/')[-2]) + ': missing/empty \"' + check + '\"')
+    for err in sorted(validator.iter_errors(manifest), key=lambda e: list(e.path)):
+        where = '.'.join(str(part) for part in err.path) or '<root>'
+        problems.append(manifest.get('id', plugin_name) + ': ' + where + ': ' + err.message)
+    for field in ('requires', 'optionalRequires'):
+        if 'verstak/core/notes/v1' in manifest.get(field, []):
+            problems.append(manifest.get('id', plugin_name) + ': ' + field + ': core notes capability is not part of v2 platform contract')
 
 if skipped:
-    print('  \u26a0\ufe0f  skipped (no plugin.json): ' + ', '.join(skipped))
+    print('  warning: skipped (no plugin.json): ' + ', '.join(skipped))
 if problems:
     for p in problems:
-        print('  \u274c ' + p)
+        print('  FAIL ' + p)
+    sys.exit(1)
 else:
-    print('  \u2705 all manifests valid')
+    print('  OK all manifests valid')
 "
-    report "manifests valid" $?
+    STATUS=$?
+    set -e
+    report "manifests valid" "$STATUS"
   else
     echo "  ℹ️  SDK schema not found at $SDK_SCHEMA — run build.sh in verstak-sdk first"
   fi
 else
   echo "  ℹ️  python3 not available — skipping manifest validation"
+fi
+
+echo ""
+# Guard official plugins against bypassing the v2 plugin API for note features.
+echo "[frontend API boundary]"
+if [ "$HAS_PYTHON" -eq 1 ]; then
+  set +e
+  python3 -c "
+import os, re, sys
+
+root = '$ROOT/plugins'
+forbidden = re.compile(r\"api\\.backend\\.call|api\\.request\\.open|window(?:\\.go|\\[['\\\"]go['\\\"]\\])\")
+problems = []
+
+for dirpath, _, filenames in os.walk(root):
+    if '/node_modules/' in dirpath:
+        continue
+    for filename in filenames:
+        if not filename.endswith(('.js', '.svelte', '.ts')):
+            continue
+        path = os.path.join(dirpath, filename)
+        with open(path, encoding='utf-8') as f:
+            for lineno, line in enumerate(f, 1):
+                if forbidden.search(line):
+                    problems.append(f'{os.path.relpath(path, \"$ROOT\")}:{lineno}: {line.strip()}')
+
+if problems:
+    for p in problems:
+        print('  FAIL ' + p)
+    sys.exit(1)
+print('  OK official plugins use public VerstakPluginAPI only')
+"
+  STATUS=$?
+  set -e
+  report "frontend API boundary" "$STATUS"
+else
+  echo "  ⚠️  python3 not available — skipping frontend API boundary"
+fi
+
+echo ""
+# Ensure source manifests do not require ignored dist files for plain JS plugins.
+echo "[frontend entry source contract]"
+if [ "$HAS_PYTHON" -eq 1 ]; then
+  set +e
+  python3 -c "
+import json, os, sys
+
+root = '$ROOT/plugins'
+problems = []
+
+for plugin_name in sorted(os.listdir(root)):
+    plugin_dir = os.path.join(root, plugin_name)
+    manifest_path = os.path.join(plugin_dir, 'plugin.json')
+    if not os.path.isfile(manifest_path):
+        continue
+    with open(manifest_path, encoding='utf-8') as f:
+        manifest = json.load(f)
+    frontend = manifest.get('frontend') or {}
+    entry = frontend.get('entry')
+    if not entry:
+        continue
+    entry_path = os.path.join(plugin_dir, entry)
+    has_build_step = os.path.isfile(os.path.join(plugin_dir, 'frontend', 'package.json'))
+    has_plain_source = os.path.isfile(os.path.join(plugin_dir, 'frontend', 'src', 'index.js'))
+    if has_build_step:
+        if entry != 'frontend/dist/index.js':
+            problems.append(f'{plugin_name}: build frontend entry must be frontend/dist/index.js, got {entry}')
+        continue
+    if has_plain_source and entry != 'frontend/src/index.js':
+        problems.append(f'{plugin_name}: plain JS frontend entry must be frontend/src/index.js, got {entry}')
+        continue
+    if not os.path.isfile(entry_path):
+        problems.append(f'{plugin_name}: frontend entry does not exist: {entry}')
+
+if problems:
+    for p in problems:
+        print('  FAIL ' + p)
+    sys.exit(1)
+print('  OK source manifests reference tracked frontend entries')
+"
+  STATUS=$?
+  set -e
+  report "frontend entry source contract" "$STATUS"
+else
+  echo "  ⚠️  python3 not available — skipping frontend entry source contract"
 fi
 
 echo ""
@@ -88,6 +180,8 @@ echo "[frontend smoke]"
 if command -v node &>/dev/null; then
   node "$ROOT/scripts/smoke-platform-frontend.js"
   report "platform-test frontend components mount" $?
+  node "$ROOT/scripts/smoke-notes-plugin.js"
+  report "notes frontend behavior" $?
 else
   echo "  ⚠️  node not available — skipping frontend smoke"
 fi
@@ -104,10 +198,11 @@ if command -v node &>/dev/null; then
     entry=$(node -e "const m=require('$manifest');console.log(m.frontend&&m.frontend.entry||'')" 2>/dev/null)
     if [ -z "$entry" ]; then continue; fi
     bundle="$plugin_dir$entry"
-    if [ ! -f "$bundle" ] && [ "$entry" = "frontend/dist/index.js" ] && [ -f "$plugin_dir/frontend/src/index.js" ]; then
-      bundle="$plugin_dir/frontend/src/index.js"
-    fi
     if [ ! -f "$bundle" ]; then
+      if [ -f "$plugin_dir/frontend/package.json" ]; then
+        echo "  ⚠️  $plugin_id: bundle not built at $entry — run scripts/build.sh for packaged frontend smoke"
+        continue
+      fi
       echo "  ❌ $plugin_id: bundle not found at $entry"
       BUNDLE_FAILED=1
       continue

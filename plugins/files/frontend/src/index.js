@@ -145,6 +145,35 @@
     return dot > 0 ? name.slice(dot + 1).toLowerCase() : '';
   }
 
+  function normalizeNoteFilename(title) {
+    var value = String(title == null ? '' : title).trim();
+    if (/\.markdown$/i.test(value) && value.length > 9) value = value.slice(0, -9);
+    else if (/\.md$/i.test(value) && value.length > 3) value = value.slice(0, -3);
+    if (!value) throw new Error('note title must not be empty');
+    value = value.replace(/\s+/g, '_');
+    value = value.replace(/[\u2012\u2013\u2014\u2015\u2212]/g, '-');
+    value = value.replace(/[<>:"/\\|?*\x00-\x1f\x7f]/g, '');
+    var out = '';
+    for (var i = 0; i < value.length; i++) {
+      var ch = value.charAt(i);
+      if (/[A-Za-z0-9._-]/.test(ch) || /[\p{L}\p{N}]/u.test(ch)) out += ch;
+      else if (/\S/.test(ch)) out += '_';
+    }
+    out = out.replace(/[_.-]+/g, '_').replace(/^[._\-\s]+|[._\-\s]+$/g, '');
+    if (!out) throw new Error('note title normalizes to an empty filename');
+    return out + '.md';
+  }
+
+  function isConflictError(err) {
+    var msg = (err && err.message) ? err.message : String(err || '');
+    return /conflict|already exists|exists/i.test(msg);
+  }
+
+  function isNotFoundError(err) {
+    var msg = (err && err.message) ? err.message : String(err || '');
+    return /not.?found|does not exist|no such/i.test(msg);
+  }
+
   var FILE_ICONS = {
     folder: 'M3 5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v1H3V5Zm0 6h18v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7Z',
     markdown: 'M5 3h10l4 4v14H5V3Zm9 1.5V8h3.5L14 4.5ZM8 11h8v2H8v-2Zm0 4h8v2H8v-2Z',
@@ -283,6 +312,56 @@
         if (!workspaceRoot) return full;
         if (full === workspaceRoot) return '';
         return full.indexOf(workspaceRoot + '/') === 0 ? full.slice(workspaceRoot.length + 1) : full;
+      }
+
+      function ensureFolder(path) {
+        return api.files.createFolder(path).catch(function (err) {
+          if (!isConflictError(err)) throw err;
+        });
+      }
+
+      function createNoteInFolder(notesFolderPath, title) {
+        var trimmedTitle = String(title || '').trim();
+        if (!trimmedTitle) return Promise.reject(new Error('note title must not be empty'));
+        var notePath = cleanPath(notesFolderPath) + '/' + normalizeNoteFilename(trimmedTitle);
+        return ensureFolder(notesFolderPath).then(function () {
+          return api.files.metadata(notePath).then(function () {
+            return { path: notePath, conflict: true };
+          }).catch(function (err) {
+            if (!isNotFoundError(err)) throw err;
+            return api.files.writeText(notePath, '# ' + trimmedTitle + '\n', {
+              createIfMissing: true,
+              overwrite: false
+            }).then(function () {
+              return { path: notePath };
+            }).catch(function (writeErr) {
+              if (isConflictError(writeErr)) return { path: notePath, conflict: true };
+              throw writeErr;
+            });
+          });
+        });
+      }
+
+      function ensureOverviewInFolder(notesFolderPath) {
+        var folderPath = cleanPath(notesFolderPath);
+        var ovPath = folderPath + '/Overview.md';
+        return api.files.metadata(ovPath).then(function () {
+          return { path: ovPath };
+        }).catch(function (err) {
+          if (!isNotFoundError(err)) throw err;
+          return ensureFolder(folderPath).then(function () {
+            var local = localPath(folderPath);
+            var parentName = baseName(parentPath(local)) || baseName(folderPath) || 'Overview';
+            return api.files.writeText(ovPath, '# ' + parentName + '\n', {
+              createIfMissing: true,
+              overwrite: false
+            }).catch(function (writeErr) {
+              if (!isConflictError(writeErr)) throw writeErr;
+            }).then(function () {
+              return { path: ovPath };
+            });
+          });
+        });
       }
 
       var toolbar = el('div', { className: 'files-toolbar' });
@@ -771,35 +850,31 @@
               ctxMenu.appendChild(ctxItem('Create Note', '', function () {
                 var title = prompt('Note title:');
                 if (!title) return;
-                api.backend.call('NormalizeNoteTitle', title).then(function (result) {
-                  var safeTitle = Array.isArray(result) ? result[0] : (typeof result === 'string' ? result : title);
-                  if (!safeTitle) safeTitle = title;
-                  return api.backend.call('CreateNote', scopedPath(entryLocalPath), safeTitle).then(function (cr) {
-                    var crErr = Array.isArray(cr) ? cr[1] : '';
-                    if (crErr) { window.alert(crErr); return; }
-                    loadEntries();
-                    var crValue = Array.isArray(cr) ? cr[0] : cr;
-                    var notePath = (crValue && crValue.path) ? crValue.path : '';
-                    if (notePath) {
-                      api.workbench.openResource({
-                        kind: 'vault-file',
-                        path: localPath(notePath),
-                        mode: 'edit',
-                        extension: '.md',
-                        context: { notesMode: true, sourcePluginId: 'verstak.files' }
-                      }).catch(function () {});
-                    }
-                  });
+                createNoteInFolder(entry.relativePath, title).then(function (created) {
+                  if (created && created.conflict) {
+                    window.alert('A note with this title already exists.');
+                    return;
+                  }
+                  loadEntries();
+                  var notePath = (created && created.path) ? created.path : '';
+                  if (notePath) {
+                    api.workbench.openResource({
+                      kind: 'vault-file',
+                      path: notePath,
+                      mode: 'edit',
+                      extension: '.md',
+                      context: { notesMode: true, sourcePluginId: 'verstak.files' }
+                    }).catch(function () {});
+                  }
                 }).catch(function (err) { window.alert('Failed to create note: ' + (err.message || String(err))); });
               }, 'create-note', 'markdownAdd'));
               ctxMenu.appendChild(ctxItem('Open Overview', '', function () {
-                api.backend.call('EnsureOverview', scopedPath(entryLocalPath)).then(function (result) {
-                  var ovValue = Array.isArray(result) ? result[0] : result;
-                  var overviewPath = (ovValue && ovValue.path) ? ovValue.path : '';
+                ensureOverviewInFolder(entry.relativePath).then(function (result) {
+                  var overviewPath = (result && result.path) ? result.path : '';
                   if (overviewPath) {
                     api.workbench.openResource({
                       kind: 'vault-file',
-                      path: localPath(overviewPath),
+                      path: overviewPath,
                       mode: 'view',
                       extension: '.md',
                       context: { notesMode: true, sourcePluginId: 'verstak.files' }
