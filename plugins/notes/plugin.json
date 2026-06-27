@@ -4,7 +4,7 @@
   "name": "Notes",
   "version": "0.1.0",
   "apiVersion": "0.1.0",
-  "description": "Workspace-scoped notes manager with create, rename, overview, and workbench integration.",
+  "description": "Workspace-scoped notes manager for Markdown files in canonical Notes folders with create, rename, and Workbench integration.",
   "source": "official",
   "icon": "edit",
   "provides": [
