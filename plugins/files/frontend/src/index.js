@@ -310,6 +310,8 @@
       var createMode = '';
       var renameTarget = null;
       var disposed = false;
+      var fileActions = [];
+      var contextMenuEntries = [];
       var historyStack = Array.isArray(savedHistory.stack) && savedHistory.stack.length ? savedHistory.stack.map(cleanPath) : [currentPath];
       var historyIndex = Math.max(0, Math.min(Number(savedHistory.index) || 0, historyStack.length - 1));
       if (historyStack[historyIndex] !== currentPath) {
@@ -589,6 +591,34 @@
         });
       }
 
+      function contributionContextMatches(item, entry) {
+        var context = String(item && item.context || '').toLowerCase();
+        if (!context || context === '*' || context === 'files' || context === 'vault-entry') return true;
+        if (context === 'file') return !entry || entry.type !== 'folder';
+        if (context === 'folder' || context === 'directory') return !entry || entry.type === 'folder';
+        return false;
+      }
+
+      function loadContributionActions() {
+        var contributions = api && api.contributions;
+        if (!contributions || typeof contributions.list !== 'function') return;
+        Promise.all([
+          contributions.list('fileActions'),
+          contributions.list('contextMenuEntries')
+        ]).then(function (result) {
+          if (disposed) return;
+          fileActions = (result[0] || []).filter(function (item) {
+            return item && item.pluginId && item.handler && item.label;
+          });
+          contextMenuEntries = (result[1] || []).filter(function (item) {
+            return item && item.pluginId && item.handler && item.label && contributionContextMatches(item, null);
+          });
+          renderList();
+        }).catch(function (err) {
+          console.error('[files] contribution actions:', err);
+        });
+      }
+
       function navigateTo(path) {
         var newPath = cleanPath(path);
         if (!navigatingHistory) {
@@ -809,6 +839,37 @@
         });
       }
 
+      function executeContributionAction(action, entry) {
+        if (!action || !entry || !api.commands || typeof api.commands.executeFor !== 'function') return;
+        api.commands.executeFor(action.pluginId, action.handler, {
+          source: 'files',
+          actionId: action.id,
+          path: entry.relativePath,
+          entry: entry,
+          currentPath: scopedPath(currentPath),
+          workspaceRootPath: workspaceRoot
+        }).catch(function (err) {
+          console.error('[files] contribution action failed:', err);
+        });
+      }
+
+      function appendContributionMenuItems(entry) {
+        var menuItems = [];
+        fileActions.forEach(function (action) {
+          menuItems.push(action);
+        });
+        contextMenuEntries.forEach(function (action) {
+          if (contributionContextMatches(action, entry)) menuItems.push(action);
+        });
+        if (menuItems.length === 0) return;
+        ctxMenu.appendChild(ctxSep());
+        menuItems.forEach(function (action) {
+          ctxMenu.appendChild(ctxItem(action.label, '', function () {
+            executeContributionAction(action, entry);
+          }, 'contribution-' + action.id, action.icon || 'open'));
+        });
+      }
+
       function showCtxMenu(x, y, entry) {
         ctxTarget = entry;
         ctxMenu.innerHTML = '';
@@ -823,6 +884,7 @@
           ctxMenu.appendChild(ctxItem(isFolder ? 'Open Folder' : 'Open', '', function () { openEntry(entry); }, 'open', 'open'));
           ctxMenu.appendChild(ctxItem('Open External', '', function () { openExternalEntry(entry, 'external'); }, 'open-external', 'external'));
           ctxMenu.appendChild(ctxItem('Show in Explorer', '', function () { openExternalEntry(entry, 'explorer'); }, 'show-in-explorer', 'explorer'));
+          appendContributionMenuItems(entry);
           ctxMenu.appendChild(ctxSep());
           ctxMenu.appendChild(ctxItem('Rename', '', function () { beginRename(entry); }, 'rename', 'rename'));
           if (entry.type !== 'folder') {
@@ -1248,6 +1310,7 @@
       });
 
       updateHistoryButtons();
+      loadContributionActions();
       loadEntries();
 
       containerEl.__filesCleanup = function () {

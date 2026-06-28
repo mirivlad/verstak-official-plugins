@@ -197,8 +197,10 @@ function loadFilesComponent(document) {
 
 function makeApi() {
   const externalCalls = [];
+  const contributionCalls = [];
   return {
     externalCalls,
+    contributionCalls,
     files: {
       list: async () => [
         {
@@ -221,6 +223,34 @@ function makeApi() {
     },
     workbench: {
       openResource: async () => ({ status: 'opened' }),
+    },
+    contributions: {
+      list: async (point) => {
+        if (point === 'fileActions') {
+          return [{
+            pluginId: 'provider.plugin',
+            id: 'provider.file.action',
+            label: 'Provider File Action',
+            handler: 'provider.command',
+          }];
+        }
+        if (point === 'contextMenuEntries') {
+          return [{
+            pluginId: 'provider.plugin',
+            id: 'provider.file.context',
+            label: 'Provider Context Action',
+            context: 'file',
+            handler: 'provider.context',
+          }];
+        }
+        return [];
+      },
+    },
+    commands: {
+      executeFor: async (pluginId, commandId, args) => {
+        contributionCalls.push({ pluginId, commandId, args });
+        return { status: 'handled' };
+      },
     },
   };
 }
@@ -265,6 +295,17 @@ async function flush() {
   }
   if (clipboard.written.length !== 0) {
     throw new Error(`expected no copied path after successful external API calls, got ${clipboard.written.join(', ')}`);
+  }
+
+  list.dispatchEvent('contextmenu', { target: row, clientX: 20, clientY: 20 });
+  const providerAction = walk(document.body, (node) => node.getAttribute && node.getAttribute('data-files-menu-action') === 'contribution-provider.file.action');
+  if (!providerAction) throw new Error('provider file action menu item not found');
+  const providerContext = walk(document.body, (node) => node.getAttribute && node.getAttribute('data-files-menu-action') === 'contribution-provider.file.context');
+  if (!providerContext) throw new Error('provider context menu item not found');
+  providerAction.click();
+  await flush();
+  if (!api.contributionCalls.some((call) => call.pluginId === 'provider.plugin' && call.commandId === 'provider.command' && call.args.path === 'Docs/readme.md')) {
+    throw new Error(`expected provider file action call, got ${JSON.stringify(api.contributionCalls)}`);
   }
 
   console.log('files frontend smoke passed');

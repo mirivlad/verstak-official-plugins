@@ -171,6 +171,7 @@
       var statusText = '';
       var statusClass = '';
       var disposed = false;
+      var noteActions = [];
 
       function notesParent() {
         return workspaceRoot || '';
@@ -313,6 +314,43 @@
         });
       }
 
+      function loadContributionActions() {
+        var contributions = api && api.contributions;
+        if (!contributions || typeof contributions.list !== 'function') return;
+        contributions.list('noteActions').then(function (result) {
+          if (disposed) return;
+          noteActions = (result || []).filter(function (item) {
+            return item && item.pluginId && item.handler && item.label;
+          });
+          renderList();
+        }).catch(function (err) {
+          console.error('[notes] contribution actions:', err);
+        });
+      }
+
+      function actionInitial(action) {
+        var label = String(action && action.label || '').trim();
+        return label ? label.charAt(0).toUpperCase() : '+';
+      }
+
+      function executeContributionAction(action, note) {
+        if (!action || !note || !api.commands || typeof api.commands.executeFor !== 'function') return;
+        setStatus(action.label + '...', 'loading');
+        api.commands.executeFor(action.pluginId, action.handler, {
+          source: 'notes',
+          actionId: action.id,
+          path: note.path,
+          note: note,
+          notesScopePath: notesParent(),
+          workspaceRootPath: workspaceRoot
+        }).then(function () {
+          if (!disposed) setStatus(action.label + ' complete', 'success');
+        }).catch(function (err) {
+          console.error('[notes] contribution action failed:', err);
+          if (!disposed) setStatus('Error: ' + (err && err.message ? err.message : err), 'error');
+        });
+      }
+
       function renderList() {
         listContainer.innerHTML = '';
         if (!notes || notes.length === 0) {
@@ -320,6 +358,38 @@
           return;
         }
         notes.forEach(function (note) {
+          var actionButtons = [
+            el('button', {
+              className: 'notes-item-btn',
+              title: 'Open',
+              innerHTML: iconSvg('open'),
+              onClick: function (e) { e.stopPropagation(); openNote(note); }
+            }),
+            el('button', {
+              className: 'notes-item-btn',
+              title: 'Rename',
+              'data-note-action': 'rename',
+              innerHTML: iconSvg('rename'),
+              onClick: function (e) { e.stopPropagation(); beginRename(note); }
+            }),
+            el('button', {
+              className: 'notes-item-btn',
+              title: 'Move to Trash',
+              'data-note-action': 'trash',
+              innerHTML: iconSvg('trash'),
+              onClick: function (e) { e.stopPropagation(); confirmTrashNote(note); }
+            })
+          ];
+          noteActions.forEach(function (action) {
+            actionButtons.push(el('button', {
+              className: 'notes-item-btn',
+              title: action.label,
+              'aria-label': action.label,
+              'data-note-contribution-action': action.id,
+              textContent: actionInitial(action),
+              onClick: function (e) { e.stopPropagation(); executeContributionAction(action, note); }
+            }));
+          });
           var row = el('div', {
             className: 'notes-item' + (note.path === selectedPath ? ' selected' : ''),
             'data-note-path': note.path,
@@ -329,28 +399,7 @@
           }, [
             el('span', { className: 'notes-item-icon', innerHTML: iconSvg('note') }),
             el('span', { className: 'notes-item-name', textContent: note.title || fileName(note.path), title: note.title || note.path }),
-            el('span', { className: 'notes-item-actions' }, [
-              el('button', {
-                className: 'notes-item-btn',
-                title: 'Open',
-                innerHTML: iconSvg('open'),
-                onClick: function (e) { e.stopPropagation(); openNote(note); }
-              }),
-              el('button', {
-                className: 'notes-item-btn',
-                title: 'Rename',
-                'data-note-action': 'rename',
-                innerHTML: iconSvg('rename'),
-                onClick: function (e) { e.stopPropagation(); beginRename(note); }
-              }),
-              el('button', {
-                className: 'notes-item-btn',
-                title: 'Move to Trash',
-                'data-note-action': 'trash',
-                innerHTML: iconSvg('trash'),
-                onClick: function (e) { e.stopPropagation(); confirmTrashNote(note); }
-              })
-            ])
+            el('span', { className: 'notes-item-actions' }, actionButtons)
           ]);
           listContainer.appendChild(row);
         });
@@ -547,6 +596,7 @@
 
       // ─── Init ───────────────────────────────────────────────
 
+      loadContributionActions();
       loadNotes();
 
       containerEl.__notesCleanup = function () {

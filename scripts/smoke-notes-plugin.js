@@ -132,9 +132,11 @@ function loadNotesComponent(document) {
 function makeApi(options = {}) {
   const entries = new Map();
   const opened = [];
+  const contributionCalls = [];
   return {
     entries,
     opened,
+    contributionCalls,
     files: {
       list: async (relativeDir) => {
         const prefix = relativeDir ? `${relativeDir}/` : '';
@@ -187,6 +189,25 @@ function makeApi(options = {}) {
         return { status: 'opened' };
       },
     },
+    contributions: {
+      list: async (point) => {
+        if (point === 'noteActions') {
+          return [{
+            pluginId: 'provider.plugin',
+            id: 'provider.note.action',
+            label: 'Provider Note Action',
+            handler: 'provider.noteCommand',
+          }];
+        }
+        return [];
+      },
+    },
+    commands: {
+      executeFor: async (pluginId, commandId, args) => {
+        contributionCalls.push({ pluginId, commandId, args });
+        return { status: 'handled' };
+      },
+    },
   };
 }
 
@@ -237,6 +258,14 @@ async function mountNotes(api) {
   }
   if (!createApi.opened.some((request) => request.path === 'Project/Notes/First_Note.md')) {
     throw new Error('create note did not open the newly created file');
+  }
+
+  const providerAction = walk(container, (node) => node.getAttribute && node.getAttribute('data-note-contribution-action') === 'provider.note.action');
+  if (!providerAction) throw new Error('provider note action button not found');
+  providerAction.click();
+  await flush();
+  if (!createApi.contributionCalls.some((call) => call.pluginId === 'provider.plugin' && call.commandId === 'provider.noteCommand' && call.args.path === 'Project/Notes/First_Note.md')) {
+    throw new Error(`expected provider note action call, got ${JSON.stringify(createApi.contributionCalls)}`);
   }
 
   const trashButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-note-action') === 'trash');
