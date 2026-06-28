@@ -15,7 +15,8 @@
   "permissions": [
     "events.subscribe",
     "storage.namespace",
-    "ui.register"
+    "ui.register",
+    "commands.register"
   ],
   "frontend": {
     "entry": "frontend/src/index.js"
@@ -44,6 +45,13 @@
         "title": "Activity",
         "icon": "activity",
         "component": "ActivityView"
+      }
+    ],
+    "commands": [
+      {
+        "id": "verstak.activity.suggestWorklog",
+        "title": "Suggest Worklog From Activity",
+        "handler": "verstak.activity.suggestWorklog"
       }
     ],
     "activityProviders": [

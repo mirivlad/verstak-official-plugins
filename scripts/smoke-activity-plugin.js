@@ -5,7 +5,10 @@ const vm = require('vm');
 
 const root = path.resolve(__dirname, '..');
 const sourcePath = path.join(root, 'plugins', 'activity', 'frontend', 'src', 'index.js');
+const manifestPath = path.join(root, 'plugins', 'activity', 'plugin.json');
 const source = fs.readFileSync(sourcePath, 'utf8');
+const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+const WORKLOG_COMMAND_ID = 'verstak.activity.suggestWorklog';
 
 class FakeNode {
   constructor(tagName) {
@@ -116,9 +119,11 @@ function loadComponent(document) {
 function makeApi(initialSettings = {}) {
   const settings = { ...initialSettings };
   const handlers = {};
+  const commandHandlers = new Map();
   const unsubscribed = [];
   return {
     handlers,
+    commandHandlers,
     unsubscribed,
     settings: {
       read: async (key) => (key ? settings[key] : { ...settings }),
@@ -134,6 +139,12 @@ function makeApi(initialSettings = {}) {
           unsubscribed.push(name);
           delete handlers[name];
         };
+      },
+    },
+    commands: {
+      register: async (commandId, handler) => {
+        commandHandlers.set(commandId, handler);
+        return () => commandHandlers.delete(commandId);
       },
     },
     storedEvents(key = 'events') {
@@ -161,6 +172,11 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   const clientKey = 'events:workspace:ClientA';
   const globalKey = 'events:global';
 
+  if (!manifest.permissions.includes('commands.register')) throw new Error('activity manifest must request commands.register');
+  const worklogCommand = (manifest.contributes.commands || []).find((item) => item.id === WORKLOG_COMMAND_ID);
+  if (!worklogCommand || worklogCommand.handler !== WORKLOG_COMMAND_ID) throw new Error('activity worklog suggestion command contribution is missing');
+  if (typeof api.commandHandlers.get(WORKLOG_COMMAND_ID) !== 'function') throw new Error('activity worklog suggestion command was not registered');
+
   for (const name of ['file.opened', 'file.changed', 'note.saved', 'action.started', 'browser.capture.received', 'case.selected', 'browser.capture.selection']) {
     if (typeof api.handlers[name] !== 'function') throw new Error(`${name} subscription missing`);
   }
@@ -181,6 +197,19 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
       text: 'Selected text',
       workspaceRootPath: 'Project',
     },
+  }, {
+    activityId: 'note-1',
+    type: 'note.saved',
+    title: 'Saved note',
+    summary: 'Project/Notes/Case.md',
+    occurredAt: '2026-06-27T00:20:00Z',
+    sourcePluginId: 'verstak.notes',
+    workspaceRootPath: 'Project',
+    payload: {
+      title: 'Saved note',
+      path: 'Project/Notes/Case.md',
+      workspaceRootPath: 'Project',
+    },
   }]);
   await api.handlers['browser.capture.selection']({
     name: 'browser.capture.selection',
@@ -197,12 +226,25 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   await flush();
 
   const stored = api.storedEvents(projectKey);
-  if (stored.length !== 1) throw new Error(`expected one stored activity event, got ${stored.length}`);
+  if (stored.length !== 2) throw new Error(`expected two stored activity events, got ${stored.length}`);
   if (stored[0].type !== 'browser.capture.selection') throw new Error('stored event type mismatch');
   if (stored[0].sourcePluginId !== 'verstak.browser-inbox') throw new Error('stored event source plugin mismatch');
   if (api.storedEvents(globalKey).length !== 0) throw new Error('workspace activity leaked into global storage');
   if (!container.textContent.includes('Example Article')) throw new Error('browser capture title was not rendered');
   if (!container.textContent.includes('browser.capture.selection')) throw new Error('event type was not rendered');
+  if (!container.textContent.includes('Worklog suggestions')) throw new Error('worklog suggestions section was not rendered');
+  if (!container.textContent.includes('Project work on 2026-06-27')) throw new Error('workspace worklog suggestion title was not rendered');
+  if (!container.textContent.includes('30 min')) throw new Error('workspace worklog suggestion duration was not rendered');
+  const suggestionNode = walk(container, (node) => node.getAttribute && node.getAttribute('data-worklog-suggestion') === 'worklog:Project:2026-06-27');
+  if (!suggestionNode) throw new Error('worklog suggestion data attribute was not rendered');
+
+  const commandResult = await api.commandHandlers.get(WORKLOG_COMMAND_ID)({ workspaceRootPath: 'Project' });
+  const suggestions = commandResult && commandResult.suggestions;
+  if (!Array.isArray(suggestions) || suggestions.length !== 1) throw new Error('worklog suggestion command returned unexpected suggestions');
+  if (suggestions[0].suggestionId !== 'worklog:Project:2026-06-27') throw new Error('worklog suggestion id mismatch');
+  if (suggestions[0].minutes !== 30) throw new Error(`expected 30 suggested minutes, got ${suggestions[0].minutes}`);
+  if (!suggestions[0].summary.includes('Example Article') || !suggestions[0].summary.includes('Saved note')) throw new Error('worklog suggestion summary did not include event titles');
+  if (suggestions[0].eventIds.join(',') !== 'capture-1,note-1') throw new Error('worklog suggestion event ids mismatch');
 
   const clientView = await mountWithApi(api, { workspaceNode: { name: 'ClientA' }, workspaceRootPath: 'ClientA' });
   if (clientView.container.textContent.includes('Example Article')) throw new Error('Project activity leaked into ClientA workspace view');
@@ -233,11 +275,14 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   await flush();
   if (api.storedEvents(clientKey).length !== 1) throw new Error('ClientA activity was not stored under ClientA workspace key');
   if (!clientView.container.textContent.includes('Client note')) throw new Error('ClientA activity was not rendered');
+  if (!clientView.container.textContent.includes('ClientA work on 2026-06-27')) throw new Error('ClientA worklog suggestion was not rendered');
   component.unmount && component.unmount(clientView.container);
 
   const globalView = await mountWithApi(api, {});
   if (!globalView.container.textContent.includes('Example Article')) throw new Error('global activity did not aggregate Project activity');
   if (!globalView.container.textContent.includes('Client note')) throw new Error('global activity did not aggregate ClientA activity');
+  if (!globalView.container.textContent.includes('Project work on 2026-06-27')) throw new Error('global activity did not render Project worklog suggestion');
+  if (!globalView.container.textContent.includes('ClientA work on 2026-06-27')) throw new Error('global activity did not render ClientA worklog suggestion');
   component.unmount && component.unmount(globalView.container);
 
   const manualButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-activity-action') === 'manual');
@@ -248,6 +293,7 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   clearButton.click();
   await flush();
   if (api.storedEvents(projectKey).length !== 0) throw new Error('clear action did not remove activity events');
+  if (container.textContent.includes('Project work on 2026-06-27')) throw new Error('clear action did not remove worklog suggestions');
 
   component.unmount && component.unmount(container);
   if (api.unsubscribed.length !== 27) throw new Error(`expected 27 unsubscribers, got ${api.unsubscribed.length}`);

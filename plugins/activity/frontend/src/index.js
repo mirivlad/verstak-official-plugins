@@ -8,9 +8,11 @@
 
   var PLUGIN_ID = 'verstak.activity';
   var MAX_EVENTS = 250;
+  var MAX_SUGGESTIONS = 12;
   var LEGACY_KEY = 'events';
   var GLOBAL_KEY = 'events:global';
   var WORKSPACE_PREFIX = 'events:workspace:';
+  var WORKLOG_COMMAND_ID = 'verstak.activity.suggestWorklog';
   var ACTIVITY_EVENTS = [
     'file.opened',
     'file.changed',
@@ -43,6 +45,12 @@
     '.activity-btn.danger{border-color:#633;color:#ff9a9a}',
     '.activity-status{font-size:.72rem;color:#8b8ba8;white-space:nowrap}',
     '.activity-status.error{color:#e74c3c}',
+    '.activity-suggestions{border-bottom:1px solid rgba(22,33,62,.65);background:#111126;padding:.55rem .75rem;display:grid;gap:.5rem}',
+    '.activity-suggestions-title{font-size:.76rem;font-weight:600;color:#8b8ba8;text-transform:uppercase;letter-spacing:.04em}',
+    '.activity-suggestion{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.65rem;align-items:start;padding:.55rem .65rem;border:1px solid rgba(78,204,163,.25);border-radius:4px;background:#14142c}',
+    '.activity-suggestion-title{font-size:.84rem;color:#e0e0e0;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.activity-suggestion-summary{margin-top:.22rem;font-size:.76rem;color:#aaa;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere}',
+    '.activity-suggestion-minutes{font-size:.76rem;color:#4ecca3;white-space:nowrap}',
     '.activity-list{flex:1;min-height:0;overflow:auto;background:#101020}',
     '.activity-empty{height:100%;display:flex;align-items:center;justify-content:center;color:#666;font-size:.86rem;padding:2rem;text-align:center}',
     '.activity-row{display:grid;grid-template-columns:9.5rem minmax(0,1fr);gap:.75rem;padding:.72rem .85rem;border-bottom:1px solid rgba(22,33,62,.6)}',
@@ -53,7 +61,7 @@
     '.activity-title-text{font-size:.86rem;color:#e0e0e0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '.activity-summary{margin-top:.25rem;font-size:.78rem;line-height:1.4;color:#aaa;white-space:pre-wrap;overflow-wrap:anywhere}',
     '.activity-source{margin-top:.25rem;font-size:.72rem;color:#777}',
-    '@media(max-width:760px){.activity-row{grid-template-columns:1fr;gap:.25rem}.activity-toolbar{align-items:stretch}.activity-status{width:100%}}'
+    '@media(max-width:760px){.activity-row,.activity-suggestion{grid-template-columns:1fr;gap:.25rem}.activity-toolbar{align-items:stretch}.activity-status{width:100%}}'
   ].join('\n');
 
   function el(tag, attrs, children) {
@@ -168,12 +176,110 @@
     }).slice(0, MAX_EVENTS);
   }
 
+  function eventTimeMs(activity) {
+    var value = activity && (activity.occurredAt || activity.receivedAt);
+    var date = value ? new Date(value) : null;
+    return date && !isNaN(date.getTime()) ? date.getTime() : 0;
+  }
+
+  function eventDay(activity) {
+    var value = activity && (activity.occurredAt || activity.receivedAt);
+    var date = value ? new Date(value) : null;
+    if (date && !isNaN(date.getTime())) return date.toISOString().slice(0, 10);
+    return text(value).slice(0, 10) || 'unknown-date';
+  }
+
+  function suggestionWorkspace(activity) {
+    return cleanWorkspace(activity && (activity.workspaceRootPath || workspaceFromPayload(activity.payload || {}))) || 'Global';
+  }
+
+  function roundUpQuarterHour(minutes) {
+    return Math.ceil(minutes / 15) * 15;
+  }
+
+  function estimateMinutes(groupEvents) {
+    if (!groupEvents.length) return 0;
+    if (groupEvents.length === 1) return 15;
+    var first = eventTimeMs(groupEvents[0]);
+    var last = eventTimeMs(groupEvents[groupEvents.length - 1]);
+    if (!first || !last || last <= first) return 15;
+    return Math.max(15, Math.min(480, roundUpQuarterHour((last - first) / 60000)));
+  }
+
+  function eventLabel(activity) {
+    return text(activity && (activity.title || activity.summary || activity.type || activity.activityId)).trim();
+  }
+
+  function summarizeEvents(groupEvents) {
+    var labels = [];
+    groupEvents.forEach(function (activity) {
+      var label = eventLabel(activity);
+      if (label && labels.indexOf(label) === -1) labels.push(label);
+    });
+    var visible = labels.slice(0, 3);
+    var suffix = labels.length > 3 ? ' +' + (labels.length - 3) + ' more' : '';
+    return (visible.join('; ') || groupEvents.length + ' activity events') + suffix;
+  }
+
+  function buildWorklogSuggestions(activityList, workspaceFilter) {
+    var filter = cleanWorkspace(workspaceFilter);
+    var groups = {};
+    sortEvents(activityList || []).forEach(function (activity) {
+      var workspace = suggestionWorkspace(activity);
+      if (filter && workspace !== filter) return;
+      var day = eventDay(activity);
+      var key = workspace + '|' + day;
+      groups[key] = groups[key] || { workspaceRootPath: workspace, date: day, events: [] };
+      groups[key].events.push(activity);
+    });
+    return Object.keys(groups).map(function (key) {
+      var group = groups[key];
+      var ordered = group.events.slice().sort(function (a, b) {
+        return eventTimeMs(a) - eventTimeMs(b);
+      });
+      var eventIds = ordered.map(function (activity) { return activity.activityId; }).filter(Boolean);
+      var suggestionId = 'worklog:' + group.workspaceRootPath + ':' + group.date;
+      return {
+        suggestionId: suggestionId,
+        workspaceRootPath: group.workspaceRootPath,
+        date: group.date,
+        title: group.workspaceRootPath + ' work on ' + group.date,
+        summary: summarizeEvents(ordered),
+        minutes: estimateMinutes(ordered),
+        eventIds: eventIds
+      };
+    }).sort(function (a, b) {
+      return b.date.localeCompare(a.date) || a.workspaceRootPath.localeCompare(b.workspaceRootPath);
+    }).slice(0, MAX_SUGGESTIONS);
+  }
+
   function globalEventKeys(settings) {
     var keys = [LEGACY_KEY, GLOBAL_KEY];
     Object.keys(settings || {}).forEach(function (key) {
       if (key.indexOf(WORKSPACE_PREFIX) === 0 && keys.indexOf(key) === -1) keys.push(key);
     });
     return keys;
+  }
+
+  function eventsFromSettings(settings, workspaceRoot) {
+    settings = settings || {};
+    var workspace = cleanWorkspace(workspaceRoot);
+    if (!workspace) {
+      var all = [];
+      globalEventKeys(settings).forEach(function (key) {
+        all = all.concat(normalizeStoredEvents(settings[key], key));
+      });
+      return sortEvents(all);
+    }
+    var workspaceKey = WORKSPACE_PREFIX + encodeKey(workspace);
+    var scopedEvents = normalizeStoredEvents(settings[workspaceKey], workspaceKey);
+    var globalEvents = normalizeStoredEvents(settings[GLOBAL_KEY], GLOBAL_KEY).filter(function (item) {
+      return item.workspaceRootPath === workspace;
+    });
+    var legacyEvents = normalizeStoredEvents(settings[LEGACY_KEY], LEGACY_KEY).filter(function (item) {
+      return item.workspaceRootPath === workspace;
+    });
+    return sortEvents(scopedEvents.concat(globalEvents, legacyEvents));
   }
 
   function formatDate(value) {
@@ -193,6 +299,7 @@
 
     var scope = scopeFromProps(props || {});
     var events = [];
+    var suggestions = [];
     var statusText = 'Loading activity...';
     var statusClass = '';
     var disposed = false;
@@ -212,6 +319,7 @@
           return;
         }
         events = [];
+        updateSuggestions();
         persist().then(render);
       }
     });
@@ -221,9 +329,18 @@
     toolbar.appendChild(statusEl);
     toolbar.appendChild(clearBtn);
 
+    var suggestionsEl = el('div', {
+      className: 'activity-suggestions',
+      'data-activity-section': 'worklog-suggestions'
+    });
     var listEl = el('div', { className: 'activity-list' });
     containerEl.appendChild(toolbar);
+    containerEl.appendChild(suggestionsEl);
     containerEl.appendChild(listEl);
+
+    function updateSuggestions() {
+      suggestions = buildWorklogSuggestions(events, scope.mode === 'workspace' ? scope.workspaceRoot : '');
+    }
 
     function persist() {
       if (!api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve();
@@ -280,11 +397,36 @@
       });
     }
 
+    function renderSuggestions() {
+      suggestionsEl.innerHTML = '';
+      if (!suggestions.length) {
+        suggestionsEl.setAttribute('hidden', 'hidden');
+        return;
+      }
+      if (typeof suggestionsEl.removeAttribute === 'function') suggestionsEl.removeAttribute('hidden');
+      else delete suggestionsEl.attributes.hidden;
+      suggestionsEl.appendChild(el('div', { className: 'activity-suggestions-title', textContent: 'Worklog suggestions' }));
+      suggestions.forEach(function (suggestion) {
+        suggestionsEl.appendChild(el('div', {
+          className: 'activity-suggestion',
+          'data-worklog-suggestion': suggestion.suggestionId
+        }, [
+          el('div', {}, [
+            el('div', { className: 'activity-suggestion-title', textContent: suggestion.title }),
+            el('div', { className: 'activity-suggestion-summary', textContent: suggestion.summary })
+          ]),
+          el('div', { className: 'activity-suggestion-minutes', textContent: suggestion.minutes + ' min' })
+        ]));
+      });
+    }
+
     function render() {
       countEl.textContent = events.length + ' event' + (events.length === 1 ? '' : 's');
       clearBtn.disabled = events.length === 0;
       statusEl.textContent = statusText;
       statusEl.className = 'activity-status' + (statusClass ? ' ' + statusClass : '');
+      updateSuggestions();
+      renderSuggestions();
       renderList();
     }
 
@@ -292,27 +434,39 @@
       if (!api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve();
       if (scope.mode === 'global') {
         return api.settings.read().then(function (settings) {
-          var all = [];
-          globalEventKeys(settings || {}).forEach(function (key) {
-            all = all.concat(normalizeStoredEvents((settings || {})[key], key));
-          });
-          events = sortEvents(all);
+          events = eventsFromSettings(settings || {}, '');
         }).catch(function (err) {
           statusText = 'Could not load activity: ' + (err && err.message ? err.message : String(err));
           statusClass = 'error';
         });
       }
       return api.settings.read().then(function (settings) {
-        var scopedEvents = normalizeStoredEvents((settings || {})[scope.key], scope.key);
-        var globalEvents = normalizeStoredEvents((settings || {})[GLOBAL_KEY], GLOBAL_KEY).filter(function (item) {
-          return item.workspaceRootPath === scope.workspaceRoot;
-        });
-        var legacyEvents = normalizeStoredEvents((settings || {})[LEGACY_KEY], LEGACY_KEY).filter(function (item) {
-          return item.workspaceRootPath === scope.workspaceRoot;
-        });
-        events = sortEvents(scopedEvents.concat(globalEvents, legacyEvents));
+        events = eventsFromSettings(settings || {}, scope.workspaceRoot);
       }).catch(function (err) {
         statusText = 'Could not load activity: ' + (err && err.message ? err.message : String(err));
+        statusClass = 'error';
+      });
+    }
+
+    function suggestWorklog(args) {
+      var workspace = cleanWorkspace(args && args.workspaceRootPath);
+      if (!api || !api.settings || typeof api.settings.read !== 'function') {
+        return Promise.resolve({ suggestions: buildWorklogSuggestions(events, workspace || (scope.mode === 'workspace' ? scope.workspaceRoot : '')) });
+      }
+      return api.settings.read().then(function (settings) {
+        var sourceEvents = eventsFromSettings(settings || {}, workspace);
+        return { suggestions: buildWorklogSuggestions(sourceEvents, workspace) };
+      }).catch(function () {
+        return { suggestions: [] };
+      });
+    }
+
+    function registerCommands() {
+      if (!api || !api.commands || typeof api.commands.register !== 'function') return Promise.resolve();
+      return api.commands.register(WORKLOG_COMMAND_ID, suggestWorklog).then(function (unregister) {
+        if (typeof unregister === 'function') unsubscribers.push(unregister);
+      }).catch(function (err) {
+        statusText = 'Activity commands unavailable: ' + (err && err.message ? err.message : String(err));
         statusClass = 'error';
       });
     }
@@ -340,6 +494,9 @@
     loadStored().then(function () {
       if (disposed) return;
       render();
+      return registerCommands();
+    }).then(function () {
+      if (disposed) return;
       return subscribeEvents();
     }).then(function () {
       if (!disposed) render();
