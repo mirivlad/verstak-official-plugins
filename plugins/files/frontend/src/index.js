@@ -112,7 +112,8 @@
     explorer: 'M3 5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v1H3V5Zm0 6h18v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7Z',
     cut: 'M9.64 7.64c.23-.5.36-1.05.36-1.64 0-2.21-1.79-4-4-4S2 3.79 2 6s1.79 4 4 4c.59 0 1.14-.13 1.64-.36L10 12l-2.36 2.36C7.14 14.13 6.59 14 6 14c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4c0-.59-.13-1.14-.36-1.64L12 14l7 7h3L9.64 7.64zM6 8c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm0 12c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm6-8.5c-.28 0-.5.22-.5.5s.22.5.5.5.5-.22.5-.5-.22-.5-.5-.5zM19 3l-6 6 2 2 7-8h-3z',
     copy: 'M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z',
-    paste: 'M19 2h-4.18C14.4.84 13.3 0 12 0S9.6.84 9.18 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm7 18H5V4h2v3h10V4h2v16z'
+    paste: 'M19 2h-4.18C14.4.84 13.3 0 12 0S9.6.84 9.18 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm7 18H5V4h2v3h10V4h2v16z',
+    restore: 'M13 3a9 9 0 1 1-8.95 8H2l3-3 3 3H6.06A7 7 0 1 0 13 5V3zm-1 5h2v5h4v2h-6V8z'
   };
 
   function iconButton(action, title, iconKey, onClick, extraClass) {
@@ -589,8 +590,8 @@
           el('span', {}, ['Original path']),
           el('span', {}, ['Type']),
           el('span', {}, ['Deleted']),
-          el('span', {}, ['Trash ID']),
-          el('span', {}, ['Trash path'])
+          el('span', {}, ['Trash path']),
+          el('span', {}, ['Actions'])
         ]);
         listContainer.appendChild(header);
 
@@ -608,8 +609,18 @@
             el('span', { className: 'files-item-name', textContent: entry.originalPath || entry.basename || '', title: entry.originalPath || '' }),
             el('span', { className: 'files-item-meta' }, [entry.originalType || '']),
             el('span', { className: 'files-item-meta hide-narrow' }, [formatDate(entry.deletedAt)]),
-            el('span', { className: 'files-item-meta hide-narrow' }, [entry.trashId || '']),
-            el('span', { className: 'files-item-meta' }, [entry.trashPath || ''])
+            el('span', { className: 'files-item-meta hide-narrow', title: entry.trashId || '' }, [entry.trashPath || '']),
+            el('div', { className: 'files-row-actions' }, [
+              el('button', {
+                className: 'files-row-btn',
+                'data-files-action': 'restore-trash',
+                'data-files-restore-trash': entry.trashId || '',
+                title: 'Restore',
+                'aria-label': 'Restore',
+                innerHTML: svgIcon(ACTION_ICONS.restore),
+                onClick: function (event) { event.stopPropagation(); restoreTrashEntry(entry); }
+              })
+            ])
           ]));
         });
         updateButtons();
@@ -865,6 +876,19 @@
           if (!single) return;
           trashEntry(single);
         }
+      }
+
+      function restoreTrashEntry(entry) {
+        if (!entry || !entry.trashId) return;
+        if (!api.files || typeof api.files.restoreTrash !== 'function') {
+          window.alert('Restore is unavailable');
+          return;
+        }
+        api.files.restoreTrash(entry.trashId, { overwrite: false }).then(function () {
+          loadEntries();
+        }).catch(function (err) {
+          window.alert((err && err.message) ? err.message : String(err));
+        });
       }
 
       filterInput.addEventListener('input', function () { filterText = filterInput.value; renderList(); });

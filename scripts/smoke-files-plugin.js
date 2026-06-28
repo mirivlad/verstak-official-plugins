@@ -198,34 +198,53 @@ function loadFilesComponent(document) {
 function makeApi() {
   const externalCalls = [];
   const contributionCalls = [];
+  let restored = false;
+  let trashEntries = [{
+    originalPath: 'Docs/deleted.md',
+    trashPath: '.verstak/trash/files/mock/deleted.md',
+    trashId: 'mock-trash',
+    deletedAt: '2026-06-27T01:02:03Z',
+    originalType: 'file',
+    basename: 'deleted.md',
+  }];
   return {
     externalCalls,
     contributionCalls,
     files: {
-      list: async () => [
-        {
+      list: async () => {
+        const entries = [{
           name: 'readme.md',
           relativePath: 'Docs/readme.md',
           type: 'file',
           extension: 'md',
           size: 12,
           modifiedAt: '2026-06-27T00:00:00Z',
-        },
-      ],
+        }];
+        if (restored) {
+          entries.push({
+            name: 'deleted.md',
+            relativePath: 'Docs/deleted.md',
+            type: 'file',
+            extension: 'md',
+            size: 8,
+            modifiedAt: '2026-06-27T01:03:00Z',
+          });
+        }
+        return entries;
+      },
       metadata: async () => { throw new Error('not-found'); },
       readText: async () => '# Readme\n',
       writeText: async () => undefined,
       createFolder: async () => undefined,
       move: async () => undefined,
       trash: async () => undefined,
-      listTrash: async () => [{
-        originalPath: 'Docs/deleted.md',
-        trashPath: '.verstak/trash/files/mock/deleted.md',
-        trashId: 'mock-trash',
-        deletedAt: '2026-06-27T01:02:03Z',
-        originalType: 'file',
-        basename: 'deleted.md',
-      }],
+      listTrash: async () => trashEntries.slice(),
+      restoreTrash: async (trashId) => {
+        if (trashId !== 'mock-trash') throw new Error(`unexpected restore trash id: ${trashId}`);
+        restored = true;
+        trashEntries = [];
+        return 'Docs/deleted.md';
+      },
       openExternal: async (relativePath) => { externalCalls.push({ action: 'open', path: relativePath }); },
       showInFolder: async (relativePath) => { externalCalls.push({ action: 'show', path: relativePath }); },
     },
@@ -323,6 +342,14 @@ async function flush() {
   const trashRow = walk(container, (node) => node.getAttribute && node.getAttribute('data-files-trash-id') === 'mock-trash');
   if (!trashRow || !trashRow.textContent.includes('Docs/deleted.md')) {
     throw new Error(`trash metadata row not rendered: ${container.textContent}`);
+  }
+  const restoreTrash = walk(container, (node) => node.getAttribute && node.getAttribute('data-files-restore-trash') === 'mock-trash');
+  if (!restoreTrash) throw new Error('restore trash button not found');
+  restoreTrash.click();
+  await flush();
+  const restoredRow = walk(container, (node) => node.getAttribute && node.getAttribute('data-file-path') === 'Docs/deleted.md');
+  if (!restoredRow) {
+    throw new Error(`restored file row not rendered after restore: ${container.textContent}`);
   }
 
   console.log('files frontend smoke passed');
