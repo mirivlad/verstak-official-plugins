@@ -6,6 +6,7 @@
   let errorMsg = ''
   let resultMsg = ''
   let resultKind = ''
+  let conflictDetails = []
   let connectionResult = ''
   let connectionOk = null
 
@@ -119,14 +120,36 @@
     return parts.join(' · ')
   }
 
+  function conflictField(conflict, keys) {
+    for (const key of keys) {
+      const value = conflict && conflict[key]
+      if (value != null && String(value).trim()) return String(value)
+    }
+    return ''
+  }
+
+  function formatSyncConflict(conflict) {
+    const entityType = conflictField(conflict, ['entity_type', 'entityType']) || 'item'
+    const entityId = conflictField(conflict, ['entity_id', 'entityId', 'path']) || 'unknown'
+    const opId = conflictField(conflict, ['op_id', 'opId'])
+    const reason = conflictField(conflict, ['reason', 'message'])
+    const parts = [entityType + ': ' + entityId]
+    if (opId) parts.push('op ' + opId)
+    if (reason) parts.push(reason)
+    return parts.join(' · ')
+  }
+
   async function runSyncNow() {
     loading = true
     errorMsg = ''
     resultMsg = ''
+    conflictDetails = []
     try {
       const r = await syncAPI().now()
       const summary = 'Pushed ' + (r?.pushed || 0) + ', pulled ' + (r?.pulled || 0)
       const warning = syncResultWarning(r)
+      const conflicts = Array.isArray(r?.conflicts) ? r.conflicts : []
+      conflictDetails = conflicts.slice(0, 5).map(formatSyncConflict)
       resultMsg = warning ? summary + ' · ' + warning : summary
       resultKind = warning ? 'warning' : ''
       await load()
@@ -192,6 +215,14 @@
   {/if}
   {#if resultMsg && !errorMsg}
     <div style="padding:0.5rem 0.75rem;margin-bottom:0.75rem;border-radius:6px;font-size:0.85rem;{resultKind === 'warning' ? 'background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);color:#f59e0b;' : 'background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.3);color:#34d399;'}">{resultMsg}</div>
+  {/if}
+  {#if conflictDetails.length > 0 && !errorMsg}
+    <div style="padding:0.5rem 0.75rem;margin-bottom:0.75rem;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:6px;color:#f59e0b;font-size:0.85rem;">
+      <div style="font-weight:600;margin-bottom:0.35rem;">Sync conflicts</div>
+      {#each conflictDetails as detail}
+        <div>{detail}</div>
+      {/each}
+    </div>
   {/if}
   {#if settings && settings.lastError && !errorMsg}
     <div style="padding:0.5rem 0.75rem;margin-bottom:0.75rem;background:rgba(255,107,107,0.1);border:1px solid rgba(255,107,107,0.3);border-radius:6px;color:#ff6b6b;font-size:0.85rem;">
