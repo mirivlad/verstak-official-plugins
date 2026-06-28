@@ -56,6 +56,10 @@
           "action.started",
           "browser.capture.received",
           "case.selected",
+          "workspace.created",
+          "workspace.renamed",
+          "workspace.trashed",
+          "workspace.selected",
           "browser.capture.page",
           "browser.capture.selection",
           "browser.capture.link"
