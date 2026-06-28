@@ -312,6 +312,8 @@
       var disposed = false;
       var fileActions = [];
       var contextMenuEntries = [];
+      var showingTrash = false;
+      var trashEntries = [];
       var historyStack = Array.isArray(savedHistory.stack) && savedHistory.stack.length ? savedHistory.stack.map(cleanPath) : [currentPath];
       var historyIndex = Math.max(0, Math.min(Number(savedHistory.index) || 0, historyStack.length - 1));
       if (historyStack[historyIndex] !== currentPath) {
@@ -337,13 +339,14 @@
       var backBtn = iconButton('back', 'Back', 'back', goBack);
       var forwardBtn = iconButton('forward', 'Forward', 'forward', goForward);
       var upBtn = iconButton('up', 'Up', 'up', goUp);
-      var refreshBtn = iconButton('refresh', 'Refresh', 'refresh', loadEntries);
+      var refreshBtn = iconButton('refresh', 'Refresh', 'refresh', function () { if (showingTrash) loadTrashEntries(); else loadEntries(); });
       var newFolderBtn = iconButton('new-folder', 'New folder', 'folderAdd', function () { startCreate('folder'); });
       var newMdBtn = iconButton('new-markdown', 'New markdown file', 'markdownAdd', function () { startCreate('markdown'); });
       var newTextBtn = iconButton('new-text', 'New text file', 'textAdd', function () { startCreate('text'); });
       var openBtn = iconButton('open', 'Open', 'open', function () { openEntry(selectedEntry()); });
       var renameBtn = iconButton('rename', 'Rename', 'rename', function () { beginRename(); });
       var trashBtn = iconButton('trash', 'Move to trash', 'trash', function () { trashEntry(); });
+      var trashViewBtn = iconButton('trash-view', 'Trash metadata', 'trash', function () { loadTrashEntries(); });
       var cutBtn = iconButton('cut', 'Cut', 'cut', function () { cutSelection(); });
       var copyBtn = iconButton('copy', 'Copy', 'copy', function () { copySelection(); });
       var pasteBtn = iconButton('paste', 'Paste', 'paste', function () { pasteEntry(); });
@@ -356,7 +359,7 @@
         el('option', { value: 'size-desc' }, ['Size'])
       ]);
       toolbar.appendChild(breadcrumb);
-      [backBtn, forwardBtn, upBtn, refreshBtn, newFolderBtn, newMdBtn, newTextBtn, openBtn, renameBtn, trashBtn, cutBtn, copyBtn, pasteBtn, filterInput, sortSelect].forEach(function (node) { toolbar.appendChild(node); });
+      [backBtn, forwardBtn, upBtn, refreshBtn, newFolderBtn, newMdBtn, newTextBtn, openBtn, renameBtn, trashBtn, trashViewBtn, cutBtn, copyBtn, pasteBtn, filterInput, sortSelect].forEach(function (node) { toolbar.appendChild(node); });
       containerEl.appendChild(toolbar);
 
       var listContainer = el('div', { className: 'files-list', 'data-files-list': '' });
@@ -398,13 +401,16 @@
 
       function updateButtons() {
         var count = selectedCount();
-        upBtn.disabled = !currentPath;
-        openBtn.disabled = count !== 1;
-        renameBtn.disabled = count !== 1;
-        trashBtn.disabled = count === 0;
-        cutBtn.disabled = count === 0;
-        copyBtn.disabled = count === 0;
-        pasteBtn.disabled = !(window.__filesClipboard && window.__filesClipboard.items && window.__filesClipboard.items.length);
+        upBtn.disabled = showingTrash || !currentPath;
+        newFolderBtn.disabled = showingTrash;
+        newMdBtn.disabled = showingTrash;
+        newTextBtn.disabled = showingTrash;
+        openBtn.disabled = showingTrash || count !== 1;
+        renameBtn.disabled = showingTrash || count !== 1;
+        trashBtn.disabled = showingTrash || count === 0;
+        cutBtn.disabled = showingTrash || count === 0;
+        copyBtn.disabled = showingTrash || count === 0;
+        pasteBtn.disabled = showingTrash || !(window.__filesClipboard && window.__filesClipboard.items && window.__filesClipboard.items.length);
       }
 
       function updateHistoryButtons() {
@@ -509,6 +515,7 @@
       }
 
       function renderList() {
+        showingTrash = false;
         listContainer.innerHTML = '';
         var header = el('div', { className: 'files-header' }, [
           el('span', {}, ['Name']),
@@ -571,7 +578,45 @@
         updateButtons();
       }
 
+      function renderTrashList() {
+        listContainer.innerHTML = '';
+        breadcrumb.innerHTML = '';
+        breadcrumb.appendChild(el('span', { className: 'files-breadcrumb-current' }, ['Trash metadata']));
+        selectedPaths = {};
+        lastClickedPath = '';
+
+        var header = el('div', { className: 'files-header' }, [
+          el('span', {}, ['Original path']),
+          el('span', {}, ['Type']),
+          el('span', {}, ['Deleted']),
+          el('span', {}, ['Trash ID']),
+          el('span', {}, ['Trash path'])
+        ]);
+        listContainer.appendChild(header);
+
+        if (!trashEntries || trashEntries.length === 0) {
+          listContainer.appendChild(el('div', { className: 'files-empty' }, ['Trash is empty']));
+          updateButtons();
+          return;
+        }
+
+        trashEntries.forEach(function (entry) {
+          listContainer.appendChild(el('div', {
+            className: 'files-item',
+            'data-files-trash-id': entry.trashId || ''
+          }, [
+            el('span', { className: 'files-item-name', textContent: entry.originalPath || entry.basename || '', title: entry.originalPath || '' }),
+            el('span', { className: 'files-item-meta' }, [entry.originalType || '']),
+            el('span', { className: 'files-item-meta hide-narrow' }, [formatDate(entry.deletedAt)]),
+            el('span', { className: 'files-item-meta hide-narrow' }, [entry.trashId || '']),
+            el('span', { className: 'files-item-meta' }, [entry.trashPath || ''])
+          ]));
+        });
+        updateButtons();
+      }
+
       function loadEntries() {
+        showingTrash = false;
         selectedPaths = {};
         lastClickedPath = '';
         listContainer.innerHTML = '';
@@ -588,6 +633,36 @@
             el('div', {}, ['Failed to load files']),
             el('div', { className: 'files-error-msg' }, [(err && err.message) ? err.message : String(err)])
           ]));
+        });
+      }
+
+      function loadTrashEntries() {
+        showingTrash = true;
+        selectedPaths = {};
+        lastClickedPath = '';
+        listContainer.innerHTML = '';
+        listContainer.appendChild(el('div', { className: 'files-loading' }, ['Loading...']));
+        if (!api.files || typeof api.files.listTrash !== 'function') {
+          trashEntries = [];
+          listContainer.innerHTML = '';
+          listContainer.appendChild(el('div', { className: 'files-error' }, [
+            el('div', {}, ['Trash metadata is unavailable'])
+          ]));
+          updateButtons();
+          return;
+        }
+        api.files.listTrash().then(function (result) {
+          if (disposed) return;
+          trashEntries = result || [];
+          renderTrashList();
+        }).catch(function (err) {
+          if (disposed) return;
+          listContainer.innerHTML = '';
+          listContainer.appendChild(el('div', { className: 'files-error' }, [
+            el('div', {}, ['Failed to load trash metadata']),
+            el('div', { className: 'files-error-msg' }, [(err && err.message) ? err.message : String(err)])
+          ]));
+          updateButtons();
         });
       }
 

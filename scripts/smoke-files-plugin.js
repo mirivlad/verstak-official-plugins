@@ -218,6 +218,14 @@ function makeApi() {
       createFolder: async () => undefined,
       move: async () => undefined,
       trash: async () => undefined,
+      listTrash: async () => [{
+        originalPath: 'Docs/deleted.md',
+        trashPath: '.verstak/trash/files/mock/deleted.md',
+        trashId: 'mock-trash',
+        deletedAt: '2026-06-27T01:02:03Z',
+        originalType: 'file',
+        basename: 'deleted.md',
+      }],
       openExternal: async (relativePath) => { externalCalls.push({ action: 'open', path: relativePath }); },
       showInFolder: async (relativePath) => { externalCalls.push({ action: 'show', path: relativePath }); },
     },
@@ -306,6 +314,15 @@ async function flush() {
   await flush();
   if (!api.contributionCalls.some((call) => call.pluginId === 'provider.plugin' && call.commandId === 'provider.command' && call.args.path === 'Docs/readme.md')) {
     throw new Error(`expected provider file action call, got ${JSON.stringify(api.contributionCalls)}`);
+  }
+
+  const trashViewButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-files-action') === 'trash-view');
+  if (!trashViewButton) throw new Error('trash metadata toolbar button not found');
+  trashViewButton.click();
+  await flush();
+  const trashRow = walk(container, (node) => node.getAttribute && node.getAttribute('data-files-trash-id') === 'mock-trash');
+  if (!trashRow || !trashRow.textContent.includes('Docs/deleted.md')) {
+    throw new Error(`trash metadata row not rendered: ${container.textContent}`);
   }
 
   console.log('files frontend smoke passed');
