@@ -5,7 +5,9 @@ const vm = require('vm');
 
 const root = path.resolve(__dirname, '..');
 const sourcePath = path.join(root, 'plugins', 'search', 'frontend', 'src', 'index.js');
+const manifestPath = path.join(root, 'plugins', 'search', 'plugin.json');
 const source = fs.readFileSync(sourcePath, 'utf8');
+const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 
 class FakeNode {
   constructor(tagName) {
@@ -129,7 +131,69 @@ async function wait(ms) {
   const document = makeDocument();
   const component = loadComponent(document);
   const opened = [];
+  const fileContents = {
+    'Project/Docs/case.md': '# Case\nTarget phrase is here.\n',
+    'Project/Docs/notes.txt': 'No match here.\n',
+  };
+  const pluginData = {};
+  const commandHandlers = new Map();
+  const eventHandlers = {};
+  const providerCalls = [];
   const api = {
+    storage: {
+      data: {
+        read: async (name) => pluginData[name] || {},
+        write: async (name, data) => {
+          pluginData[name] = JSON.parse(JSON.stringify(data || {}));
+        },
+      },
+    },
+    commands: {
+      register: async (commandId, handler) => {
+        commandHandlers.set(commandId, handler);
+        return () => commandHandlers.delete(commandId);
+      },
+      executeFor: async (pluginId, commandId, args) => {
+        providerCalls.push({ pluginId, commandId, args });
+        if (pluginId === 'external.notes' && commandId === 'external.notes.search') {
+          return {
+            status: 'handled',
+            pluginId,
+            commandId,
+            result: [{
+              path: 'Project/External/target.note',
+              type: 'note',
+              matchType: 'External note',
+              snippet: 'External provider target result',
+              openable: false,
+            }],
+          };
+        }
+        if (pluginId === 'broken.provider') {
+          throw new Error('provider unavailable');
+        }
+        throw new Error(`unexpected provider call ${pluginId}:${commandId}`);
+      },
+    },
+    contributions: {
+      list: async (point) => {
+        if (point !== 'searchProviders') return [];
+        return [
+          { pluginId: 'verstak.search', id: 'verstak.search.vault-text', label: 'Vault Text Search', handler: 'verstak.search.searchVaultText' },
+          { pluginId: 'external.notes', id: 'external.notes.search', label: 'External Notes', handler: 'external.notes.search' },
+          { pluginId: 'broken.provider', id: 'broken.provider.search', label: 'Broken Provider', handler: 'broken.provider.search' },
+        ];
+      },
+    },
+    events: {
+      subscribe: async (eventName, handler) => {
+        eventHandlers[eventName] = eventHandlers[eventName] || [];
+        eventHandlers[eventName].push(handler);
+        return () => {
+          eventHandlers[eventName] = (eventHandlers[eventName] || []).filter((candidate) => candidate !== handler);
+        };
+      },
+    },
     files: {
       list: async (relativeDir) => {
         if (relativeDir === 'Project') {
@@ -148,8 +212,7 @@ async function wait(ms) {
         return [];
       },
       readText: async (relativePath) => {
-        if (relativePath === 'Project/Docs/case.md') return '# Case\nTarget phrase is here.\n';
-        if (relativePath === 'Project/Docs/notes.txt') return 'No match here.\n';
+        if (Object.prototype.hasOwnProperty.call(fileContents, relativePath)) return fileContents[relativePath];
         throw new Error('unexpected readText path ' + relativePath);
       },
     },
@@ -163,6 +226,16 @@ async function wait(ms) {
   const container = new FakeNode('div');
   component.mount(container, { workspaceRootPath: 'Project' }, api);
   await flush();
+
+  if (!commandHandlers.has('verstak.search.searchVaultText')) throw new Error('search provider command was not registered');
+  if (!eventHandlers['file.changed'] || eventHandlers['file.changed'].length !== 1) throw new Error('file.changed subscription was not registered');
+  if (!manifest.permissions.includes('storage.namespace')) throw new Error('search manifest must request storage.namespace');
+  if (!manifest.permissions.includes('events.subscribe')) throw new Error('search manifest must request events.subscribe');
+  if (!manifest.permissions.includes('commands.register')) throw new Error('search manifest must request commands.register');
+  const command = (manifest.contributes.commands || []).find((item) => item.id === 'verstak.search.searchVaultText');
+  if (!command || command.handler !== 'verstak.search.searchVaultText') throw new Error('search command contribution is missing');
+  const provider = (manifest.contributes.searchProviders || []).find((item) => item.id === 'verstak.search.vault-text');
+  if (!provider || provider.handler !== 'verstak.search.searchVaultText') throw new Error('search provider must point at the command handler');
 
   function queryInput() {
     const input = walk(container, (node) => node.getAttribute && node.getAttribute('data-search-input') === 'query');
@@ -178,8 +251,13 @@ async function wait(ms) {
   if (!container.textContent.includes('Project/Docs/case.md')) throw new Error('typing should search file contents');
   if (!container.textContent.includes('Target phrase is here')) throw new Error('typing should render content snippet');
   if (!container.textContent.includes('Project/Target Assets')) throw new Error('typing should search folder paths');
+  if (!container.textContent.includes('Project/External/target.note')) throw new Error('external provider result should be rendered');
+  if (!container.textContent.includes('External Notes')) throw new Error('external provider label should be rendered');
+  if (!container.textContent.includes('provider unavailable')) throw new Error('provider failure should be reported without failing search');
   if (!container.textContent.includes('Content match')) throw new Error('content result type was not rendered');
   if (!container.textContent.includes('Folder name')) throw new Error('folder result type was not rendered');
+  if (!pluginData['search-index'] || !Array.isArray(pluginData['search-index'].files)) throw new Error('search index was not written to plugin data storage');
+  if (providerCalls.some((call) => call.pluginId === 'verstak.search')) throw new Error('search must not call itself as an external provider');
 
   input = queryInput();
   input.value = 'image';
@@ -200,6 +278,27 @@ async function wait(ms) {
   if (!container.textContent.includes('Project/Docs/case.md')) throw new Error('matching file path was not rendered');
   if (!container.textContent.includes('Target phrase is here')) throw new Error('matching snippet was not rendered');
   if (container.textContent.includes('image.png')) throw new Error('binary image file should not be rendered as a result');
+
+  fileContents['Project/Docs/notes.txt'] = 'Edited target appears after file change.\n';
+  eventHandlers['file.changed'].forEach((handler) => handler({
+    type: 'file.changed',
+    payload: { relativePath: 'Project/Docs/notes.txt', changeType: 'write' },
+  }));
+  await flush();
+
+  input = queryInput();
+  input.value = 'edited target';
+  input.dispatchEvent('input');
+  button.click();
+  await flush();
+
+  if (!container.textContent.includes('Project/Docs/notes.txt')) throw new Error('file.changed should refresh the persisted search index');
+
+  input = queryInput();
+  input.value = 'target';
+  input.dispatchEvent('input');
+  button.click();
+  await flush();
 
   const openButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-search-open') === 'Project/Docs/case.md');
   if (!openButton) throw new Error('result open button not found');

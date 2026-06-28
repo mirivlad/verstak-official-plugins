@@ -15,6 +15,9 @@
   var SEARCH_DEBOUNCE_MS = 300;
   var MAX_FILES = 500;
   var MAX_RESULTS = 100;
+  var INDEX_STORAGE_KEY = 'search-index';
+  var INDEX_VERSION = 1;
+  var SEARCH_COMMAND_ID = 'verstak.search.searchVaultText';
 
   function injectStyles() {
     if (document.getElementById('search-style-injected')) return;
@@ -149,25 +152,129 @@
     return found;
   }
 
-  async function runSearch(api, rootPath, query) {
-    query = String(query || '').trim();
-    if (query.length < 2) return [];
+  async function buildIndex(api, rootPath) {
     var entries = await collectEntries(api, rootPath);
-    var results = [];
-    for (var i = 0; i < entries.length && results.length < MAX_RESULTS; i++) {
+    var files = [];
+    for (var i = 0; i < entries.length; i++) {
       var entry = entries[i];
-      var path = entry.relativePath;
-      if (pathMatches(entry, query)) results.push(scanPath(entry));
-      if (!isTextFile(entry) || results.length >= MAX_RESULTS) continue;
+      if (!isTextFile(entry)) continue;
       try {
-        var text = await api.files.readText(path);
-        var match = scanText(path, String(text || ''), query);
-        if (match) results.push(match);
+        files.push({
+          path: entry.relativePath,
+          text: String(await api.files.readText(entry.relativePath) || '')
+        });
       } catch (err) {
         // Ignore unreadable files; search should remain usable on mixed vaults.
       }
     }
+    return {
+      version: INDEX_VERSION,
+      workspaceRootPath: cleanPath(rootPath),
+      updatedAt: new Date().toISOString(),
+      entries: entries,
+      files: files
+    };
+  }
+
+  function normalizeIndex(value, rootPath) {
+    if (!value || value.version !== INDEX_VERSION) return null;
+    if (cleanPath(value.workspaceRootPath) !== cleanPath(rootPath)) return null;
+    if (!Array.isArray(value.entries) || !Array.isArray(value.files)) return null;
+    return value;
+  }
+
+  async function readStoredIndex(api, rootPath) {
+    if (!api.storage || !api.storage.data || typeof api.storage.data.read !== 'function') return null;
+    try {
+      return normalizeIndex(await api.storage.data.read(INDEX_STORAGE_KEY), rootPath);
+    } catch (err) {
+      return null;
+    }
+  }
+
+  async function writeStoredIndex(api, index) {
+    if (!api.storage || !api.storage.data || typeof api.storage.data.write !== 'function') return;
+    try {
+      await api.storage.data.write(INDEX_STORAGE_KEY, index);
+    } catch (err) {
+      // Storage is an optimization for fast reloads; search can still work in memory.
+    }
+  }
+
+  async function loadOrBuildIndex(api, rootPath, currentIndex) {
+    var normalized = normalizeIndex(currentIndex, rootPath);
+    if (normalized) return normalized;
+    var stored = await readStoredIndex(api, rootPath);
+    if (stored) return stored;
+    var index = await buildIndex(api, rootPath);
+    await writeStoredIndex(api, index);
+    return index;
+  }
+
+  function runLocalSearch(index, query) {
+    query = String(query || '').trim();
+    if (query.length < 2) return [];
+    index = index || { entries: [], files: [] };
+    var results = [];
+    var entries = Array.isArray(index.entries) ? index.entries : [];
+    var files = Array.isArray(index.files) ? index.files : [];
+    for (var i = 0; i < entries.length && results.length < MAX_RESULTS; i++) {
+      var entry = entries[i];
+      if (pathMatches(entry, query)) results.push(scanPath(entry));
+    }
+    for (var j = 0; j < files.length && results.length < MAX_RESULTS; j++) {
+      var file = files[j];
+      var match = scanText(file.path, String(file.text || ''), query);
+      if (match) results.push(match);
+    }
     return results;
+  }
+
+  function normalizeProviderResults(provider, value) {
+    var list = Array.isArray(value) ? value : (value && Array.isArray(value.results) ? value.results : []);
+    return list.map(function (item) {
+      return {
+        path: cleanPath(item.path || item.relativePath || item.title || provider.label || provider.id),
+        type: item.type || 'external',
+        matchType: item.matchType || provider.label || 'External match',
+        sourceLabel: provider.label || provider.id || provider.pluginId,
+        openable: item.openable === true,
+        line: item.line || 0,
+        snippet: item.snippet || item.preview || ''
+      };
+    }).filter(function (item) { return item.path; });
+  }
+
+  async function runExternalProviders(api, rootPath, query, remaining) {
+    var output = { results: [], errors: [] };
+    if (remaining <= 0) return output;
+    if (!api.contributions || typeof api.contributions.list !== 'function') return output;
+    if (!api.commands || typeof api.commands.executeFor !== 'function') return output;
+    var providers = [];
+    try {
+      providers = await api.contributions.list('searchProviders');
+    } catch (err) {
+      output.errors.push(err && err.message ? err.message : String(err));
+      return output;
+    }
+    providers = Array.isArray(providers) ? providers : [];
+    for (var i = 0; i < providers.length && output.results.length < remaining; i++) {
+      var provider = providers[i];
+      if (!provider || !provider.handler) continue;
+      if (provider.pluginId === 'verstak.search' || provider.handler === SEARCH_COMMAND_ID) continue;
+      try {
+        var response = await api.commands.executeFor(provider.pluginId, provider.handler, {
+          query: query,
+          workspaceRootPath: rootPath,
+          limit: remaining - output.results.length
+        });
+        var normalized = normalizeProviderResults(provider, response && response.result);
+        output.results = output.results.concat(normalized.slice(0, remaining - output.results.length));
+      } catch (err) {
+        output.errors.push(err && err.message ? err.message : String(err));
+      }
+    }
+    return output;
   }
 
   var SearchView = {
@@ -177,6 +284,9 @@
       var state = { query: '', searching: false, results: [], status: 'Enter at least 2 characters.', error: '' };
       var searchTimer = null;
       var searchSeq = 0;
+      var index = null;
+      var cleanupFns = [];
+      var indexRefresh = Promise.resolve();
 
       function render() {
         containerEl.innerHTML = '';
@@ -219,7 +329,9 @@
             el('div', {}, [
               el('div', { className: 'search-path' }, [result.path]),
               el('div', { className: 'search-snippet' }, [result.snippet]),
-              el('div', { className: 'search-meta' }, [result.matchType + (result.line ? ' - Line ' + result.line : '')])
+              el('div', { className: 'search-meta' }, [
+                (result.sourceLabel ? result.sourceLabel + ' - ' : '') + result.matchType + (result.line ? ' - Line ' + result.line : '')
+              ])
             ]),
             result.openable ? el('button', {
               className: 'search-btn',
@@ -275,10 +387,15 @@
         searchSeq = seq;
         render();
         try {
-          var results = await runSearch(api, rootPath, state.query);
+          await indexRefresh;
+          var results = await searchVaultText({ query: state.query, limit: MAX_RESULTS });
+          var external = await runExternalProviders(api, rootPath, state.query, MAX_RESULTS - results.length);
           if (seq !== searchSeq) return;
-          state.results = results;
+          state.results = results.concat(external.results);
           state.status = state.results.length + ' result' + (state.results.length === 1 ? '' : 's');
+          if (external.errors.length) {
+            state.status += ' - ' + external.errors.join('; ');
+          }
         } catch (err) {
           if (seq !== searchSeq) return;
           state.results = [];
@@ -290,10 +407,58 @@
         }
       }
 
+      async function searchVaultText(args) {
+        var query = args && args.query != null ? args.query : state.query;
+        var limit = args && args.limit ? Number(args.limit) : MAX_RESULTS;
+        index = await loadOrBuildIndex(api, rootPath, index);
+        return runLocalSearch(index, query).slice(0, limit > 0 ? limit : MAX_RESULTS);
+      }
+
+      async function refreshIndex() {
+        index = await buildIndex(api, rootPath);
+        await writeStoredIndex(api, index);
+        return index;
+      }
+
+      function handleFileChanged(event) {
+        var payload = (event && event.payload) || event || {};
+        var changedPath = cleanPath(payload.relativePath || payload.path || '');
+        if (changedPath && rootPath && changedPath !== rootPath && changedPath.indexOf(rootPath + '/') !== 0) return;
+        indexRefresh = refreshIndex().catch(function (err) {
+          console.error('[search] refresh index:', err);
+        });
+        return indexRefresh;
+      }
+
+      function setupIntegrations() {
+        if (api.commands && typeof api.commands.register === 'function') {
+          api.commands.register(SEARCH_COMMAND_ID, searchVaultText).then(function (unregister) {
+            if (typeof unregister === 'function') cleanupFns.push(unregister);
+          }).catch(function (err) {
+            console.error('[search] register command:', err);
+          });
+        }
+        if (api.events && typeof api.events.subscribe === 'function') {
+          api.events.subscribe('file.changed', handleFileChanged).then(function (unsubscribe) {
+            if (typeof unsubscribe === 'function') cleanupFns.push(unsubscribe);
+          }).catch(function (err) {
+            console.error('[search] subscribe file.changed:', err);
+          });
+        }
+      }
+
+      setupIntegrations();
       render();
       containerEl.__verstakSearchCleanup = function () {
         if (searchTimer) clearTimeout(searchTimer);
         searchSeq += 1;
+        while (cleanupFns.length) {
+          try {
+            cleanupFns.pop()();
+          } catch (err) {
+            console.error('[search] cleanup:', err);
+          }
+        }
       };
     },
     unmount: function (containerEl) {

@@ -18,7 +18,10 @@
   "permissions": [
     "files.read",
     "workbench.open",
-    "ui.register"
+    "ui.register",
+    "storage.namespace",
+    "events.subscribe",
+    "commands.register"
   ],
   "frontend": {
     "entry": "frontend/src/index.js"
@@ -32,11 +35,18 @@
         "component": "SearchView"
       }
     ],
+    "commands": [
+      {
+        "id": "verstak.search.searchVaultText",
+        "title": "Search Vault Text",
+        "handler": "verstak.search.searchVaultText"
+      }
+    ],
     "searchProviders": [
       {
         "id": "verstak.search.vault-text",
         "label": "Vault Text Search",
-        "handler": "searchVaultText"
+        "handler": "verstak.search.searchVaultText"
       }
     ]
   }
