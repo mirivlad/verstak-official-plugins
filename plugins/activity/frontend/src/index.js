@@ -115,74 +115,8 @@
     };
   }
 
-  function activityId() {
-    return 'activity-' + Date.now() + '-' + Math.random().toString(36).slice(2);
-  }
-
   function eventPayload(event) {
     return event && event.payload && typeof event.payload === 'object' ? event.payload : {};
-  }
-
-  function firstText(values) {
-    for (var i = 0; i < values.length; i += 1) {
-      var value = text(values[i]).trim();
-      if (value) return value;
-    }
-    return '';
-  }
-
-  function titleFromEvent(event, payload) {
-    return firstText([
-      payload.title,
-      payload.name,
-      payload.path,
-      payload.url,
-      payload.captureId,
-      event.name,
-      'Activity event'
-    ]);
-  }
-
-  function summaryFromEvent(event, payload) {
-    if (payload.text) return text(payload.text).trim();
-    return firstText([
-      payload.summary,
-      payload.description,
-      payload.path,
-      payload.url,
-      payload.domain,
-      event.name
-    ]);
-  }
-
-  function eventToActivity(event, scope) {
-    var payload = eventPayload(event);
-    var workspaceRoot = workspaceFromPayload(payload) || (scope && scope.workspaceRoot) || '';
-    return {
-      activityId: activityId(),
-      type: text(event && event.name).trim() || 'activity.event',
-      title: titleFromEvent(event || {}, payload),
-      summary: summaryFromEvent(event || {}, payload),
-      occurredAt: text(payload.occurredAt || payload.capturedAt || (event && event.timestamp) || new Date().toISOString()),
-      receivedAt: new Date().toISOString(),
-      sourcePluginId: text((event && event.pluginId) || payload.pluginId || payload.sourcePluginId),
-      workspaceRootPath: workspaceRoot,
-      payload: payload
-    };
-  }
-
-  function manualActivity(scope) {
-    return {
-      activityId: activityId(),
-      type: 'activity.manual',
-      title: 'Manual activity',
-      summary: 'Manually recorded activity event',
-      occurredAt: new Date().toISOString(),
-      receivedAt: new Date().toISOString(),
-      sourcePluginId: PLUGIN_ID,
-      workspaceRootPath: (scope && scope.workspaceRoot) || '',
-      payload: {}
-    };
   }
 
   function normalizeStoredEvents(value, storageKey) {
@@ -268,14 +202,6 @@
     var titleEl = el('span', { className: 'activity-title', textContent: scope.mode === 'global' ? 'Activity' : 'Activity · ' + scope.label });
     var countEl = el('span', { className: 'activity-count' });
     var statusEl = el('span', { className: 'activity-status' });
-    var manualBtn = el('button', {
-      className: 'activity-btn',
-      'data-activity-action': 'manual',
-      textContent: 'Record',
-      onClick: function () {
-        addActivity(manualActivity(scope));
-      }
-    });
     var clearBtn = el('button', {
       className: 'activity-btn danger',
       'data-activity-action': 'clear',
@@ -293,7 +219,6 @@
     toolbar.appendChild(countEl);
     toolbar.appendChild(el('span', { className: 'activity-spacer' }));
     toolbar.appendChild(statusEl);
-    toolbar.appendChild(manualBtn);
     toolbar.appendChild(clearBtn);
 
     var listEl = el('div', { className: 'activity-list' });
@@ -329,14 +254,6 @@
         statusText = 'Could not clear activity: ' + (err && err.message ? err.message : String(err));
         statusClass = 'error';
       });
-    }
-
-    function addActivity(activity) {
-      activity._storageKey = scope.key;
-      events = sortEvents([activity].concat(events));
-      statusText = 'Activity recorded';
-      statusClass = '';
-      return persist().then(render);
     }
 
     function renderList() {
@@ -406,7 +323,7 @@
         return api.events.subscribe(eventName, function (event) {
           var eventWorkspace = workspaceFromPayload(eventPayload(event));
           if (scope.mode === 'workspace' && eventWorkspace && eventWorkspace !== scope.workspaceRoot) return Promise.resolve();
-          return addActivity(eventToActivity(event, scope));
+          return loadStored().then(render);
         }).then(function (unsubscribe) {
           if (typeof unsubscribe === 'function') unsubscribers.push(unsubscribe);
         });

@@ -157,11 +157,31 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
 (async () => {
   const api = makeApi();
   const { component, container } = await mountWithApi(api);
+  const projectKey = 'events:workspace:Project';
+  const clientKey = 'events:workspace:ClientA';
+  const globalKey = 'events:global';
 
   for (const name of ['file.opened', 'file.changed', 'note.saved', 'action.started', 'browser.capture.received', 'case.selected', 'browser.capture.selection']) {
     if (typeof api.handlers[name] !== 'function') throw new Error(`${name} subscription missing`);
   }
 
+  await api.settings.write(projectKey, [{
+    activityId: 'capture-1',
+    type: 'browser.capture.selection',
+    title: 'Example Article',
+    summary: 'Selected text',
+    occurredAt: '2026-06-27T00:00:00Z',
+    sourcePluginId: 'verstak.browser-inbox',
+    workspaceRootPath: 'Project',
+    payload: {
+      captureId: 'capture-1',
+      kind: 'selection',
+      title: 'Example Article',
+      url: 'https://example.com/article',
+      text: 'Selected text',
+      workspaceRootPath: 'Project',
+    },
+  }]);
   await api.handlers['browser.capture.selection']({
     name: 'browser.capture.selection',
     pluginId: 'verstak.browser-inbox',
@@ -176,9 +196,6 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   });
   await flush();
 
-  const projectKey = 'events:workspace:Project';
-  const clientKey = 'events:workspace:ClientA';
-  const globalKey = 'events:global';
   const stored = api.storedEvents(projectKey);
   if (stored.length !== 1) throw new Error(`expected one stored activity event, got ${stored.length}`);
   if (stored[0].type !== 'browser.capture.selection') throw new Error('stored event type mismatch');
@@ -189,6 +206,20 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
 
   const clientView = await mountWithApi(api, { workspaceNode: { name: 'ClientA' }, workspaceRootPath: 'ClientA' });
   if (clientView.container.textContent.includes('Example Article')) throw new Error('Project activity leaked into ClientA workspace view');
+  await api.settings.write(clientKey, [{
+    activityId: 'client-note',
+    type: 'note.saved',
+    title: 'Client note',
+    summary: 'ClientA/Notes/Client.md',
+    occurredAt: '2026-06-27T00:10:00Z',
+    sourcePluginId: 'verstak.notes',
+    workspaceRootPath: 'ClientA',
+    payload: {
+      title: 'Client note',
+      path: 'ClientA/Notes/Client.md',
+      workspaceRootPath: 'ClientA',
+    },
+  }]);
   await api.handlers['note.saved']({
     name: 'note.saved',
     pluginId: 'verstak.notes',
@@ -210,11 +241,7 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   component.unmount && component.unmount(globalView.container);
 
   const manualButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-activity-action') === 'manual');
-  if (!manualButton) throw new Error('manual activity button not found');
-  manualButton.click();
-  await flush();
-  if (api.storedEvents(projectKey).length !== 2) throw new Error('manual activity was not stored');
-  if (!container.textContent.includes('Manual activity')) throw new Error('manual activity was not rendered');
+  if (manualButton) throw new Error('manual activity button should not be rendered');
 
   const clearButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-activity-action') === 'clear');
   if (!clearButton) throw new Error('clear activity button not found');
