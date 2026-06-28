@@ -223,6 +223,8 @@ if command -v node &>/dev/null; then
   report "browser inbox frontend behavior" $?
   node "$ROOT/scripts/smoke-search-plugin.js"
   report "search frontend behavior" $?
+  node "$ROOT/scripts/smoke-sync-plugin.js"
+  report "sync frontend behavior" $?
 else
   echo "  ⚠️  node not available — skipping frontend smoke"
 fi

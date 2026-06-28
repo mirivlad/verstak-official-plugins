@@ -193,6 +193,11 @@
   {#if resultMsg && !errorMsg}
     <div style="padding:0.5rem 0.75rem;margin-bottom:0.75rem;border-radius:6px;font-size:0.85rem;{resultKind === 'warning' ? 'background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);color:#f59e0b;' : 'background:rgba(52,211,153,0.1);border:1px solid rgba(52,211,153,0.3);color:#34d399;'}">{resultMsg}</div>
   {/if}
+  {#if settings && settings.lastError && !errorMsg}
+    <div style="padding:0.5rem 0.75rem;margin-bottom:0.75rem;background:rgba(255,107,107,0.1);border:1px solid rgba(255,107,107,0.3);border-radius:6px;color:#ff6b6b;font-size:0.85rem;">
+      Last sync error: {sanitizeError(settings.lastError)}
+    </div>
+  {/if}
 
   <div style="background:#16213e;border:1px solid #0f3460;border-radius:8px;padding:1rem 1.25rem;margin-bottom:1rem;">
     <h3 style="margin:0 0 0.75rem;color:#e0e0f0;font-size:0.95rem;">Server</h3>
