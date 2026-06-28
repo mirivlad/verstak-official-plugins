@@ -7,6 +7,10 @@ const root = path.resolve(__dirname, '..');
 const sourcePath = path.join(root, 'plugins', 'notes', 'frontend', 'src', 'index.js');
 const source = fs.readFileSync(sourcePath, 'utf8');
 
+if (!source.includes('.notes-sort{width:8rem;appearance:none;')) {
+  throw new Error('notes sort select must use the shared custom dropdown style');
+}
+
 class FakeNode {
   constructor(tagName) {
     this.tagName = String(tagName || '').toUpperCase();
