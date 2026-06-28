@@ -198,7 +198,9 @@ function loadFilesComponent(document) {
 function makeApi() {
   const externalCalls = [];
   const contributionCalls = [];
+  const eventHandlers = {};
   let restored = false;
+  let externalVisible = false;
   let trashEntries = [{
     originalPath: 'Docs/deleted.md',
     trashPath: '.verstak/trash/files/mock/deleted.md',
@@ -210,6 +212,13 @@ function makeApi() {
   return {
     externalCalls,
     contributionCalls,
+    emitFileChanged(payload) {
+      (eventHandlers['file.changed'] || []).forEach((handler) => handler({
+        name: 'file.changed',
+        payload,
+        timestamp: new Date().toISOString(),
+      }));
+    },
     files: {
       list: async () => {
         const entries = [{
@@ -228,6 +237,16 @@ function makeApi() {
             extension: 'md',
             size: 8,
             modifiedAt: '2026-06-27T01:03:00Z',
+          });
+        }
+        if (externalVisible) {
+          entries.push({
+            name: 'external.md',
+            relativePath: 'Docs/external.md',
+            type: 'file',
+            extension: 'md',
+            size: 9,
+            modifiedAt: '2026-06-27T01:04:00Z',
           });
         }
         return entries;
@@ -278,6 +297,18 @@ function makeApi() {
         contributionCalls.push({ pluginId, commandId, args });
         return { status: 'handled' };
       },
+    },
+    events: {
+      subscribe: async (eventName, handler) => {
+        eventHandlers[eventName] = eventHandlers[eventName] || [];
+        eventHandlers[eventName].push(handler);
+        return () => {
+          eventHandlers[eventName] = (eventHandlers[eventName] || []).filter((candidate) => candidate !== handler);
+        };
+      },
+    },
+    showExternalFile() {
+      externalVisible = true;
     },
   };
 }
@@ -350,6 +381,13 @@ async function flush() {
   const restoredRow = walk(container, (node) => node.getAttribute && node.getAttribute('data-file-path') === 'Docs/deleted.md');
   if (!restoredRow) {
     throw new Error(`restored file row not rendered after restore: ${container.textContent}`);
+  }
+  api.showExternalFile();
+  api.emitFileChanged({ path: 'Docs/external.md', operation: 'external.create', type: 'file' });
+  await flush();
+  const externalRow = walk(container, (node) => node.getAttribute && node.getAttribute('data-file-path') === 'Docs/external.md');
+  if (!externalRow) {
+    throw new Error(`external file row not rendered after file.changed: ${container.textContent}`);
   }
 
   console.log('files frontend smoke passed');

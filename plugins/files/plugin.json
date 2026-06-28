@@ -19,6 +19,7 @@
     "files.write",
     "files.delete",
     "files.openExternal",
+    "events.subscribe",
     "workbench.open",
     "ui.register"
   ],

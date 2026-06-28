@@ -335,6 +335,13 @@
         return full.indexOf(workspaceRoot + '/') === 0 ? full.slice(workspaceRoot.length + 1) : full;
       }
 
+      function isWorkspaceEvent(event) {
+        var payload = (event && event.payload) || {};
+        var path = cleanPath(payload.path || '');
+        if (!path) return true;
+        return !workspaceRoot || path === workspaceRoot || path.indexOf(workspaceRoot + '/') === 0;
+      }
+
       var toolbar = el('div', { className: 'files-toolbar' });
       var breadcrumb = el('div', { className: 'files-breadcrumb' });
       var backBtn = iconButton('back', 'Back', 'back', goBack);
@@ -1412,8 +1419,22 @@
       loadContributionActions();
       loadEntries();
 
+      var fileChangedUnsubscribe = null;
+      if (api.events && typeof api.events.subscribe === 'function') {
+        api.events.subscribe('file.changed', function (event) {
+          if (disposed || !isWorkspaceEvent(event)) return;
+          if (showingTrash) loadTrashEntries();
+          else loadEntries();
+        }).then(function (unsubscribe) {
+          fileChangedUnsubscribe = unsubscribe;
+        }).catch(function (err) {
+          console.error('[files] file.changed subscription:', err);
+        });
+      }
+
       containerEl.__filesCleanup = function () {
         disposed = true;
+        if (typeof fileChangedUnsubscribe === 'function') fileChangedUnsubscribe();
         document.removeEventListener('click', onDocClick);
         document.removeEventListener('keydown', onDocKeydown);
         window.removeEventListener('mousedown', handleMouseHistory, true);

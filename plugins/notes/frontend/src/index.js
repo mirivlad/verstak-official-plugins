@@ -345,6 +345,14 @@
         });
       }
 
+      function isNotesEvent(event) {
+        var payload = (event && event.payload) || {};
+        var changedPath = cleanPath(payload.path || '');
+        if (!changedPath) return true;
+        var parent = notesParent();
+        return changedPath === parent || changedPath.indexOf(parent + '/') === 0;
+      }
+
       function actionInitial(action) {
         var label = String(action && action.label || '').trim();
         return label ? label.charAt(0).toUpperCase() : '+';
@@ -640,8 +648,21 @@
       loadContributionActions();
       loadNotes();
 
+      var fileChangedUnsubscribe = null;
+      if (api.events && typeof api.events.subscribe === 'function') {
+        api.events.subscribe('file.changed', function (event) {
+          if (disposed || !isNotesEvent(event)) return;
+          loadNotes();
+        }).then(function (unsubscribe) {
+          fileChangedUnsubscribe = unsubscribe;
+        }).catch(function (err) {
+          console.error('[notes] file.changed subscription:', err);
+        });
+      }
+
       containerEl.__notesCleanup = function () {
         disposed = true;
+        if (typeof fileChangedUnsubscribe === 'function') fileChangedUnsubscribe();
       };
     },
 

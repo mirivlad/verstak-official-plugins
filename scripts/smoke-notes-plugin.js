@@ -137,10 +137,18 @@ function makeApi(options = {}) {
   const entries = new Map();
   const opened = [];
   const contributionCalls = [];
+  const eventHandlers = {};
   return {
     entries,
     opened,
     contributionCalls,
+    emitFileChanged(payload) {
+      (eventHandlers['file.changed'] || []).forEach((handler) => handler({
+        name: 'file.changed',
+        payload,
+        timestamp: new Date().toISOString(),
+      }));
+    },
     files: {
       list: async (relativeDir) => {
         const prefix = relativeDir ? `${relativeDir}/` : '';
@@ -210,6 +218,15 @@ function makeApi(options = {}) {
       executeFor: async (pluginId, commandId, args) => {
         contributionCalls.push({ pluginId, commandId, args });
         return { status: 'handled' };
+      },
+    },
+    events: {
+      subscribe: async (eventName, handler) => {
+        eventHandlers[eventName] = eventHandlers[eventName] || [];
+        eventHandlers[eventName].push(handler);
+        return () => {
+          eventHandlers[eventName] = (eventHandlers[eventName] || []).filter((candidate) => candidate !== handler);
+        };
       },
     },
   };
@@ -291,6 +308,13 @@ async function mountNotes(api) {
   }
   sortSelect.value = 'title-asc';
   sortSelect.dispatchEvent('change');
+
+  createApi.entries.set('Project/Notes/Third_Note.md', { type: 'file', content: '# Third Note\n' });
+  createApi.emitFileChanged({ path: 'Project/Notes/Third_Note.md', operation: 'external.create', type: 'file' });
+  await flush();
+  if (!container.textContent.includes('Third Note')) {
+    throw new Error(`notes list did not refresh after file.changed: ${container.textContent}`);
+  }
 
   const renameButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-note-action') === 'rename');
   if (!renameButton) throw new Error('rename note button not found');
