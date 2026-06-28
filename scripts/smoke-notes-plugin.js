@@ -237,6 +237,8 @@ async function mountNotes(api) {
   }
 
   const createApi = makeApi({ metadataAlwaysExists: true });
+  createApi.entries.set('Project/Notes', { type: 'folder' });
+  createApi.entries.set('Project/Notes/Second_Note.md', { type: 'file', content: '# Second Note\n' });
   const { container, document } = await mountNotes(createApi);
   const createButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-action') === 'create');
   if (!createButton) throw new Error('create button not found');
@@ -259,6 +261,32 @@ async function mountNotes(api) {
   if (!createApi.opened.some((request) => request.path === 'Project/Notes/First_Note.md')) {
     throw new Error('create note did not open the newly created file');
   }
+
+  const filterInput = walk(container, (node) => node.getAttribute && node.getAttribute('data-notes-filter') !== undefined);
+  if (!filterInput) throw new Error('notes filter input not found');
+  filterInput.value = 'second';
+  filterInput.dispatchEvent('input');
+  if (!container.textContent.includes('Second Note') || container.textContent.includes('First Note')) {
+    throw new Error(`notes filter did not narrow the rendered list: ${container.textContent}`);
+  }
+  filterInput.value = 'missing';
+  filterInput.dispatchEvent('input');
+  if (!container.textContent.includes('No matching notes')) {
+    throw new Error('notes filter empty state not shown');
+  }
+  filterInput.value = '';
+  filterInput.dispatchEvent('input');
+
+  const sortSelect = walk(container, (node) => node.getAttribute && node.getAttribute('data-notes-sort') !== undefined);
+  if (!sortSelect) throw new Error('notes sort select not found');
+  sortSelect.value = 'title-desc';
+  sortSelect.dispatchEvent('change');
+  const renderedText = container.textContent;
+  if (renderedText.indexOf('Second Note') === -1 || renderedText.indexOf('First Note') === -1 || renderedText.indexOf('Second Note') > renderedText.indexOf('First Note')) {
+    throw new Error(`notes descending sort order is wrong: ${renderedText}`);
+  }
+  sortSelect.value = 'title-asc';
+  sortSelect.dispatchEvent('change');
 
   const providerAction = walk(container, (node) => node.getAttribute && node.getAttribute('data-note-contribution-action') === 'provider.note.action');
   if (!providerAction) throw new Error('provider note action button not found');

@@ -22,6 +22,10 @@
     '.notes-btn:disabled{opacity:.45;cursor:default}',
     '.notes-btn.primary{background:#1a3a2a;border-color:#4ecca3;color:#4ecca3}',
     '.notes-btn.primary:hover{background:#2a4a3a}',
+    '.notes-filter,.notes-sort{font-size:.78rem;padding:.32rem .5rem;border:1px solid #333;border-radius:4px;background:#0d0d1a;color:#e0e0e0;outline:none}',
+    '.notes-filter{width:11rem}',
+    '.notes-sort{width:8rem}',
+    '.notes-filter:focus,.notes-sort:focus{border-color:#4ecca3}',
     '.notes-list{flex:1;overflow:auto;min-height:0}',
     '.notes-item{display:flex;align-items:center;gap:.5rem;padding:.45rem .75rem;border-bottom:1px solid rgba(22,33,62,.55);cursor:pointer;font-size:.85rem}',
     '.notes-item:hover{background:#17172d}',
@@ -172,6 +176,8 @@
       var statusClass = '';
       var disposed = false;
       var noteActions = [];
+      var filterText = '';
+      var sortMode = 'title-asc';
 
       function notesParent() {
         return workspaceRoot || '';
@@ -182,23 +188,26 @@
           title: titleFromFilename(entry.name),
           filename: entry.name,
           path: entry.relativePath,
-          parentPath: cleanPath(parent)
+          parentPath: cleanPath(parent),
+          modifiedAt: entry.modifiedAt || ''
         };
       }
 
-      function sortNotes(list) {
+      function sortNotes(list, mode) {
         return list.sort(function (a, b) {
-          return String(a.title || '').toLowerCase().localeCompare(String(b.title || '').toLowerCase());
+          var byTitle = String(a.title || '').toLowerCase().localeCompare(String(b.title || '').toLowerCase());
+          if (mode === 'title-desc') return -byTitle;
+          return byTitle;
         });
       }
 
       function listNotes(parent) {
         return api.files.list(notesFolderPath(parent)).then(function (entries) {
-          return sortNotes((entries || []).filter(function (entry) {
+          return (entries || []).filter(function (entry) {
             return entry.type === 'file' && /\.(md|markdown)$/i.test(entry.name || '');
           }).map(function (entry) {
             return noteFromEntry(parent, entry);
-          }));
+          });
         }).catch(function (err) {
           if (isNotFoundError(err)) return [];
           throw err;
@@ -250,8 +259,15 @@
 
       var toolbar = el('div', { className: 'notes-toolbar' });
       var createBtn = el('button', { className: 'notes-btn', 'data-action': 'create', innerHTML: iconSvg('add') + ' New Note' });
+      var filterInput = el('input', { className: 'notes-filter', 'data-notes-filter': '', placeholder: 'Filter notes' });
+      var sortSelect = el('select', { className: 'notes-sort', 'data-notes-sort': '' }, [
+        el('option', { value: 'title-asc' }, ['A-Z']),
+        el('option', { value: 'title-desc' }, ['Z-A'])
+      ]);
       var statusEl = el('span', { className: 'notes-status' });
       toolbar.appendChild(createBtn);
+      toolbar.appendChild(filterInput);
+      toolbar.appendChild(sortSelect);
       toolbar.appendChild(el('span', { style: { flex: '1' } }));
       toolbar.appendChild(statusEl);
       containerEl.appendChild(toolbar);
@@ -351,13 +367,28 @@
         });
       }
 
+      function visibleNotes() {
+        var q = filterText.trim().toLowerCase();
+        var filtered = (notes || []).filter(function (note) {
+          if (!q) return true;
+          return String(note.title || '').toLowerCase().indexOf(q) !== -1 ||
+            String(note.path || '').toLowerCase().indexOf(q) !== -1;
+        });
+        return sortNotes(filtered, sortMode);
+      }
+
       function renderList() {
         listContainer.innerHTML = '';
         if (!notes || notes.length === 0) {
           renderEmpty('No notes yet');
           return;
         }
-        notes.forEach(function (note) {
+        var shown = visibleNotes();
+        if (shown.length === 0) {
+          renderEmpty('No matching notes', 'Clear the filter to show all notes');
+          return;
+        }
+        shown.forEach(function (note) {
           var actionButtons = [
             el('button', {
               className: 'notes-item-btn',
@@ -405,12 +436,12 @@
         });
       }
 
-      function renderEmpty(msg) {
+      function renderEmpty(msg, hint) {
         listContainer.innerHTML = '';
         listContainer.appendChild(el('div', { className: 'notes-empty' }, [
           el('div', { innerHTML: iconSvg('note') }),
           el('div', {}, [msg]),
-          el('div', { className: 'notes-empty-hint' }, ['Click "New Note" to create one'])
+          el('div', { className: 'notes-empty-hint' }, [hint || 'Click "New Note" to create one'])
         ]));
       }
 
@@ -581,6 +612,14 @@
       // ─── Event Wiring ───────────────────────────────────────
 
       createBtn.addEventListener('click', showCreate);
+      filterInput.addEventListener('input', function () {
+        filterText = filterInput.value;
+        renderList();
+      });
+      sortSelect.addEventListener('change', function () {
+        sortMode = sortSelect.value || 'title-asc';
+        renderList();
+      });
       createConfirm.addEventListener('click', confirmCreate);
       createCancel.addEventListener('click', hideCreate);
       renameConfirm.addEventListener('click', confirmRename);
