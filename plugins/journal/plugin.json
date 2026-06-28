@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "id": "verstak.journal",
+  "name": "Journal",
+  "version": "0.1.0",
+  "apiVersion": "0.1.0",
+  "description": "Workspace-scoped worklog journal with manual entries and Activity suggestion import.",
+  "source": "official",
+  "icon": "book-open",
+  "provides": [
+    "worklog",
+    "journal",
+    "report.worklog"
+  ],
+  "optionalRequires": [
+    "activity.reconstruction"
+  ],
+  "permissions": [
+    "storage.namespace",
+    "ui.register"
+  ],
+  "frontend": {
+    "entry": "frontend/src/index.js"
+  },
+  "contributes": {
+    "views": [
+      {
+        "id": "verstak.journal.view",
+        "title": "Journal",
+        "icon": "book-open",
+        "component": "JournalView"
+      }
+    ],
+    "sidebarItems": [
+      {
+        "id": "verstak.journal.sidebar",
+        "title": "Journal",
+        "icon": "book-open",
+        "view": "verstak.journal.view",
+        "position": 30
+      }
+    ],
+    "workspaceItems": [
+      {
+        "id": "verstak.journal.workspace",
+        "title": "Journal",
+        "icon": "book-open",
+        "component": "JournalView"
+      }
+    ]
+  }
+}
