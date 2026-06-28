@@ -178,6 +178,7 @@
       var noteActions = [];
       var filterText = '';
       var sortMode = 'title-asc';
+      var renameTarget = null;
 
       function notesParent() {
         return workspaceRoot || '';
@@ -489,7 +490,7 @@
           if (disposed) return;
           data = data || {};
           if (data.conflict) {
-            showConflictModal(title, data.path);
+            showConflictModal(title, data.path, createInput);
             return;
           }
           hideCreate();
@@ -540,7 +541,7 @@
           if (disposed) return;
           data = data || {};
           if (data.conflict) {
-            showConflictModal(newTitle, data.path);
+            showConflictModal(newTitle, data.path, renameInput);
             return;
           }
           hideRename();
@@ -571,16 +572,17 @@
 
       // ─── Conflict Modal ─────────────────────────────────────
 
-      function showConflictModal(title, existingPath) {
+      function showConflictModal(title, existingPath, focusTarget) {
         var overlay = el('div', { className: 'notes-modal-overlay' });
         var modal = el('div', { className: 'notes-modal' }, [
           el('div', { className: 'notes-modal-title' }, ['Name Conflict']),
           el('div', { className: 'notes-modal-msg' }, [
             'A note with the title "' + title + '" already exists.',
+            existingPath ? ' Existing file: ' + existingPath + '.' : '',
             ' Please choose a different title.'
           ].join('')),
           el('div', { className: 'notes-modal-actions' }, [
-            el('button', { className: 'notes-modal-btn confirm', textContent: 'OK', onClick: function () { overlay.remove(); createInput.focus(); } })
+            el('button', { className: 'notes-modal-btn confirm', textContent: 'OK', onClick: function () { overlay.remove(); (focusTarget || createInput).focus(); } })
           ])
         ]);
         overlay.appendChild(modal);

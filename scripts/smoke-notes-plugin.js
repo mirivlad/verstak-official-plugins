@@ -288,6 +288,25 @@ async function mountNotes(api) {
   sortSelect.value = 'title-asc';
   sortSelect.dispatchEvent('change');
 
+  const renameButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-note-action') === 'rename');
+  if (!renameButton) throw new Error('rename note button not found');
+  renameButton.click();
+  const renameInput = walk(container, (node) => node.getAttribute && node.getAttribute('data-notes-rename-input') !== undefined);
+  if (!renameInput) throw new Error('rename input not found');
+  renameInput.value = 'Second Note';
+  const renameConfirm = walk(container, (node) => node.tagName === 'BUTTON' && node.textContent === 'Rename');
+  if (!renameConfirm) throw new Error('rename confirm button not found');
+  renameConfirm.click();
+  await flush();
+  const conflictModal = walk(document.body, (node) => node.className === 'notes-modal-msg');
+  if (!conflictModal || !conflictModal.textContent.includes('Project/Notes/Second_Note.md')) {
+    throw new Error(`rename conflict modal should include existing path, got ${conflictModal && conflictModal.textContent}`);
+  }
+  const conflictOk = walk(document.body, (node) => node.tagName === 'BUTTON' && node.textContent === 'OK');
+  if (!conflictOk) throw new Error('rename conflict OK button not found');
+  conflictOk.click();
+  await flush();
+
   const providerAction = walk(container, (node) => node.getAttribute && node.getAttribute('data-note-contribution-action') === 'provider.note.action');
   if (!providerAction) throw new Error('provider note action button not found');
   providerAction.click();
