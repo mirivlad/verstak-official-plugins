@@ -4,7 +4,7 @@
   "name": "File Preview",
   "version": "0.1.0",
   "apiVersion": "0.1.0",
-  "description": "Read-only image metadata preview provider for vault files.",
+  "description": "Read-only inline image preview provider for vault files.",
   "source": "official",
   "icon": "eye",
   "provides": [

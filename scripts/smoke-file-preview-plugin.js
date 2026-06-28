@@ -123,17 +123,28 @@ async function flush() {
 
   const imageContainer = new FakeNode('div');
   const opened = [];
+  const byteReads = [];
   component.mount(imageContainer, {
     request: { path: 'Images/logo.png', extension: '.png', mode: 'view' },
   }, {
     files: {
       metadata: async () => ({ type: 'file', size: 2048, isText: false, modifiedAt: '2026-06-27T00:00:00Z' }),
+      readBytes: async (relativePath) => {
+        byteReads.push(relativePath);
+        return { relativePath, size: 4, mimeHint: 'image/png', dataBase64: 'iVBORw==' };
+      },
       readText: async () => { throw new Error('file preview should not read text content'); },
       openExternal: async (relativePath) => { opened.push(relativePath); },
     },
   });
   await flush();
   if (!imageContainer.textContent.includes('Image Preview')) throw new Error('image preview metadata was not rendered');
+  if (byteReads[0] !== 'Images/logo.png') throw new Error(`expected readBytes path Images/logo.png, got ${byteReads[0] || '<none>'}`);
+  const previewImage = walk(imageContainer, (node) => node.tagName === 'IMG' && node.getAttribute('data-preview-image') === 'true');
+  if (!previewImage) throw new Error('preview image not rendered');
+  if (previewImage.getAttribute('src') !== 'data:image/png;base64,iVBORw==') {
+    throw new Error(`unexpected preview image src: ${previewImage.getAttribute('src') || '<none>'}`);
+  }
   const openButton = walk(imageContainer, (node) => node.getAttribute && node.getAttribute('data-action') === 'open-external');
   if (!openButton) throw new Error('open external button not found');
   openButton.click();

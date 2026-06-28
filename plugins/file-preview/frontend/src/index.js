@@ -25,6 +25,8 @@
     '.fp-btn{font-size:.75rem;padding:.28rem .58rem;border:1px solid #333;border-radius:4px;background:#1a1a2e;color:#ccc;cursor:pointer}',
     '.fp-btn:hover{background:#2a2a4e;border-color:#4ecca3;color:#4ecca3}',
     '.fp-body{flex:1;min-height:0;overflow:auto;padding:1rem 1.2rem}',
+    '.fp-image-wrap{display:flex;align-items:center;justify-content:center;min-height:220px;margin:0 0 1rem;padding:1rem;background:#090914;border:1px solid #16213e;border-radius:6px}',
+    '.fp-image{display:block;max-width:100%;max-height:62vh;object-fit:contain}',
     '.fp-meta{display:grid;grid-template-columns:max-content 1fr;gap:.45rem .8rem;max-width:760px;font-size:.86rem}',
     '.fp-meta dt{color:#8b8ba8}.fp-meta dd{margin:0;color:#e0e0e0;word-break:break-word}',
     '.fp-kind{margin:0 0 1rem;color:#f0f0ff;font-size:1.1rem}',
@@ -64,6 +66,26 @@
     if (size < 1024) return size + ' B';
     if (size < 1024 * 1024) return (size / 1024).toFixed(1) + ' KB';
     return (size / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function imageMime(ext, hint) {
+    if (hint && String(hint).indexOf('image/') === 0) return String(hint);
+    if (ext === 'jpg') return 'image/jpeg';
+    if (ext === 'svg') return 'image/svg+xml';
+    if (IMAGE_EXTS.indexOf(ext) !== -1) return 'image/' + ext;
+    return 'application/octet-stream';
+  }
+
+  function renderImage(body, path, meta, ext, bytes) {
+    var src = 'data:' + imageMime(ext, bytes && bytes.mimeHint || meta && meta.mimeHint) + ';base64,' + (bytes && bytes.dataBase64 || '');
+    var img = el('img', {
+      className: 'fp-image',
+      src: src,
+      alt: path,
+      'data-preview-image': 'true'
+    });
+    var wrap = el('div', { className: 'fp-image-wrap' }, [img]);
+    body.appendChild(wrap);
   }
 
   function renderMeta(body, path, meta, ext) {
@@ -111,6 +133,11 @@
 
       api.files.metadata(path).then(function (meta) {
         renderMeta(body, path, meta || {}, ext);
+        if (IMAGE_EXTS.indexOf(ext) === -1 || !api.files.readBytes) return null;
+        return api.files.readBytes(path).then(function (bytes) {
+          if (bytes && bytes.dataBase64) renderImage(body, path, meta || {}, ext, bytes);
+          return null;
+        });
       }).catch(function (err) {
         body.className = 'fp-error';
         body.textContent = 'Preview error: ' + (err && err.message ? err.message : String(err));
