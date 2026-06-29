@@ -87,6 +87,33 @@
     return text(value).trim().replace(/^\/+|\/+$/g, '');
   }
 
+  function cleanDomain(value) {
+    return text(value).trim().toLowerCase().replace(/^\.+/, '');
+  }
+
+  function domainFromUrl(value) {
+    try {
+      return cleanDomain(new URL(text(value).trim()).hostname);
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function domainFromCapture(capture) {
+    return cleanDomain(capture && capture.domain) || domainFromUrl(capture && capture.url);
+  }
+
+  function normalizeDomainBindings(value) {
+    var result = {};
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return result;
+    Object.keys(value).forEach(function (domain) {
+      var normalizedDomain = cleanDomain(domain);
+      var workspaceRoot = cleanWorkspace(value[domain]);
+      if (normalizedDomain && workspaceRoot) result[normalizedDomain] = workspaceRoot;
+    });
+    return result;
+  }
+
   function workspaceFromProps(props) {
     var node = props && props.workspaceNode;
     return cleanWorkspace((props && (props.workspaceRootPath || props.workspaceName || props.workspaceNodeId))
@@ -162,6 +189,7 @@
         source: text(item.source),
         browserName: text(item.browserName),
         workspaceRootPath: cleanWorkspace(item.workspaceRootPath),
+        workspaceName: cleanWorkspace(item.workspaceName || item.workspaceRootPath),
         _storageKey: storageKey || ''
       };
     }).slice(0, MAX_CAPTURES);
@@ -180,7 +208,8 @@
         text: item.text,
         source: item.source,
         browserName: item.browserName,
-        workspaceRootPath: item.workspaceRootPath
+        workspaceRootPath: item.workspaceRootPath,
+        workspaceName: item.workspaceName || item.workspaceRootPath || ''
       };
     });
   }
@@ -228,6 +257,7 @@
     var statusClass = '';
     var disposed = false;
     var unsubscribers = [];
+    var domainBindings = {};
 
     var toolbar = el('div', { className: 'browser-inbox-toolbar' });
     var titleEl = el('span', { className: 'browser-inbox-title', textContent: scope.mode === 'global' ? 'Browser Inbox' : 'Browser Inbox · ' + scope.label });
@@ -263,9 +293,21 @@
 
     function persist() {
       if (!api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve();
-      var toStore = scope.mode === 'global'
-        ? captures.filter(function (item) { return !item._storageKey || item._storageKey === GLOBAL_KEY; })
-        : captures;
+      if (scope.mode === 'global') {
+        var grouped = {};
+        captures.forEach(function (item) {
+          var key = item._storageKey || GLOBAL_KEY;
+          grouped[key] = grouped[key] || [];
+          grouped[key].push(item);
+        });
+        return Promise.all(Object.keys(grouped).map(function (key) {
+          return api.settings.write(key, storageCaptures(sortCaptures(grouped[key])));
+        })).catch(function (err) {
+          statusText = 'Could not save inbox: ' + (err && err.message ? err.message : String(err));
+          statusClass = 'error';
+        });
+      }
+      var toStore = captures;
       return api.settings.write(scope.key, storageCaptures(toStore)).catch(function (err) {
         statusText = 'Could not save inbox: ' + (err && err.message ? err.message : String(err));
         statusClass = 'error';
@@ -302,16 +344,35 @@
     }
 
     function addCapture(capture) {
+      capture = applyDomainBinding(capture);
+      if (scope.mode === 'workspace' && capture.workspaceRootPath && capture.workspaceRootPath !== scope.workspaceRoot) {
+        return Promise.resolve();
+      }
       var existing = captures.some(function (item) {
         return item.captureId === capture.captureId;
       });
       if (existing) return Promise.resolve();
-      capture._storageKey = scope.key;
+      capture._storageKey = storageKeyForCapture(capture);
       captures = sortCaptures([capture].concat(captures));
       selectedId = capture.captureId;
       statusText = 'Capture received';
       statusClass = '';
       return persist().then(render);
+    }
+
+    function applyDomainBinding(capture) {
+      if (!capture || capture.workspaceRootPath) return capture;
+      var workspaceRoot = domainBindings[domainFromCapture(capture)];
+      if (!workspaceRoot) return capture;
+      capture.workspaceRootPath = workspaceRoot;
+      capture.workspaceName = workspaceRoot;
+      return capture;
+    }
+
+    function storageKeyForCapture(capture) {
+      var workspaceRoot = cleanWorkspace(capture && capture.workspaceRootPath);
+      if (workspaceRoot) return WORKSPACE_PREFIX + encodeKey(workspaceRoot);
+      return scope.key;
     }
 
     function removeCapture(captureId) {
@@ -408,6 +469,7 @@
       if (!api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve();
       if (scope.mode === 'global') {
         return api.settings.read().then(function (settings) {
+          domainBindings = normalizeDomainBindings((settings || {}).domainBindings);
           var all = [];
           globalCaptureKeys(settings || {}).forEach(function (key) {
             all = all.concat(normalizeStoredCaptures((settings || {})[key], key));
@@ -420,6 +482,7 @@
         });
       }
       return api.settings.read().then(function (settings) {
+        domainBindings = normalizeDomainBindings((settings || {}).domainBindings);
         var scopedCaptures = normalizeStoredCaptures((settings || {})[scope.key], scope.key);
         var globalCaptures = normalizeStoredCaptures((settings || {})[GLOBAL_KEY], GLOBAL_KEY).filter(function (item) {
           return item.workspaceRootPath === scope.workspaceRoot;

@@ -334,6 +334,65 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
     throw new Error('workspace-tagged global capture leaked into another workspace');
   }
 
+  const bindingApi = makeApi({
+    domainBindings: {
+      'client.example.com': 'ClientA',
+      'project.example.com': 'Project',
+    },
+  });
+  const bindingGlobal = await mountWithApi(bindingApi, {});
+  await bindingApi.handlers['browser.capture.page']({
+    name: 'browser.capture.page',
+    timestamp: '2026-06-29T00:00:00Z',
+    payload: {
+      captureId: 'bound-client-capture',
+      capturedAt: '2026-06-29T00:00:00.000Z',
+      kind: 'page',
+      url: 'https://client.example.com/page',
+      title: 'Bound Client Page',
+      domain: 'client.example.com',
+    },
+  });
+  await flush();
+  if (bindingApi.getStoredCaptures('captures:workspace:ClientA').length !== 1) {
+    throw new Error('domain-bound capture was not stored under ClientA workspace key');
+  }
+  if (bindingApi.getStoredCaptures('captures:global').length !== 0) {
+    throw new Error('domain-bound capture was stored in global queue');
+  }
+  const bindingClient = await mountWithApi(bindingApi, { workspaceNode: { name: 'ClientA' }, workspaceRootPath: 'ClientA' });
+  if (!walk(bindingClient.container, (node) => node.getAttribute && node.getAttribute('data-browser-capture-id') === 'bound-client-capture')) {
+    throw new Error('domain-bound capture was not rendered in bound workspace');
+  }
+  const bindingAggregate = await mountWithApi(bindingApi, {});
+  if (!walk(bindingAggregate.container, (node) => node.getAttribute && node.getAttribute('data-browser-capture-id') === 'bound-client-capture')) {
+    throw new Error('global browser inbox did not aggregate domain-bound capture');
+  }
+
+  await bindingApi.handlers['browser.capture.page']({
+    name: 'browser.capture.page',
+    timestamp: '2026-06-29T00:10:00Z',
+    payload: {
+      captureId: 'explicit-project-capture',
+      capturedAt: '2026-06-29T00:10:00.000Z',
+      kind: 'page',
+      url: 'https://client.example.com/explicit',
+      title: 'Explicit Project Page',
+      domain: 'client.example.com',
+      workspaceRootPath: 'Project',
+    },
+  });
+  await flush();
+  if (!bindingApi.getStoredCaptures('captures:workspace:Project').some((capture) => capture.captureId === 'explicit-project-capture')) {
+    throw new Error('explicit workspace capture was not stored under its payload workspace');
+  }
+  if (bindingApi.getStoredCaptures('captures:workspace:ClientA').some((capture) => capture.captureId === 'explicit-project-capture')) {
+    throw new Error('domain binding overrode explicit workspaceRootPath');
+  }
+  component.unmount && component.unmount(bindingGlobal.container);
+  component.unmount && component.unmount(bindingClient.container);
+  component.unmount && component.unmount(bindingAggregate.container);
+
   console.log('browser inbox plugin smoke passed');
 })().catch((err) => {
   console.error(err);
