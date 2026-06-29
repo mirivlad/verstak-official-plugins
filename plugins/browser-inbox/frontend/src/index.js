@@ -216,6 +216,7 @@
       fileMime: text(payload.fileMime).trim(),
       fileSize: Number(payload.fileSize) || 0,
       fileText: text(payload.fileText),
+      fileDataBase64: text(payload.fileDataBase64).trim(),
       source: text(payload.source).trim(),
       browserName: text(payload.browserName).trim(),
       workspaceRootPath: workspaceFromPayload(payload) || (scope && scope.workspaceRoot) || ''
@@ -240,6 +241,7 @@
         fileMime: text(item.fileMime),
         fileSize: Number(item.fileSize) || 0,
         fileText: text(item.fileText),
+        fileDataBase64: text(item.fileDataBase64).trim(),
         source: text(item.source),
         browserName: text(item.browserName),
         workspaceRootPath: cleanWorkspace(item.workspaceRootPath),
@@ -264,6 +266,7 @@
         fileMime: item.fileMime,
         fileSize: item.fileSize,
         fileText: item.fileText,
+        fileDataBase64: item.fileDataBase64,
         source: item.source,
         browserName: item.browserName,
         workspaceRootPath: item.workspaceRootPath,
@@ -531,8 +534,8 @@
     }
 
     function createFileFromCapture(capture) {
-      if (!capture || !capture.workspaceRootPath || capture.kind !== 'file' || !capture.fileName || !capture.fileText) return Promise.resolve();
-      if (!api || !api.files || typeof api.files.writeText !== 'function') {
+      if (!capture || !capture.workspaceRootPath || capture.kind !== 'file' || !capture.fileName || (!capture.fileText && !capture.fileDataBase64)) return Promise.resolve();
+      if (!api || !api.files || (capture.fileDataBase64 ? typeof api.files.writeBytes !== 'function' : typeof api.files.writeText !== 'function')) {
         statusText = 'Could not create file: files API unavailable';
         statusClass = 'error';
         render();
@@ -543,10 +546,14 @@
       statusText = 'Creating file...';
       statusClass = '';
       render();
-      return api.files.writeText(filePath, capture.fileText, {
+      var writeOptions = {
         createIfMissing: true,
         overwrite: false
-      }).then(function () {
+      };
+      var writePromise = capture.fileDataBase64
+        ? api.files.writeBytes(filePath, capture.fileDataBase64, writeOptions)
+        : api.files.writeText(filePath, capture.fileText, writeOptions);
+      return writePromise.then(function () {
         if (api.events && typeof api.events.publish === 'function') {
           return api.events.publish('browser.capture.converted', {
             captureId: capture.captureId,
@@ -648,7 +655,7 @@
             }
           }));
         }
-        if (capture.kind === 'file' && capture.fileName && capture.fileText) {
+        if (capture.kind === 'file' && capture.fileName && (capture.fileText || capture.fileDataBase64)) {
           actionButtons.push(el('button', {
             className: 'browser-inbox-btn',
             'data-browser-inbox-action': 'create-file',

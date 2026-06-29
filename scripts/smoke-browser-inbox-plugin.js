@@ -135,6 +135,7 @@ function makeApi(initialSettings = {}) {
   const handlers = {};
   const unsubscribed = [];
   const fileWrites = [];
+  const fileByteWrites = [];
   const publishedEvents = [];
   let nextWriteError = null;
   return {
@@ -142,6 +143,7 @@ function makeApi(initialSettings = {}) {
     handlers,
     unsubscribed,
     fileWrites,
+    fileByteWrites,
     publishedEvents,
     failNextWrite(message) {
       nextWriteError = new Error(message || 'write failed');
@@ -173,6 +175,14 @@ function makeApi(initialSettings = {}) {
           throw err;
         }
         fileWrites.push({ relativePath, content, options });
+      },
+      writeBytes: async (relativePath, dataBase64, options = {}) => {
+        if (nextWriteError) {
+          const err = nextWriteError;
+          nextWriteError = null;
+          throw err;
+        }
+        fileByteWrites.push({ relativePath, dataBase64, options });
       },
     },
     getStoredCaptures(key = 'captures') {
@@ -584,6 +594,41 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   if (convertedFileEvent.payload.conversionType !== 'file') throw new Error('converted file event conversionType mismatch');
   if (convertedFileEvent.payload.filePath !== 'Project/Files/notes.txt') throw new Error('converted file event filePath mismatch');
   component.unmount && component.unmount(fileConversionView.container);
+
+  const binaryFileApi = makeApi({
+    'captures:workspace:Project': [{
+      captureId: 'convert-binary-file',
+      capturedAt: '2026-06-29T02:25:00.000Z',
+      kind: 'file',
+      url: 'https://example.com/files',
+      title: 'Example Files',
+      domain: 'example.com',
+      fileName: 'logo.png',
+      fileMime: 'image/png',
+      fileSize: 4,
+      fileDataBase64: 'iVBORw==',
+      workspaceRootPath: 'Project',
+      workspaceName: 'Project',
+    }],
+  });
+  const binaryFileView = await mountWithApi(binaryFileApi);
+  const createBinaryFileButton = walk(binaryFileView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-action') === 'create-file');
+  if (!createBinaryFileButton) throw new Error('create file button for binary capture was not rendered');
+  createBinaryFileButton.click();
+  await flush();
+  if (binaryFileApi.fileWrites.length !== 0) throw new Error('binary file conversion used writeText');
+  if (binaryFileApi.fileByteWrites.length !== 1) throw new Error(`expected one byte write, got ${binaryFileApi.fileByteWrites.length}`);
+  const byteWrite = binaryFileApi.fileByteWrites[0];
+  if (byteWrite.relativePath !== 'Project/Files/logo.png') throw new Error(`byte write path mismatch: ${byteWrite.relativePath}`);
+  if (byteWrite.dataBase64 !== 'iVBORw==') throw new Error(`byte write data mismatch: ${byteWrite.dataBase64}`);
+  if (byteWrite.options.createIfMissing !== true || byteWrite.options.overwrite !== false) {
+    throw new Error(`byte write options mismatch: ${JSON.stringify(byteWrite.options)}`);
+  }
+  const convertedBinaryFileEvent = binaryFileApi.publishedEvents.find((event) => event.name === 'browser.capture.converted');
+  if (!convertedBinaryFileEvent || convertedBinaryFileEvent.payload.filePath !== 'Project/Files/logo.png') {
+    throw new Error('binary file conversion event mismatch');
+  }
+  component.unmount && component.unmount(binaryFileView.container);
 
   const failedFileApi = makeApi({
     'captures:workspace:Project': [{

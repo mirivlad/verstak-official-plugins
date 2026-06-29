@@ -109,6 +109,15 @@ const api = {
     writeText: async (relativePath, content) => {
       api.files._entries.set(relativePath, { type: 'file', content });
     },
+    readBytes: async (relativePath) => {
+      const entry = api.files._entries.get(relativePath);
+      if (!entry) throw new Error(`not-found: ${relativePath}`);
+      const content = entry.content || '';
+      return { relativePath, size: content.length, mimeHint: '', dataBase64: Buffer.from(content, 'binary').toString('base64') };
+    },
+    writeBytes: async (relativePath, dataBase64) => {
+      api.files._entries.set(relativePath, { type: 'file', content: Buffer.from(dataBase64, 'base64').toString('binary') });
+    },
     readText: async (relativePath) => {
       if (String(relativePath).split('/')[0].toLowerCase() === '.verstak') {
         throw new Error('reserved-path: .verstak is internal');
