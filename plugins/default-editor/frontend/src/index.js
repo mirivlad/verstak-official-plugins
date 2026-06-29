@@ -107,11 +107,14 @@
     return out + '.md';
   }
 
-  function renderInline(text, isNotesContext) {
+  function renderInline(text, isNotesContext, secretLinksAvailable) {
     var html = escapeHtml(text);
     // Internal wiki links [[Title]] — only render in notes context
     if (isNotesContext) {
       html = html.replace(/\[\[([^\]]+)\]\]/g, '<a href="#" class="internal-link" data-note-link="$1">$1</a>');
+    }
+    if (secretLinksAvailable) {
+      html = html.replace(/\[([^\]]+)\]\(verstak-secret:\/\/([^)]+)\)/g, '<a href="#" class="secret-link" data-secret-id="$2">$1</a>');
     }
     html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
     html = html.replace(/!\[([^\]]*)\]\((https?:\/\/[^)]+)\)/g, '<img alt="$1" src="$2">');
@@ -122,7 +125,7 @@
     return html;
   }
 
-  function renderMarkdown(text, isNotesContext) {
+  function renderMarkdown(text, isNotesContext, secretLinksAvailable) {
     var lines = String(text || '').split(/\r?\n/);
     var out = [];
     var inCode = false;
@@ -140,14 +143,14 @@
     function closeTable() {
       if (!table.length) return;
       out.push('<table><tbody>' + table.map(function (row) {
-        return '<tr>' + row.map(function (cell) { return '<td>' + renderInline(cell.trim(), isNotesContext) + '</td>'; }).join('') + '</tr>';
+        return '<tr>' + row.map(function (cell) { return '<td>' + renderInline(cell.trim(), isNotesContext, secretLinksAvailable) + '</td>'; }).join('') + '</tr>';
       }).join('') + '</tbody></table>');
       table = [];
     }
     function pushParagraph(line) {
       closeList();
       closeTable();
-      if (line.trim()) out.push('<p>' + renderInline(line, isNotesContext) + '</p>');
+      if (line.trim()) out.push('<p>' + renderInline(line, isNotesContext, secretLinksAvailable) + '</p>');
     }
 
     lines.forEach(function (line) {
@@ -181,7 +184,7 @@
       if (heading) {
         closeList();
         closeTable();
-        out.push('<h' + heading[1].length + '>' + renderInline(heading[2], isNotesContext) + '</h' + heading[1].length + '>');
+        out.push('<h' + heading[1].length + '>' + renderInline(heading[2], isNotesContext, secretLinksAvailable) + '</h' + heading[1].length + '>');
         return;
       }
 
@@ -196,7 +199,7 @@
       if (quote) {
         closeList();
         closeTable();
-        out.push('<blockquote>' + renderInline(quote[1], isNotesContext) + '</blockquote>');
+        out.push('<blockquote>' + renderInline(quote[1], isNotesContext, secretLinksAvailable) + '</blockquote>');
         return;
       }
 
@@ -212,9 +215,9 @@
           listType = desired;
         }
         if (task) {
-          out.push('<li><input class="task" type="checkbox" disabled ' + (task[1].toLowerCase() === 'x' ? 'checked' : '') + '> ' + renderInline(task[2], isNotesContext) + '</li>');
+          out.push('<li><input class="task" type="checkbox" disabled ' + (task[1].toLowerCase() === 'x' ? 'checked' : '') + '> ' + renderInline(task[2], isNotesContext, secretLinksAvailable) + '</li>');
         } else {
-          out.push('<li>' + renderInline((ordered || unordered)[1], isNotesContext) + '</li>');
+          out.push('<li>' + renderInline((ordered || unordered)[1], isNotesContext, secretLinksAvailable) + '</li>');
         }
         return;
       }
@@ -287,6 +290,7 @@
       var textarea = null;
       var linesEl = null;
       var previewEl = null;
+      var secretLinksAvailable = false;
 
       containerEl.setAttribute('data-editor-mode', editorMode);
       containerEl.setAttribute('data-resource-path', resourcePath);
@@ -364,7 +368,23 @@
       }
 
       function updatePreview() {
-        if (previewEl) previewEl.innerHTML = isMarkdown ? renderMarkdown(currentContent, editorMode === 'notes-markdown') : '<pre>' + escapeHtml(currentContent) + '</pre>';
+        if (previewEl) previewEl.innerHTML = isMarkdown ? renderMarkdown(currentContent, editorMode === 'notes-markdown', secretLinksAvailable) : '<pre>' + escapeHtml(currentContent) + '</pre>';
+      }
+
+      function loadSecretProviderAvailability() {
+        if (!isMarkdown || !api.contributions || typeof api.contributions.list !== 'function') return;
+        api.contributions.list('openProviders').then(function (providers) {
+          if (disposed) return;
+          secretLinksAvailable = (providers || []).some(function (provider) {
+            return (provider.supports || []).some(function (support) {
+              return support.kind === 'secret';
+            });
+          });
+          updatePreview();
+        }).catch(function () {
+          secretLinksAvailable = false;
+          updatePreview();
+        });
       }
 
       function syncFromTextarea() {
@@ -512,9 +532,29 @@
         });
       }
 
+      loadSecretProviderAvailability();
       reloadFromDisk();
 
       containerEl.addEventListener('click', function (event) {
+        var secretLink = event.target.closest('.secret-link');
+        if (secretLink) {
+          event.preventDefault();
+          if (!secretLinksAvailable) return;
+          var secretID = secretLink.getAttribute('data-secret-id');
+          if (!secretID) return;
+          api.workbench.openResource({
+            kind: 'secret',
+            path: decodeURIComponent(secretID),
+            mode: 'view',
+            context: {
+              sourcePluginId: 'verstak.default-editor',
+              sourceView: 'editor'
+            }
+          }).catch(function (err) {
+            console.error('[default-editor] open secret link:', err);
+          });
+          return;
+        }
         var link = event.target.closest('.internal-link');
         if (!link) return;
         event.preventDefault();

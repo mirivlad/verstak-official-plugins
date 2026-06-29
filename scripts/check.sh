@@ -211,6 +211,8 @@ echo "[frontend smoke]"
 if command -v node &>/dev/null; then
   node "$ROOT/scripts/smoke-platform-frontend.js"
   report "platform-test frontend components mount" $?
+  node "$ROOT/scripts/smoke-default-editor-plugin.js"
+  report "default editor frontend behavior" $?
   node "$ROOT/scripts/smoke-notes-plugin.js"
   report "notes frontend behavior" $?
   node "$ROOT/scripts/smoke-file-preview-plugin.js"

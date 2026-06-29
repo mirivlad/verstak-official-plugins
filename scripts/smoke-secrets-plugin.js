@@ -129,6 +129,7 @@ async function flush() {
   if (!manifest.permissions.includes('secrets.read')) throw new Error('secrets manifest must request secrets.read');
   if (!manifest.permissions.includes('secrets.write')) throw new Error('secrets manifest must request secrets.write');
   if (!manifest.permissions.includes('ui.register')) throw new Error('secrets manifest must request ui.register');
+  if (!(manifest.contributes.openProviders || []).some((item) => (item.supports || []).some((support) => support.kind === 'secret'))) throw new Error('secrets secret open provider missing');
   if (!(manifest.contributes.workspaceItems || []).some((item) => item.component === 'SecretsView')) throw new Error('secrets workspace item missing');
   if (!(manifest.contributes.settingsPanels || []).some((item) => item.component === 'SecretsView')) throw new Error('secrets settings panel missing');
 
