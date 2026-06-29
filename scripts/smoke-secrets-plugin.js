@@ -105,6 +105,7 @@ function loadComponent(document) {
       VerstakPluginRegister(pluginId, bundle) {
         registry[pluginId] = bundle.components || {};
       },
+      confirm: () => true,
       navigator: { clipboard: { writeText: async () => undefined } },
     },
     setTimeout,
@@ -139,14 +140,17 @@ async function flush() {
     { id: 'global.server', title: 'Global Server', username: 'root', scope: { kind: 'global' }, updatedAt: '2026-06-29T00:00:00Z' },
     { id: 'client-a.db', title: 'Client A DB', username: 'app', scope: { kind: 'workspace', workspaceRootPath: 'ClientA' }, updatedAt: '2026-06-29T00:00:00Z' },
   ];
+  let initialized = false;
   let unlocked = false;
   const readCalls = [];
   const copied = [];
+  const deleted = [];
   const api = {
     secrets: {
-      status: async () => ({ unlocked }),
+      status: async () => ({ initialized, unlocked }),
       unlock: async (password) => {
-        if (password !== 'master') throw new Error('bad password');
+        if (password !== 'master-password') throw new Error('bad password');
+        initialized = true;
         unlocked = true;
       },
       list: async () => records,
@@ -154,7 +158,20 @@ async function flush() {
         readCalls.push(id);
         return { ...records.find((record) => record.id === id), value: 'secret-value' };
       },
-      write: async (record) => ({ ...record, id: record.id || 'generated.id', updatedAt: '2026-06-29T00:00:00Z' }),
+      write: async (record) => {
+        const next = { ...record, id: record.id || 'generated.id', updatedAt: '2026-06-29T00:00:00Z' };
+        const idx = records.findIndex((item) => item.id === next.id);
+        const listRecord = { ...next };
+        delete listRecord.value;
+        if (idx >= 0) records[idx] = listRecord;
+        else records.push(listRecord);
+        return listRecord;
+      },
+      delete: async (id) => {
+        deleted.push(id);
+        const idx = records.findIndex((record) => record.id === id);
+        if (idx >= 0) records.splice(idx, 1);
+      },
       copyLink: async (id) => `[${records.find((record) => record.id === id).title}](verstak-secret://${id})`,
     },
     clipboard: {
@@ -166,11 +183,13 @@ async function flush() {
   component.mount(container, { workspaceRootPath: 'ClientA', resource: { path: 'client-a.db' } }, api);
   await flush();
 
-  if (!container.textContent.includes('Unlock secrets')) throw new Error('locked screen did not render');
+  if (!container.textContent.includes('Create master password')) throw new Error('setup screen did not render');
   const passwordInput = walk(container, (node) => node.getAttribute && node.getAttribute('data-secret-master-password') === '');
+  const confirmInput = walk(container, (node) => node.getAttribute && node.getAttribute('data-secret-master-password-confirm') === '');
   const unlockButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-secret-unlock') === '');
-  if (!passwordInput || !unlockButton) throw new Error('unlock controls missing');
-  passwordInput.value = 'master';
+  if (!passwordInput || !confirmInput || !unlockButton) throw new Error('setup controls missing');
+  passwordInput.value = 'master-password';
+  confirmInput.value = 'master-password';
   unlockButton.click();
   await flush();
 
@@ -178,12 +197,36 @@ async function flush() {
   if (!container.textContent.includes('ClientA')) throw new Error('workspace group missing');
   if (!container.textContent.includes('Client A DB')) throw new Error('workspace secret missing');
   if (!readCalls.includes('client-a.db')) throw new Error('deep-linked secret was not selected/read');
+  if (!container.textContent.includes('Group')) throw new Error('secret field table missing Group row');
+  if (!container.textContent.includes('Username')) throw new Error('secret field table missing Username row');
+  if (!container.textContent.includes('Password')) throw new Error('secret field table missing Password row');
+  if (!container.textContent.includes('secret-value')) throw new Error('secret value was not shown in the field table');
 
   const copyButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-secret-copy-link') === 'client-a.db');
   if (!copyButton) throw new Error('copy link button missing');
   copyButton.click();
   await flush();
   if (!copied.includes('[Client A DB](verstak-secret://client-a.db)')) throw new Error('secret link was not copied');
+
+  const editButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-secret-edit') === 'client-a.db');
+  if (!editButton) throw new Error('edit button missing');
+  editButton.click();
+  await flush();
+  const titleInput = walk(container, (node) => node.getAttribute && node.getAttribute('data-secret-title') === '');
+  const valueInput = walk(container, (node) => node.getAttribute && node.getAttribute('data-secret-value') === '');
+  const saveButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-secret-save') === '');
+  if (!titleInput || !valueInput || !saveButton) throw new Error('edit form controls missing');
+  titleInput.value = 'Client A DB Updated';
+  valueInput.value = 'updated-secret-value';
+  saveButton.click();
+  await flush();
+  if (!records.some((record) => record.id === 'client-a.db' && record.title === 'Client A DB Updated')) throw new Error('secret edit did not persist');
+
+  const deleteButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-secret-delete') === 'client-a.db');
+  if (!deleteButton) throw new Error('delete button missing');
+  deleteButton.click();
+  await flush();
+  if (!deleted.includes('client-a.db')) throw new Error('secret delete was not called');
 
   console.log('secrets plugin smoke passed');
 })().catch((err) => {

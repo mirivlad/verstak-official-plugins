@@ -50,6 +50,11 @@
     '.secrets-status{font-size:.78rem;color:#8b949e;min-height:1rem}',
     '.secrets-status.error{color:#ff8f8f}',
     '.secrets-secret-value{white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #303844;background:#0d1117;border-radius:4px;padding:.7rem;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.82rem}',
+    '.secrets-table{width:100%;border-collapse:collapse;border:1px solid #252b36;background:#11151d;border-radius:6px;overflow:hidden}',
+    '.secrets-table th,.secrets-table td{border-bottom:1px solid #252b36;padding:.55rem .65rem;text-align:left;vertical-align:top;font-size:.84rem}',
+    '.secrets-table th{width:9rem;color:#8b949e;font-weight:500;background:#151a23}',
+    '.secrets-table td{color:#e6edf3;overflow-wrap:anywhere}',
+    '.secrets-table tr:last-child th,.secrets-table tr:last-child td{border-bottom:0}',
     '@media(max-width:780px){.secrets-root{grid-template-columns:1fr}.secrets-panel{border-right:0;border-bottom:1px solid #252b36;max-height:45vh}.secrets-row{grid-template-columns:1fr}}'
   ].join('\n');
 
@@ -138,6 +143,7 @@
       var records = [];
       var selectedRecord = null;
       var selectedValue = '';
+      var initialized = false;
       var unlocked = false;
       var statusText = '';
       var statusError = false;
@@ -155,13 +161,24 @@
           'data-secret-master-password': '',
           placeholder: 'Master password'
         });
+        var confirmInput = initialized ? null : el('input', {
+          className: 'secrets-input',
+          type: 'password',
+          'data-secret-master-password-confirm': '',
+          placeholder: 'Repeat master password'
+        });
         var unlockBtn = el('button', {
           className: 'secrets-btn primary',
           type: 'button',
           'data-secret-unlock': '',
           onClick: function () {
+            if (!initialized && passwordInput.value !== confirmInput.value) {
+              setStatus('Master passwords do not match', true);
+              return;
+            }
             unlockBtn.disabled = true;
             api.secrets.unlock(passwordInput.value).then(function () {
+              initialized = true;
               unlocked = true;
               return loadRecords();
             }).catch(function (err) {
@@ -170,6 +187,21 @@
             });
           }
         }, ['Unlock']);
+        if (!initialized) unlockBtn.textContent = 'Create master password';
+        var rows = [
+          el('div', { className: 'secrets-row' }, [
+            el('label', { className: 'secrets-label' }, ['Password']),
+            passwordInput
+          ])
+        ];
+        if (confirmInput) {
+          rows.push(el('div', { className: 'secrets-row' }, [
+            el('label', { className: 'secrets-label' }, ['Repeat']),
+            confirmInput
+          ]));
+        }
+        rows.push(el('div', { className: 'secrets-actions' }, [unlockBtn]));
+        rows.push(el('div', { className: statusError ? 'secrets-status error' : 'secrets-status' }, [statusText]));
         containerEl.innerHTML = '';
         containerEl.appendChild(el('div', { className: 'secrets-root' }, [
           el('div', { className: 'secrets-panel' }, [
@@ -179,15 +211,8 @@
           ]),
           el('div', { className: 'secrets-main' }, [
             el('div', { className: 'secrets-card' }, [
-              el('h2', {}, ['Unlock secrets']),
-              el('div', { className: 'secrets-form' }, [
-                el('div', { className: 'secrets-row' }, [
-                  el('label', { className: 'secrets-label' }, ['Password']),
-                  passwordInput
-                ]),
-                el('div', { className: 'secrets-actions' }, [unlockBtn]),
-                el('div', { className: statusError ? 'secrets-status error' : 'secrets-status' }, [statusText])
-              ])
+              el('h2', {}, [initialized ? 'Unlock secrets' : 'Create master password']),
+              el('div', { className: 'secrets-form' }, rows)
             ])
           ])
         ]));
@@ -231,34 +256,64 @@
         ]);
         return el('div', { className: 'secrets-card' }, [
           el('h2', {}, [selectedRecord.title || selectedRecord.id]),
-          el('div', { className: 'secrets-status' }, [
-            scopeLabel(selectedRecord) + (selectedRecord.username ? ' · ' + selectedRecord.username : '')
+          el('table', { className: 'secrets-table' }, [
+            el('tbody', {}, [
+              fieldRow('Group', scopeLabel(selectedRecord)),
+              fieldRow('ID', selectedRecord.id),
+              fieldRow('Username', selectedRecord.username || ''),
+              fieldRow('Password', selectedValue ? selectedValue : 'Value hidden'),
+              fieldRow('Updated', selectedRecord.updatedAt || '')
+            ])
           ]),
-          el('div', { className: 'secrets-secret-value' }, [selectedValue ? selectedValue : 'Value hidden']),
           el('div', { className: 'secrets-actions' }, [
             el('button', {
               className: 'secrets-btn',
               type: 'button',
               'data-secret-copy-link': selectedRecord.id,
               onClick: function () { copySecretLink(selectedRecord.id); }
-            }, ['Copy secret link'])
+            }, ['Copy secret link']),
+            el('button', {
+              className: 'secrets-btn',
+              type: 'button',
+              'data-secret-edit': selectedRecord.id,
+              onClick: function () { showEditSecret(); }
+            }, ['Edit']),
+            el('button', {
+              className: 'secrets-btn',
+              type: 'button',
+              'data-secret-delete': selectedRecord.id,
+              onClick: function () { deleteSecret(selectedRecord.id); }
+            }, ['Delete'])
           ]),
           el('div', { className: statusError ? 'secrets-status error' : 'secrets-status' }, [statusText])
         ]);
       }
 
-      function renderNewSecret() {
-        var title = el('input', { className: 'secrets-input', type: 'text', value: '', placeholder: 'Title' });
-        var id = el('input', { className: 'secrets-input', type: 'text', value: '', placeholder: 'stable.id' });
-        var username = el('input', { className: 'secrets-input', type: 'text', value: '', placeholder: 'optional username' });
-        var value = el('textarea', { className: 'secrets-textarea', placeholder: 'Secret value' });
+      function fieldRow(label, value) {
+        return el('tr', {}, [
+          el('th', {}, [label]),
+          el('td', {}, [value || ''])
+        ]);
+      }
+
+      function renderSecretForm(existing) {
+        var isEdit = !!existing;
+        var title = el('input', { className: 'secrets-input', type: 'text', 'data-secret-title': '', placeholder: 'Title' });
+        title.value = existing ? text(existing.title) : '';
+        var id = el('input', { className: 'secrets-input', type: 'text', placeholder: 'stable.id' });
+        id.value = existing ? text(existing.id) : '';
+        id.disabled = isEdit;
+        var username = el('input', { className: 'secrets-input', type: 'text', placeholder: 'optional username' });
+        username.value = existing ? text(existing.username) : '';
+        var value = el('textarea', { className: 'secrets-textarea', 'data-secret-value': '', placeholder: 'Secret value' });
+        value.value = isEdit ? selectedValue : '';
         var scope = el('select', { className: 'secrets-select' }, [
           el('option', { value: ScopeGlobal }, ['Global']),
           el('option', { value: ScopeWorkspace }, [workspaceRoot || 'Workspace'])
         ]);
-        if (workspaceRoot) scope.value = ScopeWorkspace;
+        scope.value = existing && existing.scope && existing.scope.kind ? existing.scope.kind : (workspaceRoot ? ScopeWorkspace : ScopeGlobal);
         return el('div', { className: 'secrets-card' }, [
-          el('h2', {}, ['New secret']),
+          el('h2', {}, [isEdit ? 'Edit secret' : 'New secret']),
           el('div', { className: 'secrets-form' }, [
             el('div', { className: 'secrets-row' }, [el('label', { className: 'secrets-label' }, ['Title']), title]),
             el('div', { className: 'secrets-row' }, [el('label', { className: 'secrets-label' }, ['ID']), id]),
@@ -269,6 +324,7 @@
               el('button', {
                 className: 'secrets-btn primary',
                 type: 'button',
+                'data-secret-save': '',
                 onClick: function () {
                   var nextID = text(id.value).trim() || text(title.value).trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '.').replace(/^\.+|\.+$/g, '');
                   api.secrets.write({
@@ -286,7 +342,8 @@
                     setStatus((err && err.message) ? err.message : String(err), true);
                   });
                 }
-              }, ['Save'])
+              }, ['Save']),
+              el('button', { className: 'secrets-btn', type: 'button', onClick: function () { mode = 'selected'; render(); } }, ['Cancel'])
             ]),
             el('div', { className: statusError ? 'secrets-status error' : 'secrets-status' }, [statusText])
           ])
@@ -305,7 +362,7 @@
         containerEl.appendChild(el('div', { className: 'secrets-root' }, [
           el('div', { className: 'secrets-panel' }, renderList()),
           el('div', { className: 'secrets-main' }, [
-            mode === 'new' ? renderNewSecret() : renderSelected()
+            mode === 'new' ? renderSecretForm(null) : mode === 'edit' ? renderSecretForm(selectedRecord) : renderSelected()
           ])
         ]));
       }
@@ -350,6 +407,26 @@
         render();
       }
 
+      function showEditSecret() {
+        if (!selectedRecord) return;
+        mode = 'edit';
+        statusText = '';
+        statusError = false;
+        render();
+      }
+
+      function deleteSecret(id) {
+        if (!id || !window.confirm('Delete this secret?')) return;
+        api.secrets.delete(id).then(function () {
+          selectedID = '';
+          selectedRecord = null;
+          selectedValue = '';
+          return loadRecords();
+        }).catch(function (err) {
+          setStatus((err && err.message) ? err.message : String(err), true);
+        });
+      }
+
       function copySecretLink(id) {
         api.secrets.copyLink(id).then(function (link) {
           return writeClipboard(api, link).then(function () {
@@ -361,6 +438,7 @@
       }
 
       api.secrets.status().then(function (status) {
+        initialized = !!(status && status.initialized);
         unlocked = !!(status && status.unlocked);
         if (unlocked) return loadRecords();
         render();
