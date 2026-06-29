@@ -7,7 +7,7 @@
   'use strict';
 
   var PLUGIN_ID = 'verstak.browser-inbox';
-  var CAPTURE_EVENTS = ['browser.capture.page', 'browser.capture.selection', 'browser.capture.link'];
+  var CAPTURE_EVENTS = ['browser.capture.page', 'browser.capture.selection', 'browser.capture.link', 'browser.capture.file'];
   var MAX_CAPTURES = 100;
   var LEGACY_KEY = 'captures';
   var GLOBAL_KEY = 'captures:global';
@@ -139,10 +139,11 @@
 
   function cleanKind(value) {
     value = text(value).trim();
-    return value === 'selection' || value === 'link' || value === 'page' ? value : 'page';
+    return value === 'selection' || value === 'link' || value === 'file' || value === 'page' ? value : 'page';
   }
 
   function displayTitle(capture) {
+    if (capture && capture.kind === 'file' && capture.fileName) return capture.fileName;
     return capture.title || capture.url || capture.captureId || 'Untitled capture';
   }
 
@@ -161,6 +162,16 @@
 
   function safeLinkFilename(title) {
     return safeNoteFilename(title).replace(/\.md$/, '.url');
+  }
+
+  function safeFileFilename(name) {
+    var base = text(name).trim()
+      .replace(/[\\/:*?"<>|\r\n\t]+/g, '_')
+      .replace(/\s+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    if (!base || base === '.' || base === '..') return 'browser-file.txt';
+    return base;
   }
 
   function captureToMarkdown(capture) {
@@ -201,6 +212,10 @@
       title: text(payload.title).trim(),
       domain: text(payload.domain).trim(),
       text: text(payload.text).trim(),
+      fileName: text(payload.fileName).trim(),
+      fileMime: text(payload.fileMime).trim(),
+      fileSize: Number(payload.fileSize) || 0,
+      fileText: text(payload.fileText),
       source: text(payload.source).trim(),
       browserName: text(payload.browserName).trim(),
       workspaceRootPath: workspaceFromPayload(payload) || (scope && scope.workspaceRoot) || ''
@@ -221,6 +236,10 @@
         title: text(item.title),
         domain: text(item.domain),
         text: text(item.text),
+        fileName: text(item.fileName),
+        fileMime: text(item.fileMime),
+        fileSize: Number(item.fileSize) || 0,
+        fileText: text(item.fileText),
         source: text(item.source),
         browserName: text(item.browserName),
         workspaceRootPath: cleanWorkspace(item.workspaceRootPath),
@@ -241,6 +260,10 @@
         title: item.title,
         domain: item.domain,
         text: item.text,
+        fileName: item.fileName,
+        fileMime: item.fileMime,
+        fileSize: item.fileSize,
+        fileText: item.fileText,
         source: item.source,
         browserName: item.browserName,
         workspaceRootPath: item.workspaceRootPath,
@@ -507,6 +530,49 @@
       });
     }
 
+    function createFileFromCapture(capture) {
+      if (!capture || !capture.workspaceRootPath || capture.kind !== 'file' || !capture.fileName || !capture.fileText) return Promise.resolve();
+      if (!api || !api.files || typeof api.files.writeText !== 'function') {
+        statusText = 'Could not create file: files API unavailable';
+        statusClass = 'error';
+        render();
+        return Promise.resolve();
+      }
+      var fileName = safeFileFilename(capture.fileName);
+      var filePath = capture.workspaceRootPath + '/Files/' + fileName;
+      statusText = 'Creating file...';
+      statusClass = '';
+      render();
+      return api.files.writeText(filePath, capture.fileText, {
+        createIfMissing: true,
+        overwrite: false
+      }).then(function () {
+        if (api.events && typeof api.events.publish === 'function') {
+          return api.events.publish('browser.capture.converted', {
+            captureId: capture.captureId,
+            conversionType: 'file',
+            filePath: filePath,
+            workspaceRootPath: capture.workspaceRootPath,
+            title: displayTitle(capture),
+            url: capture.url || '',
+            fileName: capture.fileName || '',
+            fileMime: capture.fileMime || '',
+            fileSize: capture.fileSize || 0,
+            sourcePluginId: PLUGIN_ID
+          });
+        }
+        return undefined;
+      }).then(function () {
+        statusText = 'Created file: ' + filePath;
+        statusClass = '';
+        return removeCapture(capture.captureId);
+      }).catch(function (err) {
+        statusText = 'Could not create file: ' + (err && err.message ? err.message : String(err));
+        statusClass = 'error';
+        render();
+      });
+    }
+
     function renderList() {
       listEl.innerHTML = '';
       if (captures.length === 0) {
@@ -559,6 +625,9 @@
       if (capture.text) {
         detailEl.appendChild(el('div', { className: 'browser-inbox-text', textContent: capture.text }));
       }
+      if (capture.kind === 'file' && capture.fileText) {
+        detailEl.appendChild(el('div', { className: 'browser-inbox-text', textContent: capture.fileText }));
+      }
       var actionButtons = [];
       if (capture.workspaceRootPath) {
         actionButtons.push(el('button', {
@@ -576,6 +645,16 @@
             textContent: 'Create Link',
             onClick: function () {
               createLinkFromCapture(capture);
+            }
+          }));
+        }
+        if (capture.kind === 'file' && capture.fileName && capture.fileText) {
+          actionButtons.push(el('button', {
+            className: 'browser-inbox-btn',
+            'data-browser-inbox-action': 'create-file',
+            textContent: 'Create File',
+            onClick: function () {
+              createFileFromCapture(capture);
             }
           }));
         }

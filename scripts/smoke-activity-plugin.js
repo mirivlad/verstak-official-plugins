@@ -177,9 +177,10 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   if (!worklogCommand || worklogCommand.handler !== WORKLOG_COMMAND_ID) throw new Error('activity worklog suggestion command contribution is missing');
   if (typeof api.commandHandlers.get(WORKLOG_COMMAND_ID) !== 'function') throw new Error('activity worklog suggestion command was not registered');
   const activityProvider = (manifest.contributes.activityProviders || []).find((item) => item.id === 'verstak.activity.log');
+  if (!activityProvider || !activityProvider.events.includes('browser.capture.file')) throw new Error('activity provider must include browser.capture.file');
   if (!activityProvider || !activityProvider.events.includes('browser.capture.converted')) throw new Error('activity provider must include browser.capture.converted');
 
-  for (const name of ['file.opened', 'file.changed', 'note.saved', 'action.started', 'browser.capture.received', 'case.selected', 'browser.capture.selection', 'browser.capture.converted']) {
+  for (const name of ['file.opened', 'file.changed', 'note.saved', 'action.started', 'browser.capture.received', 'case.selected', 'browser.capture.selection', 'browser.capture.file', 'browser.capture.converted']) {
     if (typeof api.handlers[name] !== 'function') throw new Error(`${name} subscription missing`);
   }
 
@@ -333,7 +334,7 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   if (container.textContent.includes('Project work on 2026-06-27')) throw new Error('clear action did not remove worklog suggestions');
 
   component.unmount && component.unmount(container);
-  if (api.unsubscribed.length !== 30) throw new Error(`expected 30 unsubscribers, got ${api.unsubscribed.length}`);
+  if (api.unsubscribed.length !== 33) throw new Error(`expected 33 unsubscribers, got ${api.unsubscribed.length}`);
 
   const persistedApi = makeApi({
     'events:workspace:Project': [{

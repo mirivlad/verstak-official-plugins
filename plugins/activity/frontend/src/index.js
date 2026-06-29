@@ -23,6 +23,7 @@
     'browser.capture.page',
     'browser.capture.selection',
     'browser.capture.link',
+    'browser.capture.file',
     'browser.capture.converted'
   ];
 

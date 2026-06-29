@@ -197,7 +197,7 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   const api = makeApi();
   const { component, container } = await mountWithApi(api);
 
-  for (const name of ['browser.capture.page', 'browser.capture.selection', 'browser.capture.link']) {
+  for (const name of ['browser.capture.page', 'browser.capture.selection', 'browser.capture.link', 'browser.capture.file']) {
     if (typeof api.handlers[name] !== 'function') throw new Error(`${name} subscription missing`);
   }
 
@@ -287,7 +287,7 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   if (api.getStoredCaptures(projectKey).length !== 0) throw new Error('clear action did not empty stored captures');
 
   component.unmount && component.unmount(container);
-  if (api.unsubscribed.length !== 9) throw new Error('component did not unsubscribe all capture handlers');
+  if (api.unsubscribed.length !== 12) throw new Error('component did not unsubscribe all capture handlers');
 
   const persistedApi = makeApi({ 'captures:workspace:Project': [captures[0]] });
   const persisted = await mountWithApi(persistedApi);
@@ -545,6 +545,78 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
     throw new Error('failed link conversion published converted event');
   }
   component.unmount && component.unmount(failedLinkView.container);
+
+  const fileConversionApi = makeApi({
+    'captures:workspace:Project': [{
+      captureId: 'convert-file',
+      capturedAt: '2026-06-29T02:20:00.000Z',
+      kind: 'file',
+      url: 'https://example.com/files',
+      title: 'Example Files',
+      domain: 'example.com',
+      fileName: 'notes.txt',
+      fileMime: 'text/plain',
+      fileSize: 11,
+      fileText: 'hello file',
+      workspaceRootPath: 'Project',
+      workspaceName: 'Project',
+    }],
+  });
+  const fileConversionView = await mountWithApi(fileConversionApi);
+  const createFileButton = walk(fileConversionView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-action') === 'create-file');
+  if (!createFileButton) throw new Error('create file button was not rendered');
+  createFileButton.click();
+  await flush();
+  if (fileConversionApi.fileWrites.length !== 1) throw new Error(`expected one file write, got ${fileConversionApi.fileWrites.length}`);
+  const fileWrite = fileConversionApi.fileWrites[0];
+  if (fileWrite.relativePath !== 'Project/Files/notes.txt') {
+    throw new Error(`file path mismatch: ${fileWrite.relativePath}`);
+  }
+  if (fileWrite.content !== 'hello file') throw new Error(`file content mismatch: ${fileWrite.content}`);
+  if (fileWrite.options.createIfMissing !== true || fileWrite.options.overwrite !== false) {
+    throw new Error(`file write options mismatch: ${JSON.stringify(fileWrite.options)}`);
+  }
+  if (fileConversionApi.getStoredCaptures(projectKey).some((capture) => capture.captureId === 'convert-file')) {
+    throw new Error('converted file capture was not removed from queue');
+  }
+  const convertedFileEvent = fileConversionApi.publishedEvents.find((event) => event.name === 'browser.capture.converted');
+  if (!convertedFileEvent) throw new Error('browser.capture.converted file event was not published');
+  if (convertedFileEvent.payload.conversionType !== 'file') throw new Error('converted file event conversionType mismatch');
+  if (convertedFileEvent.payload.filePath !== 'Project/Files/notes.txt') throw new Error('converted file event filePath mismatch');
+  component.unmount && component.unmount(fileConversionView.container);
+
+  const failedFileApi = makeApi({
+    'captures:workspace:Project': [{
+      captureId: 'convert-file-conflict',
+      capturedAt: '2026-06-29T02:30:00.000Z',
+      kind: 'file',
+      url: 'https://example.com/files',
+      title: 'Example Files',
+      domain: 'example.com',
+      fileName: 'existing.txt',
+      fileMime: 'text/plain',
+      fileSize: 12,
+      fileText: 'existing file',
+      workspaceRootPath: 'Project',
+      workspaceName: 'Project',
+    }],
+  });
+  const failedFileView = await mountWithApi(failedFileApi);
+  const failedCreateFileButton = walk(failedFileView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-action') === 'create-file');
+  if (!failedCreateFileButton) throw new Error('create file button for failed conversion was not rendered');
+  failedFileApi.failNextWrite('file already exists');
+  failedCreateFileButton.click();
+  await flush();
+  if (!failedFileApi.getStoredCaptures(projectKey).some((capture) => capture.captureId === 'convert-file-conflict')) {
+    throw new Error('failed file conversion removed capture from queue');
+  }
+  if (!failedFileView.container.textContent.includes('Could not create file')) {
+    throw new Error('failed file conversion did not render an error status');
+  }
+  if (failedFileApi.publishedEvents.some((event) => event.name === 'browser.capture.converted')) {
+    throw new Error('failed file conversion published converted event');
+  }
+  component.unmount && component.unmount(failedFileView.container);
 
   console.log('browser inbox plugin smoke passed');
 })().catch((err) => {
