@@ -22,7 +22,8 @@
     'case.selected',
     'browser.capture.page',
     'browser.capture.selection',
-    'browser.capture.link'
+    'browser.capture.link',
+    'browser.capture.converted'
   ];
 
   function injectStyles() {

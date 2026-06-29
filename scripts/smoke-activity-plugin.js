@@ -176,8 +176,10 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   const worklogCommand = (manifest.contributes.commands || []).find((item) => item.id === WORKLOG_COMMAND_ID);
   if (!worklogCommand || worklogCommand.handler !== WORKLOG_COMMAND_ID) throw new Error('activity worklog suggestion command contribution is missing');
   if (typeof api.commandHandlers.get(WORKLOG_COMMAND_ID) !== 'function') throw new Error('activity worklog suggestion command was not registered');
+  const activityProvider = (manifest.contributes.activityProviders || []).find((item) => item.id === 'verstak.activity.log');
+  if (!activityProvider || !activityProvider.events.includes('browser.capture.converted')) throw new Error('activity provider must include browser.capture.converted');
 
-  for (const name of ['file.opened', 'file.changed', 'note.saved', 'action.started', 'browser.capture.received', 'case.selected', 'browser.capture.selection']) {
+  for (const name of ['file.opened', 'file.changed', 'note.saved', 'action.started', 'browser.capture.received', 'case.selected', 'browser.capture.selection', 'browser.capture.converted']) {
     if (typeof api.handlers[name] !== 'function') throw new Error(`${name} subscription missing`);
   }
 
@@ -210,6 +212,23 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
       path: 'Project/Notes/Case.md',
       workspaceRootPath: 'Project',
     },
+  }, {
+    activityId: 'capture-1:browser.capture.converted',
+    type: 'browser.capture.converted',
+    title: 'Example Article converted',
+    summary: 'Project/Notes/Example_Article.md',
+    occurredAt: '2026-06-27T00:30:00Z',
+    sourcePluginId: 'verstak.browser-inbox',
+    workspaceRootPath: 'Project',
+    payload: {
+      captureId: 'capture-1',
+      conversionType: 'note',
+      notePath: 'Project/Notes/Example_Article.md',
+      workspaceRootPath: 'Project',
+      title: 'Example Article converted',
+      url: 'https://example.com/article',
+      sourcePluginId: 'verstak.browser-inbox',
+    },
   }]);
   await api.handlers['browser.capture.selection']({
     name: 'browser.capture.selection',
@@ -223,15 +242,33 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
       text: 'Selected text',
     },
   });
+  await api.handlers['browser.capture.converted']({
+    name: 'browser.capture.converted',
+    pluginId: 'verstak.browser-inbox',
+    timestamp: '2026-06-27T00:30:00Z',
+    payload: {
+      captureId: 'capture-1',
+      conversionType: 'note',
+      notePath: 'Project/Notes/Example_Article.md',
+      workspaceRootPath: 'Project',
+      title: 'Example Article converted',
+      url: 'https://example.com/article',
+      sourcePluginId: 'verstak.browser-inbox',
+    },
+  });
   await flush();
 
   const stored = api.storedEvents(projectKey);
-  if (stored.length !== 2) throw new Error(`expected two stored activity events, got ${stored.length}`);
+  if (stored.length !== 3) throw new Error(`expected three stored activity events, got ${stored.length}`);
   if (stored[0].type !== 'browser.capture.selection') throw new Error('stored event type mismatch');
   if (stored[0].sourcePluginId !== 'verstak.browser-inbox') throw new Error('stored event source plugin mismatch');
+  if (!stored.some((event) => event.type === 'browser.capture.converted' && event.title === 'Example Article converted')) {
+    throw new Error('conversion activity event was not stored');
+  }
   if (api.storedEvents(globalKey).length !== 0) throw new Error('workspace activity leaked into global storage');
   if (!container.textContent.includes('Example Article')) throw new Error('browser capture title was not rendered');
   if (!container.textContent.includes('browser.capture.selection')) throw new Error('event type was not rendered');
+  if (!container.textContent.includes('browser.capture.converted')) throw new Error('conversion event type was not rendered');
   if (!container.textContent.includes('Worklog suggestions')) throw new Error('worklog suggestions section was not rendered');
   if (!container.textContent.includes('Project work on 2026-06-27')) throw new Error('workspace worklog suggestion title was not rendered');
   if (!container.textContent.includes('30 min')) throw new Error('workspace worklog suggestion duration was not rendered');
@@ -244,7 +281,7 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   if (suggestions[0].suggestionId !== 'worklog:Project:2026-06-27') throw new Error('worklog suggestion id mismatch');
   if (suggestions[0].minutes !== 30) throw new Error(`expected 30 suggested minutes, got ${suggestions[0].minutes}`);
   if (!suggestions[0].summary.includes('Example Article') || !suggestions[0].summary.includes('Saved note')) throw new Error('worklog suggestion summary did not include event titles');
-  if (suggestions[0].eventIds.join(',') !== 'capture-1,note-1') throw new Error('worklog suggestion event ids mismatch');
+  if (suggestions[0].eventIds.join(',') !== 'capture-1,note-1,capture-1:browser.capture.converted') throw new Error('worklog suggestion event ids mismatch');
 
   const clientView = await mountWithApi(api, { workspaceNode: { name: 'ClientA' }, workspaceRootPath: 'ClientA' });
   if (clientView.container.textContent.includes('Example Article')) throw new Error('Project activity leaked into ClientA workspace view');
@@ -296,7 +333,7 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   if (container.textContent.includes('Project work on 2026-06-27')) throw new Error('clear action did not remove worklog suggestions');
 
   component.unmount && component.unmount(container);
-  if (api.unsubscribed.length !== 27) throw new Error(`expected 27 unsubscribers, got ${api.unsubscribed.length}`);
+  if (api.unsubscribed.length !== 30) throw new Error(`expected 30 unsubscribers, got ${api.unsubscribed.length}`);
 
   const persistedApi = makeApi({
     'events:workspace:Project': [{
