@@ -8,10 +8,14 @@
   "source": "official",
   "icon": "inbox",
   "provides": [
-    "browser.inbox"
+    "capture.browser",
+    "browser.inbox",
+    "domain.binding"
   ],
   "permissions": [
     "events.subscribe",
+    "events.publish",
+    "files.write",
     "storage.namespace",
     "ui.register"
   ],

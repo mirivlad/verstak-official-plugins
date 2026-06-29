@@ -146,6 +146,33 @@
     return capture.title || capture.url || capture.captureId || 'Untitled capture';
   }
 
+  function noteTitle(capture) {
+    return text((capture && (capture.title || capture.domain || capture.captureId)) || 'Browser Capture').trim() || 'Browser Capture';
+  }
+
+  function safeNoteFilename(title) {
+    var base = text(title).trim()
+      .replace(/[\\/:*?"<>|#\[\]\r\n\t]+/g, '_')
+      .replace(/\s+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    return (base || 'Browser_Capture') + '.md';
+  }
+
+  function captureToMarkdown(capture) {
+    var title = noteTitle(capture);
+    var lines = ['# ' + title, ''];
+    if (capture && capture.url) lines.push('Source: ' + capture.url);
+    if (capture && capture.capturedAt) lines.push('Captured: ' + capture.capturedAt);
+    if (capture && capture.kind) lines.push('Kind: ' + capture.kind);
+    if (lines[lines.length - 1] !== '') lines.push('');
+    if (capture && capture.text) {
+      lines.push(capture.text);
+      lines.push('');
+    }
+    return lines.join('\n');
+  }
+
   function eventPayload(event) {
     if (!event || !event.payload) return {};
     return event.payload;
@@ -392,6 +419,46 @@
       }).then(render);
     }
 
+    function createNoteFromCapture(capture) {
+      if (!capture || !capture.workspaceRootPath) return Promise.resolve();
+      if (!api || !api.files || typeof api.files.writeText !== 'function') {
+        statusText = 'Could not create note: files API unavailable';
+        statusClass = 'error';
+        render();
+        return Promise.resolve();
+      }
+      var title = noteTitle(capture);
+      var notePath = capture.workspaceRootPath + '/Notes/' + safeNoteFilename(title);
+      statusText = 'Creating note...';
+      statusClass = '';
+      render();
+      return api.files.writeText(notePath, captureToMarkdown(capture), {
+        createIfMissing: true,
+        overwrite: false
+      }).then(function () {
+        if (api.events && typeof api.events.publish === 'function') {
+          return api.events.publish('browser.capture.converted', {
+            captureId: capture.captureId,
+            conversionType: 'note',
+            notePath: notePath,
+            workspaceRootPath: capture.workspaceRootPath,
+            title: title,
+            url: capture.url || '',
+            sourcePluginId: PLUGIN_ID
+          });
+        }
+        return undefined;
+      }).then(function () {
+        statusText = 'Created note: ' + notePath;
+        statusClass = '';
+        return removeCapture(capture.captureId);
+      }).catch(function (err) {
+        statusText = 'Could not create note: ' + (err && err.message ? err.message : String(err));
+        statusClass = 'error';
+        render();
+      });
+    }
+
     function renderList() {
       listEl.innerHTML = '';
       if (captures.length === 0) {
@@ -444,16 +511,26 @@
       if (capture.text) {
         detailEl.appendChild(el('div', { className: 'browser-inbox-text', textContent: capture.text }));
       }
-      detailEl.appendChild(el('div', { className: 'browser-inbox-detail-actions' }, [
-        el('button', {
+      var actionButtons = [];
+      if (capture.workspaceRootPath) {
+        actionButtons.push(el('button', {
+          className: 'browser-inbox-btn',
+          'data-browser-inbox-action': 'create-note',
+          textContent: 'Create Note',
+          onClick: function () {
+            createNoteFromCapture(capture);
+          }
+        }));
+      }
+      actionButtons.push(el('button', {
           className: 'browser-inbox-btn danger',
           'data-browser-inbox-action': 'remove',
           textContent: 'Remove',
           onClick: function () {
             removeCapture(capture.captureId);
           }
-        })
-      ]));
+        }));
+      detailEl.appendChild(el('div', { className: 'browser-inbox-detail-actions' }, actionButtons));
     }
 
     function render() {

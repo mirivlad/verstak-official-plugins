@@ -134,11 +134,22 @@ function makeApi(initialSettings = {}) {
   const settings = { ...initialSettings };
   const handlers = {};
   const unsubscribed = [];
+  const fileWrites = [];
+  const publishedEvents = [];
+  let nextWriteError = null;
   return {
     settings,
     handlers,
     unsubscribed,
+    fileWrites,
+    publishedEvents,
+    failNextWrite(message) {
+      nextWriteError = new Error(message || 'write failed');
+    },
     events: {
+      publish: async (name, payload) => {
+        publishedEvents.push({ name, payload });
+      },
       subscribe: async (name, handler) => {
         handlers[name] = handler;
         return () => {
@@ -152,6 +163,16 @@ function makeApi(initialSettings = {}) {
       write: async (key, value) => {
         settings[key] = value;
         return { ...settings };
+      },
+    },
+    files: {
+      writeText: async (relativePath, content, options = {}) => {
+        if (nextWriteError) {
+          const err = nextWriteError;
+          nextWriteError = null;
+          throw err;
+        }
+        fileWrites.push({ relativePath, content, options });
       },
     },
     getStoredCaptures(key = 'captures') {
@@ -392,6 +413,73 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   component.unmount && component.unmount(bindingGlobal.container);
   component.unmount && component.unmount(bindingClient.container);
   component.unmount && component.unmount(bindingAggregate.container);
+
+  const conversionApi = makeApi({
+    'captures:workspace:Project': [{
+      captureId: 'convert-selection',
+      capturedAt: '2026-06-29T01:00:00.000Z',
+      kind: 'selection',
+      url: 'https://example.com/article',
+      title: 'Example Article',
+      domain: 'example.com',
+      text: 'Selected text from the page',
+      workspaceRootPath: 'Project',
+      workspaceName: 'Project',
+    }],
+  });
+  const conversionView = await mountWithApi(conversionApi);
+  const createNoteButton = walk(conversionView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-action') === 'create-note');
+  if (!createNoteButton) throw new Error('create note button was not rendered');
+  createNoteButton.click();
+  await flush();
+  if (conversionApi.fileWrites.length !== 1) throw new Error(`expected one note write, got ${conversionApi.fileWrites.length}`);
+  const noteWrite = conversionApi.fileWrites[0];
+  if (noteWrite.relativePath !== 'Project/Notes/Example_Article.md') {
+    throw new Error(`note path mismatch: ${noteWrite.relativePath}`);
+  }
+  if (noteWrite.options.createIfMissing !== true || noteWrite.options.overwrite !== false) {
+    throw new Error(`note write options mismatch: ${JSON.stringify(noteWrite.options)}`);
+  }
+  if (!noteWrite.content.includes('# Example Article')) throw new Error('note content missing heading');
+  if (!noteWrite.content.includes('Source: https://example.com/article')) throw new Error('note content missing source URL');
+  if (!noteWrite.content.includes('Selected text from the page')) throw new Error('note content missing selected text');
+  if (conversionApi.getStoredCaptures(projectKey).some((capture) => capture.captureId === 'convert-selection')) {
+    throw new Error('converted capture was not removed from queue');
+  }
+  const convertedEvent = conversionApi.publishedEvents.find((event) => event.name === 'browser.capture.converted');
+  if (!convertedEvent) throw new Error('browser.capture.converted event was not published');
+  if (convertedEvent.payload.conversionType !== 'note') throw new Error('converted event conversionType mismatch');
+  if (convertedEvent.payload.notePath !== 'Project/Notes/Example_Article.md') throw new Error('converted event notePath mismatch');
+  component.unmount && component.unmount(conversionView.container);
+
+  const failedConversionApi = makeApi({
+    'captures:workspace:Project': [{
+      captureId: 'convert-conflict',
+      capturedAt: '2026-06-29T01:10:00.000Z',
+      kind: 'page',
+      url: 'https://example.com/existing',
+      title: 'Existing Article',
+      domain: 'example.com',
+      workspaceRootPath: 'Project',
+      workspaceName: 'Project',
+    }],
+  });
+  const failedConversionView = await mountWithApi(failedConversionApi);
+  const failedCreateNoteButton = walk(failedConversionView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-action') === 'create-note');
+  if (!failedCreateNoteButton) throw new Error('create note button for failed conversion was not rendered');
+  failedConversionApi.failNextWrite('file already exists');
+  failedCreateNoteButton.click();
+  await flush();
+  if (!failedConversionApi.getStoredCaptures(projectKey).some((capture) => capture.captureId === 'convert-conflict')) {
+    throw new Error('failed conversion removed capture from queue');
+  }
+  if (!failedConversionView.container.textContent.includes('Could not create note')) {
+    throw new Error('failed conversion did not render an error status');
+  }
+  if (failedConversionApi.publishedEvents.some((event) => event.name === 'browser.capture.converted')) {
+    throw new Error('failed conversion published converted event');
+  }
+  component.unmount && component.unmount(failedConversionView.container);
 
   console.log('browser inbox plugin smoke passed');
 })().catch((err) => {
