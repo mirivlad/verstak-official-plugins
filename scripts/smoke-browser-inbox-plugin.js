@@ -481,6 +481,71 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   }
   component.unmount && component.unmount(failedConversionView.container);
 
+  const linkConversionApi = makeApi({
+    'captures:workspace:Project': [{
+      captureId: 'convert-link',
+      capturedAt: '2026-06-29T01:20:00.000Z',
+      kind: 'link',
+      url: 'https://example.com/article',
+      title: 'Example Article',
+      domain: 'example.com',
+      workspaceRootPath: 'Project',
+      workspaceName: 'Project',
+    }],
+  });
+  const linkConversionView = await mountWithApi(linkConversionApi);
+  const createLinkButton = walk(linkConversionView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-action') === 'create-link');
+  if (!createLinkButton) throw new Error('create link button was not rendered');
+  createLinkButton.click();
+  await flush();
+  if (linkConversionApi.fileWrites.length !== 1) throw new Error(`expected one link write, got ${linkConversionApi.fileWrites.length}`);
+  const linkWrite = linkConversionApi.fileWrites[0];
+  if (linkWrite.relativePath !== 'Project/Links/Example_Article.url') {
+    throw new Error(`link path mismatch: ${linkWrite.relativePath}`);
+  }
+  if (linkWrite.options.createIfMissing !== true || linkWrite.options.overwrite !== false) {
+    throw new Error(`link write options mismatch: ${JSON.stringify(linkWrite.options)}`);
+  }
+  if (!linkWrite.content.includes('[InternetShortcut]')) throw new Error('link content missing InternetShortcut header');
+  if (!linkWrite.content.includes('URL=https://example.com/article')) throw new Error('link content missing URL');
+  if (linkConversionApi.getStoredCaptures(projectKey).some((capture) => capture.captureId === 'convert-link')) {
+    throw new Error('converted link capture was not removed from queue');
+  }
+  const convertedLinkEvent = linkConversionApi.publishedEvents.find((event) => event.name === 'browser.capture.converted');
+  if (!convertedLinkEvent) throw new Error('browser.capture.converted link event was not published');
+  if (convertedLinkEvent.payload.conversionType !== 'link') throw new Error('converted link event conversionType mismatch');
+  if (convertedLinkEvent.payload.linkPath !== 'Project/Links/Example_Article.url') throw new Error('converted link event linkPath mismatch');
+  component.unmount && component.unmount(linkConversionView.container);
+
+  const failedLinkApi = makeApi({
+    'captures:workspace:Project': [{
+      captureId: 'convert-link-conflict',
+      capturedAt: '2026-06-29T01:30:00.000Z',
+      kind: 'link',
+      url: 'https://example.com/existing-link',
+      title: 'Existing Link',
+      domain: 'example.com',
+      workspaceRootPath: 'Project',
+      workspaceName: 'Project',
+    }],
+  });
+  const failedLinkView = await mountWithApi(failedLinkApi);
+  const failedCreateLinkButton = walk(failedLinkView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-action') === 'create-link');
+  if (!failedCreateLinkButton) throw new Error('create link button for failed conversion was not rendered');
+  failedLinkApi.failNextWrite('link already exists');
+  failedCreateLinkButton.click();
+  await flush();
+  if (!failedLinkApi.getStoredCaptures(projectKey).some((capture) => capture.captureId === 'convert-link-conflict')) {
+    throw new Error('failed link conversion removed capture from queue');
+  }
+  if (!failedLinkView.container.textContent.includes('Could not create link')) {
+    throw new Error('failed link conversion did not render an error status');
+  }
+  if (failedLinkApi.publishedEvents.some((event) => event.name === 'browser.capture.converted')) {
+    throw new Error('failed link conversion published converted event');
+  }
+  component.unmount && component.unmount(failedLinkView.container);
+
   console.log('browser inbox plugin smoke passed');
 })().catch((err) => {
   console.error(err);

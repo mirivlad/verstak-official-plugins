@@ -159,6 +159,10 @@
     return (base || 'Browser_Capture') + '.md';
   }
 
+  function safeLinkFilename(title) {
+    return safeNoteFilename(title).replace(/\.md$/, '.url');
+  }
+
   function captureToMarkdown(capture) {
     var title = noteTitle(capture);
     var lines = ['# ' + title, ''];
@@ -171,6 +175,10 @@
       lines.push('');
     }
     return lines.join('\n');
+  }
+
+  function captureToUrlShortcut(capture) {
+    return '[InternetShortcut]\nURL=' + text(capture && capture.url).trim() + '\n';
   }
 
   function eventPayload(event) {
@@ -459,6 +467,46 @@
       });
     }
 
+    function createLinkFromCapture(capture) {
+      if (!capture || !capture.workspaceRootPath || !capture.url) return Promise.resolve();
+      if (!api || !api.files || typeof api.files.writeText !== 'function') {
+        statusText = 'Could not create link: files API unavailable';
+        statusClass = 'error';
+        render();
+        return Promise.resolve();
+      }
+      var title = noteTitle(capture);
+      var linkPath = capture.workspaceRootPath + '/Links/' + safeLinkFilename(title);
+      statusText = 'Creating link...';
+      statusClass = '';
+      render();
+      return api.files.writeText(linkPath, captureToUrlShortcut(capture), {
+        createIfMissing: true,
+        overwrite: false
+      }).then(function () {
+        if (api.events && typeof api.events.publish === 'function') {
+          return api.events.publish('browser.capture.converted', {
+            captureId: capture.captureId,
+            conversionType: 'link',
+            linkPath: linkPath,
+            workspaceRootPath: capture.workspaceRootPath,
+            title: title,
+            url: capture.url || '',
+            sourcePluginId: PLUGIN_ID
+          });
+        }
+        return undefined;
+      }).then(function () {
+        statusText = 'Created link: ' + linkPath;
+        statusClass = '';
+        return removeCapture(capture.captureId);
+      }).catch(function (err) {
+        statusText = 'Could not create link: ' + (err && err.message ? err.message : String(err));
+        statusClass = 'error';
+        render();
+      });
+    }
+
     function renderList() {
       listEl.innerHTML = '';
       if (captures.length === 0) {
@@ -521,6 +569,16 @@
             createNoteFromCapture(capture);
           }
         }));
+        if (capture.url) {
+          actionButtons.push(el('button', {
+            className: 'browser-inbox-btn',
+            'data-browser-inbox-action': 'create-link',
+            textContent: 'Create Link',
+            onClick: function () {
+              createLinkFromCapture(capture);
+            }
+          }));
+        }
       }
       actionButtons.push(el('button', {
           className: 'browser-inbox-btn danger',
