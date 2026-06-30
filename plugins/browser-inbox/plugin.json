@@ -39,14 +39,6 @@
         "view": "verstak.browser-inbox.view",
         "position": 30
       }
-    ],
-    "workspaceItems": [
-      {
-        "id": "verstak.browser-inbox.workspace",
-        "title": "Browser Inbox",
-        "icon": "inbox",
-        "component": "BrowserInboxView"
-      }
     ]
   }
 }

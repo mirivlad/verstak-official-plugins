@@ -27,14 +27,6 @@
     "entry": "frontend/src/index.js"
   },
   "contributes": {
-    "workspaceItems": [
-      {
-        "id": "verstak.search.workspace",
-        "title": "Search",
-        "icon": "search",
-        "component": "SearchView"
-      }
-    ],
     "commands": [
       {
         "id": "verstak.search.searchVaultText",

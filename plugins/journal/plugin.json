@@ -31,15 +31,7 @@
         "component": "JournalView"
       }
     ],
-    "sidebarItems": [
-      {
-        "id": "verstak.journal.sidebar",
-        "title": "Journal",
-        "icon": "book-open",
-        "view": "verstak.journal.view",
-        "position": 30
-      }
-    ],
+
     "workspaceItems": [
       {
         "id": "verstak.journal.workspace",
