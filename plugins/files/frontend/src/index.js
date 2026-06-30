@@ -1383,6 +1383,13 @@
           pasteEntry();
           return;
         }
+        if (key === 'Escape') {
+          event.preventDefault();
+          selectedPaths = {};
+          lastClickedPath = '';
+          renderList();
+          return;
+        }
 
         if (key === 'ArrowDown' || key === 'ArrowUp' || key === 'Home' || key === 'End' || key === 'PageDown' || key === 'PageUp') {
           event.preventDefault();
