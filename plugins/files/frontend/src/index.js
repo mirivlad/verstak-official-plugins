@@ -48,6 +48,8 @@
     '.files-error{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#e74c3c;gap:.5rem;padding:1rem}',
     '.files-error-msg{font-size:.85rem;color:#aaa;max-width:420px;text-align:center}',
     '.files-panel{display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem;border-top:1px solid #16213e;flex-shrink:0;background:#12122a}',
+    '.files-field-stack{display:flex;flex:1;min-width:160px;flex-direction:column;gap:.25rem}',
+    '.files-panel-error{display:none;color:#ff8a8a;font-size:.72rem;line-height:1.2}',
     '.files-create-input,.files-rename-input{flex:1;min-width:160px}',
     '@media(max-width:760px){.files-header,.files-item{grid-template-columns:minmax(130px,1fr) 70px 0 0 150px}.files-header span:nth-child(3),.files-header span:nth-child(4),.files-item-meta.hide-narrow{display:none}.files-toolbar{align-items:stretch}.files-filter,.files-sort{width:100%}}',
     '.files-ctx-menu{position:fixed;z-index:9999;min-width:180px;background:#1a1a2e;border:1px solid #333;border-radius:6px;padding:6px 0;box-shadow:0 8px 24px rgba(0,0,0,.5);font-size:.84rem;color:#e0e0e0;user-select:none}',
@@ -383,10 +385,14 @@
       containerEl.appendChild(createPanel);
 
       var renamePanel = el('div', { className: 'files-panel', style: { display: 'none' } });
+      var renameField = el('div', { className: 'files-field-stack' });
       var renameInput = el('input', { className: 'files-rename-input', 'data-files-rename-input': '' });
+      var renameError = el('div', { className: 'files-panel-error', 'data-files-rename-error': '', role: 'alert' });
       var renameConfirm = el('button', { className: 'files-toolbar-btn', 'data-files-rename-confirm': '' }, ['Rename']);
       var renameCancel = el('button', { className: 'files-toolbar-btn' }, ['Cancel']);
-      renamePanel.appendChild(renameInput);
+      renameField.appendChild(renameInput);
+      renameField.appendChild(renameError);
+      renamePanel.appendChild(renameField);
       renamePanel.appendChild(renameConfirm);
       renamePanel.appendChild(renameCancel);
       containerEl.appendChild(renamePanel);
@@ -816,6 +822,7 @@
         if (!entry) return;
         renameTarget = entry;
         renameInput.value = entry.name;
+        setRenameError('');
         renamePanel.style.display = 'flex';
         renameInput.focus();
         renameInput.select();
@@ -823,7 +830,14 @@
 
       function cancelRename() {
         renameTarget = null;
+        setRenameError('');
         renamePanel.style.display = 'none';
+      }
+
+      function setRenameError(message) {
+        renameError.textContent = message || '';
+        renameError.style.display = message ? 'block' : 'none';
+        renameInput.setAttribute('aria-invalid', message ? 'true' : 'false');
       }
 
       function confirmRename() {
@@ -834,11 +848,11 @@
           return;
         }
         if (/[\\/:*?"<>|\x00-\x1f]/.test(newName)) {
-          renameInput.placeholder = 'Invalid characters in name';
+          setRenameError('Invalid characters in name');
           return;
         }
         if (newName === '.' || newName === '..' || newName[0] === ' ' || newName[newName.length - 1] === ' ' || newName[newName.length - 1] === '.') {
-          renameInput.placeholder = 'Invalid name';
+          setRenameError('Invalid name');
           return;
         }
         var from = renameTarget.relativePath;
@@ -846,17 +860,17 @@
         var to = targetParent ? targetParent + '/' + newName : newName;
         api.files.metadata(to).then(function () {
           if (to.toLowerCase() === from.toLowerCase() && to !== from) {
-            renameInput.placeholder = 'Name differs only by case';
+            setRenameError('Name differs only by case');
             return;
           }
-          renameInput.placeholder = 'A file with that name already exists';
+          setRenameError('A file with that name already exists');
         }, function () {
           api.files.move(from, to, { overwrite: false }).then(function () {
             cancelRename();
             loadEntries();
           }).catch(function (err) {
             renameInput.value = renameTarget.name;
-            renameInput.placeholder = 'Error: ' + ((err && err.message) ? err.message : String(err));
+            setRenameError('Error: ' + ((err && err.message) ? err.message : String(err)));
           });
         });
       }
@@ -905,6 +919,7 @@
       renameConfirm.addEventListener('click', confirmRename);
       renameCancel.addEventListener('click', cancelRename);
       createInput.addEventListener('keydown', function (event) { if (event.key === 'Enter') confirmCreate(); if (event.key === 'Escape') cancelCreate(); });
+      renameInput.addEventListener('input', function () { setRenameError(''); });
       renameInput.addEventListener('keydown', function (event) { if (event.key === 'Enter') confirmRename(); if (event.key === 'Escape') cancelRename(); });
       /* --- Context menu --- */
       var ctxMenu = el('div', { className: 'files-ctx-menu', style: { display: 'none' } });
