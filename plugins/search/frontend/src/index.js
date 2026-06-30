@@ -287,13 +287,18 @@
       var index = null;
       var cleanupFns = [];
       var indexRefresh = Promise.resolve();
+      var input = null;
+      var button = null;
+      var statusEl = null;
+      var resultsEl = null;
 
-      function render() {
+      function ensureLayout() {
+        if (input) return;
         containerEl.innerHTML = '';
         containerEl.className = 'search-root';
         containerEl.setAttribute('data-plugin-id', 'verstak.search');
 
-        var input = el('input', {
+        input = el('input', {
           className: 'search-input',
           type: 'search',
           placeholder: 'Search files, folders, text',
@@ -304,10 +309,8 @@
             scheduleSearch();
           }
         });
-        var button = el('button', {
+        button = el('button', {
           className: 'search-btn',
-          textContent: state.searching ? 'Searching...' : 'Search',
-          disabled: state.searching ? 'disabled' : null,
           'data-search-action': 'run',
           onClick: search
         });
@@ -317,9 +320,22 @@
           el('span', { className: 'search-scope', title: rootPath || 'Vault' }, [rootPath || 'Vault'])
         ]));
 
-        containerEl.appendChild(el('div', { className: 'search-status' + (state.error ? ' error' : '') }, [state.error || state.status]));
-        var resultsEl = el('div', { className: 'search-results' });
+        statusEl = el('div', { className: 'search-status' });
+        containerEl.appendChild(statusEl);
+        resultsEl = el('div', { className: 'search-results' });
         containerEl.appendChild(resultsEl);
+      }
+
+      function render() {
+        ensureLayout();
+        if (document.activeElement !== input && input.value !== state.query) {
+          input.value = state.query;
+        }
+        button.textContent = state.searching ? 'Searching...' : 'Search';
+        button.disabled = !!state.searching;
+        statusEl.className = 'search-status' + (state.error ? ' error' : '');
+        statusEl.textContent = state.error || state.status;
+        resultsEl.innerHTML = '';
         if (!state.results.length) {
           resultsEl.appendChild(el('div', { className: 'search-empty' }, [state.searching ? 'Searching...' : 'No results']));
           return;
