@@ -57,6 +57,15 @@
         "handler": "showVersion"
       }
     ],
+    "sidebarItems": [
+      {
+        "id": "verstak.platform-test.sidebar",
+        "title": "Platform Test",
+        "icon": "flask",
+        "view": "verstak.platform-test.diagnostics",
+        "position": 100
+      }
+    ],
     "statusBarItems": [
       {
         "id": "verstak.platform-test.status",

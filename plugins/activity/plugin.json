@@ -30,7 +30,15 @@
         "component": "ActivityView"
       }
     ],
-
+    "sidebarItems": [
+      {
+        "id": "verstak.activity.sidebar",
+        "title": "Activity",
+        "icon": "activity",
+        "view": "verstak.activity.view",
+        "position": 20
+      }
+    ],
     "workspaceItems": [
       {
         "id": "verstak.activity.workspace",

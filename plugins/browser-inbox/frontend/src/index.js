@@ -52,10 +52,6 @@
     '.browser-inbox-meta-value{color:#ccc;min-width:0;overflow-wrap:anywhere}',
     '.browser-inbox-text{border:1px solid #24304f;background:#101020;border-radius:6px;padding:.75rem;font-size:.85rem;line-height:1.5;color:#ddd;white-space:pre-wrap;overflow-wrap:anywhere}',
     '.browser-inbox-detail-actions{display:flex;gap:.5rem;flex-wrap:wrap}',
-    '.browser-inbox-picker{display:flex;flex-direction:column;gap:2px;width:100%;border:1px solid #2a3a5e;border-radius:6px;background:#12122a;padding:4px;max-height:240px;overflow:auto}',
-    '.browser-inbox-picker-item{font-size:.78rem;padding:.35rem .65rem;border:none;border-radius:4px;background:transparent;color:#d0d0e0;cursor:pointer;text-align:left}',
-    '.browser-inbox-picker-item:hover{background:#1e2a4a;color:#4ecca3}',
-    '.browser-inbox-picker-empty{font-size:.76rem;color:#8b8ba8;padding:.5rem;text-align:center}',
     '@media(max-width:760px){.browser-inbox-body{grid-template-columns:1fr}.browser-inbox-list{border-right:0;border-bottom:1px solid #16213e;max-height:45vh}.browser-inbox-meta{grid-template-columns:1fr}}'
   ].join('\n');
 
@@ -317,9 +313,7 @@
 
     var scope = scopeFromProps(props || {});
     var captures = [];
-    var selectedId = null;
-    var workspacesList = [];
-    var pickerOpen = false;
+    var selectedId = '';
     var statusText = 'Connecting to receiver events...';
     var statusClass = '';
     var disposed = false;
@@ -671,39 +665,6 @@
             }
           }));
         }
-      } else {
-        actionButtons.push(el('button', {
-          className: 'browser-inbox-btn',
-          'data-browser-inbox-action': 'assign',
-          textContent: 'Assign to Workspace',
-          onClick: function () {
-            pickerOpen = !pickerOpen;
-            render();
-          }
-        }));
-        if (pickerOpen) {
-          var pickerContainer = el('div', { className: 'browser-inbox-picker' });
-          if (workspacesList.length > 0) {
-            workspacesList.forEach(function (ws) {
-              var wsPath = ws.rootPath || ws.name || ws.id || '';
-              pickerContainer.appendChild(el('button', {
-                className: 'browser-inbox-picker-item',
-                textContent: ws.name || ws.title || wsPath,
-                title: wsPath,
-                onClick: function () {
-                  pickerOpen = false;
-                  assignToWorkspace(capture, wsPath);
-                }
-              }));
-            });
-          } else {
-            pickerContainer.appendChild(el('div', {
-              className: 'browser-inbox-picker-empty',
-              textContent: 'No workspaces found. Create a workspace first.'
-            }));
-          }
-          actionButtons.push(pickerContainer);
-        }
       }
       actionButtons.push(el('button', {
           className: 'browser-inbox-btn danger',
@@ -777,27 +738,7 @@
       });
     }
 
-    function loadWorkspacesList() {
-      if (!api || !api.workspaces || typeof api.workspaces.list !== 'function') return Promise.resolve();
-      return api.workspaces.list().then(function (list) {
-        workspacesList = Array.isArray(list) ? list : [];
-      }).catch(function () {
-        workspacesList = [];
-      });
-    }
-
-    function assignToWorkspace(capture, workspacePath) {
-      if (!capture || !workspacePath) return Promise.resolve();
-      capture.workspaceRootPath = workspacePath;
-      capture._storageKey = WORKSPACE_PREFIX + encodeKey(workspacePath);
-      selectedId = capture.captureId;
-      return persist().then(function () {
-        render();
-      });
-    }
-
     render();
-    loadWorkspacesList();
     loadStored().then(function () {
       if (disposed) return;
       render();
