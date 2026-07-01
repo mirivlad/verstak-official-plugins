@@ -26,6 +26,27 @@
     'browser.capture.file',
     'browser.capture.converted'
   ];
+  var EVENT_LABELS = {
+    'workspace.selected': 'Workspace selected',
+    'case.selected': 'Workspace selected',
+    'file.opened': 'File opened',
+    'file.changed': 'File changed',
+    'note.saved': 'Note edited',
+    'action.started': 'Work session detected',
+    'browser.capture.received': 'Browser capture received',
+    'browser.capture.page': 'Page captured',
+    'browser.capture.selection': 'Selection captured',
+    'browser.capture.link': 'Link captured',
+    'browser.capture.file': 'File captured',
+    'browser.capture.converted': 'Capture converted'
+  };
+  var LOW_VALUE_EVENT_TYPES = {
+    'workspace.selected': true,
+    'case.selected': true,
+    'file.selected': true,
+    'file.opened': true,
+    'note.opened': true
+  };
 
   function injectStyles() {
     if (document.getElementById('activity-style-injected')) return;
@@ -36,33 +57,36 @@
   }
 
   var STYLES = [
-    '.activity-root{display:flex;flex-direction:column;height:100%;min-height:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:#e0e0e0;background:#0d0d1a}',
-    '.activity-toolbar{display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem;border-bottom:1px solid #16213e;background:#12122a;flex-shrink:0;flex-wrap:wrap}',
-    '.activity-title{font-size:.84rem;font-weight:600;color:#e0e0e0}',
-    '.activity-count{font-size:.72rem;color:#8b8ba8}',
+    '.activity-root{display:flex;flex-direction:column;height:100%;min-height:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:var(--vt-color-text-primary,#f4f7fb);background:var(--vt-color-background,#101020)}',
+    '.activity-toolbar{display:flex;align-items:center;gap:.5rem;min-height:2.75rem;padding:.5rem .75rem;border-bottom:1px solid var(--vt-color-border,#202b46);background:var(--vt-color-surface-muted,#111629);flex-shrink:0;flex-wrap:wrap}',
+    '.activity-title{font-size:.84rem;font-weight:600;color:var(--vt-color-text-primary,#f4f7fb)}',
+    '.activity-count{font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3)}',
     '.activity-spacer{flex:1}',
-    '.activity-btn{font-size:.78rem;padding:.32rem .65rem;border:1px solid #333;border-radius:4px;background:#1a1a2e;color:#ccc;cursor:pointer}',
-    '.activity-btn:hover{background:#2a2a4e;border-color:#4ecca3}',
+    '.activity-btn{font-size:.78rem;padding:.32rem .65rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-md,6px);background:var(--vt-color-surface-hover,#1b2440);color:var(--vt-color-text-secondary,#b7c0d4);cursor:pointer}',
+    '.activity-btn:hover{background:var(--vt-color-surface-hover,#1b2440);border-color:var(--vt-color-accent,#4ecca3);color:var(--vt-color-text-primary,#f4f7fb)}',
     '.activity-btn:disabled{opacity:.45;cursor:default}',
-    '.activity-btn.danger{border-color:#633;color:#ff9a9a}',
-    '.activity-status{font-size:.72rem;color:#8b8ba8;white-space:nowrap}',
-    '.activity-status.error{color:#e74c3c}',
-    '.activity-suggestions{border-bottom:1px solid rgba(22,33,62,.65);background:#111126;padding:.55rem .75rem;display:grid;gap:.5rem}',
-    '.activity-suggestions-title{font-size:.76rem;font-weight:600;color:#8b8ba8;text-transform:uppercase;letter-spacing:.04em}',
-    '.activity-suggestion{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.65rem;align-items:start;padding:.55rem .65rem;border:1px solid rgba(78,204,163,.25);border-radius:4px;background:#14142c}',
-    '.activity-suggestion-title{font-size:.84rem;color:#e0e0e0;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-    '.activity-suggestion-summary{margin-top:.22rem;font-size:.76rem;color:#aaa;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere}',
-    '.activity-suggestion-minutes{font-size:.76rem;color:#4ecca3;white-space:nowrap}',
-    '.activity-list{flex:1;min-height:0;overflow:auto;background:#101020}',
-    '.activity-empty{height:100%;display:flex;align-items:center;justify-content:center;color:#666;font-size:.86rem;padding:2rem;text-align:center}',
-    '.activity-row{display:grid;grid-template-columns:9.5rem minmax(0,1fr);gap:.75rem;padding:.72rem .85rem;border-bottom:1px solid rgba(22,33,62,.6)}',
-    '.activity-time{font-size:.72rem;color:#777;white-space:nowrap}',
+    '.activity-btn.danger{border-color:rgba(233,69,96,.42);color:#ff9a9a}',
+    '.activity-status{font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3);white-space:nowrap}',
+    '.activity-status.error{display:inline-flex;border:1px solid rgba(233,69,96,.45);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-danger-muted,rgba(233,69,96,.14));color:#ffc6ce;padding:.18rem .4rem}',
+    '.activity-suggestions{border-bottom:1px solid rgba(32,43,70,.72);background:var(--vt-color-surface-muted,#111629);padding:.65rem .75rem;display:grid;gap:.5rem}',
+    '.activity-suggestions-title{font-size:.76rem;font-weight:600;color:var(--vt-color-text-muted,#7f8aa3);text-transform:uppercase;letter-spacing:.04em}',
+    '.activity-suggestion{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.65rem;align-items:start;padding:.65rem .75rem;border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface,#15152c)}',
+    '.activity-suggestion-title{font-size:.84rem;color:var(--vt-color-text-primary,#f4f7fb);font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.activity-suggestion-summary{margin-top:.22rem;font-size:.76rem;color:var(--vt-color-text-secondary,#b7c0d4);line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere}',
+    '.activity-suggestion-minutes{font-size:.76rem;color:var(--vt-color-accent,#4ecca3);white-space:nowrap}',
+    '.activity-list{flex:1;min-height:0;overflow:auto;background:var(--vt-color-background,#101020)}',
+    '.activity-empty{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.35rem;color:var(--vt-color-text-muted,#7f8aa3);font-size:.86rem;padding:2rem;text-align:center}',
+    '.activity-empty-title{color:var(--vt-color-text-secondary,#b7c0d4);font-weight:650}',
+    '.activity-row{display:grid;grid-template-columns:9.5rem minmax(0,1fr);gap:.75rem;padding:.72rem .85rem;border-bottom:1px solid rgba(32,43,70,.72)}',
+    '.activity-row:hover{background:var(--vt-color-surface-hover,#1b2440)}',
+    '.activity-time{font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3);white-space:nowrap}',
     '.activity-main{min-width:0}',
     '.activity-row-head{display:flex;align-items:center;gap:.45rem;min-width:0}',
-    '.activity-type{font-size:.68rem;color:#4ecca3;text-transform:uppercase;letter-spacing:.04em;flex-shrink:0}',
-    '.activity-title-text{font-size:.86rem;color:#e0e0e0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-    '.activity-summary{margin-top:.25rem;font-size:.78rem;line-height:1.4;color:#aaa;white-space:pre-wrap;overflow-wrap:anywhere}',
-    '.activity-source{margin-top:.25rem;font-size:.72rem;color:#777}',
+    '.activity-type{font-size:.68rem;color:var(--vt-color-accent,#4ecca3);text-transform:uppercase;letter-spacing:.04em;flex-shrink:0}',
+    '.activity-title-text{font-size:.86rem;color:var(--vt-color-text-primary,#f4f7fb);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.activity-summary{margin-top:.25rem;font-size:.78rem;line-height:1.4;color:var(--vt-color-text-secondary,#b7c0d4);white-space:pre-wrap;overflow-wrap:anywhere}',
+    '.activity-source{margin-top:.25rem;font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3)}',
+    '.activity-details{margin-top:.25rem;font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3)}.activity-details summary{cursor:pointer}',
     '@media(max-width:760px){.activity-row,.activity-suggestion{grid-template-columns:1fr;gap:.25rem}.activity-toolbar{align-items:stretch}.activity-status{width:100%}}'
   ].join('\n');
 
@@ -178,6 +202,11 @@
     }).slice(0, MAX_EVENTS);
   }
 
+  function isMeaningfulActivity(activity) {
+    var type = text(activity && activity.type).toLowerCase();
+    return !LOW_VALUE_EVENT_TYPES[type];
+  }
+
   function eventTimeMs(activity) {
     var value = activity && (activity.occurredAt || activity.receivedAt);
     var date = value ? new Date(value) : null;
@@ -209,7 +238,28 @@
   }
 
   function eventLabel(activity) {
-    return text(activity && (activity.title || activity.summary || activity.type || activity.activityId)).trim();
+    return humanEventTitle(activity);
+  }
+
+  function humanEventType(type) {
+    return EVENT_LABELS[text(type).toLowerCase()] || '';
+  }
+
+  function humanEventTitle(activity) {
+    var explicit = text(activity && activity.title).trim();
+    var type = text(activity && activity.type).trim();
+    if (explicit && explicit.toLowerCase() !== type.toLowerCase()) return explicit;
+    return humanEventType(type) || text(activity && (activity.summary || activity.activityId)).trim() || 'Activity event';
+  }
+
+  function eventKind(activity) {
+    var type = text(activity && activity.type).toLowerCase();
+    if (type.indexOf('browser.capture') === 0) return 'Capture';
+    if (type.indexOf('file.') === 0) return 'File';
+    if (type.indexOf('note.') === 0) return 'Note';
+    if (type.indexOf('workspace') !== -1 || type.indexOf('case.') === 0) return 'Workspace';
+    if (type.indexOf('action.') === 0) return 'Work';
+    return 'Activity';
   }
 
   function summarizeEvents(groupEvents) {
@@ -226,7 +276,7 @@
   function buildWorklogSuggestions(activityList, workspaceFilter) {
     var filter = cleanWorkspace(workspaceFilter);
     var groups = {};
-    sortEvents(activityList || []).forEach(function (activity) {
+    sortEvents(activityList || []).filter(isMeaningfulActivity).forEach(function (activity) {
       var workspace = suggestionWorkspace(activity);
       if (filter && workspace !== filter) return;
       var day = eventDay(activity);
@@ -271,7 +321,7 @@
       globalEventKeys(settings).forEach(function (key) {
         all = all.concat(normalizeStoredEvents(settings[key], key));
       });
-      return sortEvents(all);
+      return sortEvents(all).filter(isMeaningfulActivity);
     }
     var workspaceKey = WORKSPACE_PREFIX + encodeKey(workspace);
     var scopedEvents = normalizeStoredEvents(settings[workspaceKey], workspaceKey);
@@ -281,7 +331,7 @@
     var legacyEvents = normalizeStoredEvents(settings[LEGACY_KEY], LEGACY_KEY).filter(function (item) {
       return item.workspaceRootPath === workspace;
     });
-    return sortEvents(scopedEvents.concat(globalEvents, legacyEvents));
+    return sortEvents(scopedEvents.concat(globalEvents, legacyEvents)).filter(isMeaningfulActivity);
   }
 
   function formatDate(value) {
@@ -378,7 +428,10 @@
     function renderList() {
       listEl.innerHTML = '';
       if (events.length === 0) {
-        listEl.appendChild(el('div', { className: 'activity-empty', textContent: 'No activity events yet.' }));
+        listEl.appendChild(el('div', { className: 'activity-empty' }, [
+          el('div', { className: 'activity-empty-title', textContent: 'No activity events yet' }),
+          el('div', { textContent: 'File changes, browser captures, and conversions will appear here.' })
+        ]));
         return;
       }
       events.forEach(function (activity) {
@@ -389,11 +442,14 @@
           el('div', { className: 'activity-time', textContent: formatDate(activity.occurredAt) || '-' }),
           el('div', { className: 'activity-main' }, [
             el('div', { className: 'activity-row-head' }, [
-              el('span', { className: 'activity-type', textContent: activity.type }),
-              el('span', { className: 'activity-title-text', textContent: activity.title || 'Activity event' })
+              el('span', { className: 'activity-type', textContent: eventKind(activity) }),
+              el('span', { className: 'activity-title-text', textContent: humanEventTitle(activity) })
             ]),
             activity.summary ? el('div', { className: 'activity-summary', textContent: activity.summary }) : null,
-            activity.sourcePluginId ? el('div', { className: 'activity-source', textContent: activity.sourcePluginId }) : null
+            el('details', { className: 'activity-details' }, [
+              el('summary', {}, ['Details']),
+              el('div', { className: 'activity-source', textContent: 'Event: ' + activity.type + (activity.sourcePluginId ? ' · Source: ' + activity.sourcePluginId : '') })
+            ])
           ])
         ]));
       });

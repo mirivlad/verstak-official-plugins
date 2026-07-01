@@ -200,16 +200,30 @@ function byData(container, attr, value) {
   const { component, container } = await mountWithApi(api);
   const projectKey = 'worklog:workspace:Project';
 
+  byData(container, 'data-journal-action', 'add').click();
+  await flush();
   byData(container, 'data-journal-input', 'date').value = '2026-06-27';
   byData(container, 'data-journal-input', 'title').value = 'Draft brief';
   byData(container, 'data-journal-input', 'summary').value = 'Reviewed docs';
   byData(container, 'data-journal-input', 'minutes').value = '45';
-  byData(container, 'data-journal-action', 'add').click();
+  byData(container, 'data-journal-action', 'save-entry').click();
   await flush();
 
   if (api.storedEntries(projectKey).length !== 1) throw new Error('manual journal entry was not stored');
   if (!container.textContent.includes('Draft brief')) throw new Error('manual journal entry was not rendered');
   if (!container.textContent.includes('45 min')) throw new Error('manual journal entry minutes were not rendered');
+
+  byData(container, 'data-journal-action', 'edit').click();
+  await flush();
+  byData(container, 'data-journal-input', 'title').value = 'Draft brief updated';
+  byData(container, 'data-journal-input', 'summary').value = 'Reviewed docs and drafted notes';
+  byData(container, 'data-journal-input', 'minutes').value = '60';
+  byData(container, 'data-journal-action', 'save-entry').click();
+  await flush();
+
+  if (api.storedEntries(projectKey).length !== 1) throw new Error('editing journal entry created a duplicate');
+  if (api.storedEntries(projectKey)[0].title !== 'Draft brief updated') throw new Error('journal entry title was not updated');
+  if (!container.textContent.includes('60 min')) throw new Error('edited journal entry minutes were not rendered');
 
   byData(container, 'data-journal-action', 'import-activity').click();
   await flush();
@@ -223,9 +237,14 @@ function byData(container, attr, value) {
   await flush();
   if (api.storedEntries(projectKey).length !== 2) throw new Error('duplicate activity suggestion was imported');
 
+  byData(container, 'data-journal-action', 'delete').click();
+  await flush();
+  if (api.storedEntries(projectKey).length !== 1) throw new Error('journal entry was not deleted');
+
   const globalView = await mountWithApi(api, {});
-  if (!globalView.container.textContent.includes('Draft brief')) throw new Error('global journal did not aggregate manual entry');
-  if (!globalView.container.textContent.includes('Project work on 2026-06-27')) throw new Error('global journal did not aggregate imported suggestion');
+  if (!globalView.container.textContent.includes('Project work on 2026-06-27') && !globalView.container.textContent.includes('Draft brief updated')) {
+    throw new Error('global journal did not aggregate remaining entries');
+  }
 
   component.unmount && component.unmount(container);
   component.unmount && component.unmount(globalView.container);

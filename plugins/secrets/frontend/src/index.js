@@ -19,42 +19,44 @@
   }
 
   var STYLES = [
-    '.secrets-root{display:grid;grid-template-columns:minmax(17rem,20rem) minmax(0,1fr);height:100%;min-height:0;background:#0d0f14;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}',
-    '.secrets-panel{min-height:0;overflow:auto;border-right:1px solid #252b36;background:#11151d}',
-    '.secrets-main{min-width:0;min-height:0;overflow:auto;padding:1rem;background:#0d0f14}',
-    '.secrets-toolbar{display:flex;align-items:center;gap:.5rem;padding:.65rem .75rem;border-bottom:1px solid #252b36}',
+    '.secrets-root{display:grid;grid-template-columns:minmax(17rem,20rem) minmax(0,1fr);height:100%;min-height:0;background:var(--vt-color-background,#101020);color:var(--vt-color-text-primary,#f4f7fb);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}',
+    '.secrets-panel{min-height:0;overflow:auto;border-right:1px solid var(--vt-color-border,#202b46);background:var(--vt-color-surface-muted,#111629)}',
+    '.secrets-main{min-width:0;min-height:0;overflow:auto;padding:1rem;background:var(--vt-color-background,#101020)}',
+    '.secrets-toolbar{display:flex;align-items:center;gap:.5rem;min-height:2.75rem;padding:.65rem .75rem;border-bottom:1px solid var(--vt-color-border,#202b46)}',
     '.secrets-title{font-weight:600;font-size:.88rem}',
-    '.secrets-count{color:#8b949e;font-size:.76rem}',
+    '.secrets-count{color:var(--vt-color-text-muted,#7f8aa3);font-size:.76rem}',
     '.secrets-spacer{flex:1}',
-    '.secrets-btn{height:2rem;padding:0 .65rem;border:1px solid #303844;border-radius:4px;background:#1b222d;color:#d8dee9;font:inherit;font-size:.78rem;cursor:pointer}',
-    '.secrets-btn:hover{border-color:#56b6c2;background:#222b38}',
-    '.secrets-btn.primary{background:#176b5f;border-color:#248879;color:white}',
+    '.secrets-btn{height:2rem;padding:0 .65rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-md,6px);background:var(--vt-color-surface-hover,#1b2440);color:var(--vt-color-text-secondary,#b7c0d4);font:inherit;font-size:.78rem;cursor:pointer}',
+    '.secrets-btn:hover{border-color:var(--vt-color-accent,#4ecca3);background:var(--vt-color-surface-hover,#1b2440);color:var(--vt-color-text-primary,#f4f7fb)}',
+    '.secrets-btn.primary{background:var(--vt-color-accent,#4ecca3);border-color:var(--vt-color-accent,#4ecca3);color:#101827}',
+    '.secrets-btn.danger{border-color:rgba(233,69,96,.5);color:#ff9aaa;background:var(--vt-color-danger-muted,rgba(233,69,96,.14))}',
     '.secrets-btn:disabled{opacity:.45;cursor:default}',
-    '.secrets-group{padding:.6rem .55rem .25rem;color:#8b949e;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em}',
+    '.secrets-group{padding:.6rem .55rem .25rem;color:var(--vt-color-text-muted,#7f8aa3);font-size:.72rem;text-transform:uppercase;letter-spacing:.04em}',
     '.secrets-list{display:grid;gap:.25rem;padding:.2rem .45rem .75rem}',
-    '.secrets-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.45rem;align-items:center;text-align:left;border:1px solid transparent;border-radius:5px;background:transparent;color:#d8dee9;padding:.5rem .55rem;cursor:pointer}',
-    '.secrets-item:hover{background:#171d27;border-color:#293241}',
-    '.secrets-item.active{background:#18232f;border-color:#56b6c2}',
+    '.secrets-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.45rem;align-items:center;text-align:left;border:1px solid transparent;border-radius:var(--vt-radius-md,6px);background:transparent;color:var(--vt-color-text-secondary,#b7c0d4);padding:.5rem .55rem;cursor:pointer}',
+    '.secrets-item:hover{background:var(--vt-color-surface-hover,#1b2440);border-color:var(--vt-color-border,#202b46)}',
+    '.secrets-item.active{background:var(--vt-color-surface-selected,rgba(78,204,163,.14));border-color:rgba(78,204,163,.45);box-shadow:inset 2px 0 0 var(--vt-color-accent,#4ecca3)}',
     '.secrets-item-title{font-size:.82rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-    '.secrets-item-meta{font-size:.72rem;color:#8b949e;margin-top:.12rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-    '.secrets-empty{padding:1.5rem;color:#8b949e;font-size:.84rem;text-align:center}',
+    '.secrets-item-meta{font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3);margin-top:.12rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.secrets-empty{padding:1.5rem;color:var(--vt-color-text-muted,#7f8aa3);font-size:.84rem;text-align:center}',
     '.secrets-card{max-width:46rem;display:grid;gap:.8rem}',
-    '.secrets-card h2{font-size:1rem;margin:0;color:#f0f6fc}',
-    '.secrets-form{display:grid;gap:.65rem;border:1px solid #252b36;border-radius:6px;padding:.9rem;background:#11151d}',
+    '.secrets-card h2{font-size:1rem;margin:0;color:var(--vt-color-text-primary,#f4f7fb)}',
+    '.secrets-form{display:grid;gap:.65rem;border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-lg,8px);padding:.9rem;background:var(--vt-color-surface,#15152c)}',
     '.secrets-row{display:grid;grid-template-columns:8rem minmax(0,1fr);gap:.65rem;align-items:center}',
-    '.secrets-label{font-size:.78rem;color:#8b949e}',
-    '.secrets-input,.secrets-textarea,.secrets-select{width:100%;box-sizing:border-box;border:1px solid #303844;border-radius:4px;background:#0d1117;color:#e6edf3;font:inherit;font-size:.84rem;padding:.45rem .55rem;outline:none}',
+    '.secrets-label{font-size:.78rem;color:var(--vt-color-text-muted,#7f8aa3)}',
+    '.secrets-input,.secrets-textarea,.secrets-select{width:100%;box-sizing:border-box;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:#0f1424;color:var(--vt-color-text-primary,#f4f7fb);font:inherit;font-size:.84rem;padding:.45rem .55rem;outline:none}',
     '.secrets-select{appearance:none;background-color:#0d1117;background-image:linear-gradient(45deg,transparent 50%,#8b949e 50%),linear-gradient(135deg,#8b949e 50%,transparent 50%);background-position:calc(100% - 16px) 50%,calc(100% - 11px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:2rem}',
     '.secrets-textarea{min-height:6rem;resize:vertical;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}',
-    '.secrets-input:focus,.secrets-textarea:focus,.secrets-select:focus{border-color:#56b6c2}',
+    '.secrets-input:focus,.secrets-textarea:focus,.secrets-select:focus{border-color:var(--vt-color-accent,#4ecca3);box-shadow:var(--vt-focus-ring,0 0 0 2px rgba(78,204,163,.34))}',
     '.secrets-actions{display:flex;gap:.5rem;flex-wrap:wrap}',
-    '.secrets-status{font-size:.78rem;color:#8b949e;min-height:1rem}',
-    '.secrets-status.error{color:#ff8f8f}',
-    '.secrets-secret-value{white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #303844;background:#0d1117;border-radius:4px;padding:.7rem;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.82rem}',
-    '.secrets-table{width:100%;border-collapse:collapse;border:1px solid #252b36;background:#11151d;border-radius:6px;overflow:hidden}',
-    '.secrets-table th,.secrets-table td{border-bottom:1px solid #252b36;padding:.55rem .65rem;text-align:left;vertical-align:top;font-size:.84rem}',
-    '.secrets-table th{width:9rem;color:#8b949e;font-weight:500;background:#151a23}',
-    '.secrets-table td{color:#e6edf3;overflow-wrap:anywhere}',
+    '.secrets-status{font-size:.78rem;color:var(--vt-color-text-muted,#7f8aa3);min-height:1rem}',
+    '.secrets-status.error{color:#ffc6ce}',
+    '.secrets-secret-value{white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid var(--vt-color-border-strong,#2c456a);background:#0f1424;border-radius:var(--vt-radius-sm,4px);padding:.7rem;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.82rem}',
+    '.secrets-hidden-value{display:inline-flex;align-items:center;min-height:2rem;width:100%;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:#0f1424;color:var(--vt-color-text-muted,#7f8aa3);padding:.35rem .55rem;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.08em}',
+    '.secrets-table{width:100%;border-collapse:collapse;border:1px solid var(--vt-color-border,#202b46);background:var(--vt-color-surface,#15152c);border-radius:var(--vt-radius-lg,8px);overflow:hidden}',
+    '.secrets-table th,.secrets-table td{border-bottom:1px solid var(--vt-color-border,#202b46);padding:.55rem .65rem;text-align:left;vertical-align:top;font-size:.84rem}',
+    '.secrets-table th{width:9rem;color:var(--vt-color-text-muted,#7f8aa3);font-weight:500;background:var(--vt-color-surface-muted,#111629)}',
+    '.secrets-table td{color:var(--vt-color-text-primary,#f4f7fb);overflow-wrap:anywhere}',
     '.secrets-table tr:last-child th,.secrets-table tr:last-child td{border-bottom:0}',
     '@media(max-width:780px){.secrets-root{grid-template-columns:1fr}.secrets-panel{border-right:0;border-bottom:1px solid #252b36;max-height:45vh}.secrets-row{grid-template-columns:1fr}}'
   ].join('\n');
@@ -262,7 +264,7 @@
               fieldRow('Group', scopeLabel(selectedRecord)),
               fieldRow('ID', selectedRecord.id),
               fieldRow('Username', selectedRecord.username || ''),
-              fieldRow('Password', selectedValue ? selectedValue : 'Value hidden'),
+              fieldRow('Password', selectedValue ? selectedValue : '••••••••••••', selectedValue ? '' : 'secrets-hidden-value'),
               fieldRow('Updated', selectedRecord.updatedAt || '')
             ])
           ]),
@@ -280,7 +282,7 @@
               onClick: function () { showEditSecret(); }
             }, ['Edit']),
             el('button', {
-              className: 'secrets-btn',
+              className: 'secrets-btn danger',
               type: 'button',
               'data-secret-delete': selectedRecord.id,
               onClick: function () { deleteSecret(selectedRecord.id); }
@@ -290,10 +292,10 @@
         ]);
       }
 
-      function fieldRow(label, value) {
+      function fieldRow(label, value, valueClass) {
         return el('tr', {}, [
           el('th', {}, [label]),
-          el('td', {}, [value || ''])
+          el('td', {}, [valueClass ? el('span', { className: valueClass }, [value || '']) : (value || '')])
         ]);
       }
 

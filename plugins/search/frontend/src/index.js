@@ -28,23 +28,30 @@
   }
 
   var STYLES = [
-    '.search-root{height:100%;min-height:0;display:flex;flex-direction:column;background:#0d0d1a;color:#e0e0e0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}',
-    '.search-toolbar{display:flex;align-items:center;gap:.5rem;padding:.55rem .75rem;border-bottom:1px solid #16213e;background:#12122a;flex-shrink:0;flex-wrap:wrap}',
-    '.search-input{flex:1;min-width:180px;font-size:.86rem;padding:.42rem .55rem;border:1px solid #333;border-radius:4px;background:#0d0d1a;color:#e0e0e0;outline:none}',
-    '.search-input:focus{border-color:#4ecca3}',
-    '.search-btn{font-size:.8rem;padding:.42rem .7rem;border:1px solid #333;border-radius:4px;background:#1a1a2e;color:#ddd;cursor:pointer}',
-    '.search-btn:hover{border-color:#4ecca3;background:#2a2a4e}',
+    '.search-root{height:100%;min-height:0;display:flex;flex-direction:column;background:var(--vt-color-background,#101020);color:var(--vt-color-text-primary,#f4f7fb);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}',
+    '.search-toolbar{display:flex;align-items:center;gap:.5rem;min-height:2.75rem;padding:.55rem .75rem;border-bottom:1px solid var(--vt-color-border,#202b46);background:var(--vt-color-surface-muted,#111629);flex-shrink:0;flex-wrap:wrap}',
+    '.search-input{flex:1;min-width:180px;font-size:.86rem;padding:.42rem .55rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:#0f1424;color:var(--vt-color-text-primary,#f4f7fb);outline:none}',
+    '.search-input:focus{border-color:var(--vt-color-accent,#4ecca3);box-shadow:var(--vt-focus-ring,0 0 0 2px rgba(78,204,163,.34))}',
+    '.search-btn{font-size:.8rem;min-height:2rem;padding:.42rem .7rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-md,6px);background:var(--vt-color-surface-hover,#1b2440);color:var(--vt-color-text-secondary,#b7c0d4);cursor:pointer}',
+    '.search-btn:hover{border-color:var(--vt-color-accent,#4ecca3);background:var(--vt-color-surface-hover,#1b2440);color:var(--vt-color-text-primary,#f4f7fb)}',
     '.search-btn:disabled{opacity:.45;cursor:default}',
-    '.search-scope{font-size:.72rem;color:#8b8ba8;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:18rem}',
-    '.search-status{font-size:.78rem;color:#8b8ba8;padding:.45rem .75rem;border-bottom:1px solid rgba(22,33,62,.55);flex-shrink:0}',
-    '.search-status.error{color:#e74c3c}',
+    '.search-scope{font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:18rem}',
+    '.search-status{font-size:.78rem;color:var(--vt-color-text-muted,#7f8aa3);padding:.45rem .75rem;border-bottom:1px solid rgba(32,43,70,.72);flex-shrink:0}',
+    '.search-status.error{color:var(--vt-color-danger,#e94560)}',
+    '.search-alert{margin:.65rem .75rem 0;border:1px solid rgba(233,69,96,.45);border-radius:var(--vt-radius-md,6px);background:var(--vt-color-danger-muted,rgba(233,69,96,.14));color:#ffc6ce;padding:.55rem .65rem;font-size:.78rem}',
+    '.search-alert[hidden]{display:none}',
+    '.search-alert summary{cursor:pointer;color:#fff}',
     '.search-results{flex:1;min-height:0;overflow:auto}',
-    '.search-empty{height:100%;display:flex;align-items:center;justify-content:center;color:#666;font-size:.9rem;padding:2rem;text-align:center}',
-    '.search-result{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.5rem;padding:.7rem .85rem;border-bottom:1px solid rgba(22,33,62,.55)}',
-    '.search-result:hover{background:#17172d}',
-    '.search-path{font-size:.84rem;color:#4ecca3;word-break:break-word}',
-    '.search-snippet{margin-top:.25rem;font-size:.8rem;line-height:1.45;color:#cfcfe0;white-space:pre-wrap;overflow-wrap:anywhere}',
-    '.search-meta{margin-top:.28rem;font-size:.72rem;color:#777}',
+    '.search-empty{height:100%;display:flex;align-items:center;justify-content:center;color:var(--vt-color-text-muted,#7f8aa3);font-size:.9rem;padding:2rem;text-align:center}',
+    '.search-result{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.75rem;align-items:center;margin:.5rem .75rem 0;padding:.7rem .8rem;border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface,#15152c)}',
+    '.search-result:hover{background:var(--vt-color-surface-hover,#1b2440)}',
+    '.search-result-head{display:flex;align-items:center;gap:.5rem;min-width:0}',
+    '.search-type{display:inline-flex;align-items:center;min-height:1.25rem;padding:.1rem .4rem;border:1px solid rgba(78,204,163,.4);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-accent-muted,rgba(78,204,163,.14));color:var(--vt-color-accent,#4ecca3);font-size:.68rem;font-weight:650;text-transform:uppercase;letter-spacing:.03em}',
+    '.search-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.86rem;color:var(--vt-color-text-primary,#f4f7fb);font-weight:650}',
+    '.search-path{margin-top:.2rem;font-size:.76rem;color:var(--vt-color-text-muted,#7f8aa3);word-break:break-word}',
+    '.search-snippet{margin-top:.25rem;font-size:.8rem;line-height:1.45;color:var(--vt-color-text-secondary,#b7c0d4);white-space:pre-wrap;overflow-wrap:anywhere}',
+    '.search-meta{margin-top:.28rem;font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3)}',
+    '.search-open-btn{align-self:center;white-space:nowrap;min-width:4.5rem;padding:.35rem .65rem}',
     '@media(max-width:700px){.search-result{grid-template-columns:1fr}.search-toolbar{align-items:stretch}.search-btn{width:100%}.search-scope{max-width:none}}'
   ].join('\n');
 
@@ -54,7 +61,9 @@
       Object.keys(attrs).forEach(function (k) {
         if (attrs[k] == null) return;
         if (k === 'className') elem.className = attrs[k];
-        else if (k === 'style' && typeof attrs[k] === 'object') Object.assign(elem.style, attrs[k]);
+        else if (k === 'style' && typeof attrs[k] === 'object') {
+          if (elem.style) Object.assign(elem.style, attrs[k]);
+        }
         else if (k.slice(0, 2) === 'on') elem.addEventListener(k.slice(2).toLowerCase(), attrs[k]);
         else if (k === 'textContent') elem.textContent = attrs[k];
         else if (k === 'innerHTML') elem.innerHTML = attrs[k];
@@ -72,6 +81,20 @@
 
   function cleanPath(path) {
     return String(path || '').split('/').filter(Boolean).join('/');
+  }
+
+  function baseName(path) {
+    path = cleanPath(path);
+    var parts = path.split('/');
+    return parts[parts.length - 1] || path || 'Untitled';
+  }
+
+  function resultTypeLabel(result) {
+    var type = String(result && result.type || 'result').toLowerCase();
+    if (type === 'folder') return 'Folder';
+    if (type === 'file') return 'File';
+    if (type === 'external') return 'Plugin';
+    return type.charAt(0).toUpperCase() + type.slice(1);
   }
 
   function extension(entry) {
@@ -281,7 +304,7 @@
     mount: function (containerEl, props, api) {
       injectStyles();
       var rootPath = cleanPath(props && (props.workspaceRootPath || props.workspaceName));
-      var state = { query: '', searching: false, results: [], status: 'Enter at least 2 characters.', error: '' };
+      var state = { query: '', searching: false, results: [], status: 'Enter at least 2 characters.', error: '', providerErrors: [] };
       var searchTimer = null;
       var searchSeq = 0;
       var index = null;
@@ -290,6 +313,7 @@
       var input = null;
       var button = null;
       var statusEl = null;
+      var alertEl = null;
       var resultsEl = null;
 
       function ensureLayout() {
@@ -322,6 +346,8 @@
 
         statusEl = el('div', { className: 'search-status' });
         containerEl.appendChild(statusEl);
+        alertEl = el('div', { className: 'search-alert', hidden: 'hidden' });
+        containerEl.appendChild(alertEl);
         resultsEl = el('div', { className: 'search-results' });
         containerEl.appendChild(resultsEl);
       }
@@ -335,6 +361,16 @@
         button.disabled = !!state.searching;
         statusEl.className = 'search-status' + (state.error ? ' error' : '');
         statusEl.textContent = state.error || state.status;
+        alertEl.innerHTML = '';
+        if (state.providerErrors && state.providerErrors.length) {
+          if (typeof alertEl.removeAttribute === 'function') alertEl.removeAttribute('hidden');
+          alertEl.appendChild(el('details', {}, [
+            el('summary', {}, ['Some plugin search providers did not respond']),
+            el('div', {}, [state.providerErrors.join('; ')])
+          ]));
+        } else if (typeof alertEl.setAttribute === 'function') {
+          alertEl.setAttribute('hidden', 'hidden');
+        }
         resultsEl.innerHTML = '';
         if (!state.results.length) {
           resultsEl.appendChild(el('div', { className: 'search-empty' }, [state.searching ? 'Searching...' : 'No results']));
@@ -343,6 +379,10 @@
         state.results.forEach(function (result) {
           resultsEl.appendChild(el('div', { className: 'search-result' }, [
             el('div', {}, [
+              el('div', { className: 'search-result-head' }, [
+                el('span', { className: 'search-type' }, [resultTypeLabel(result)]),
+                el('span', { className: 'search-title', title: result.path }, [baseName(result.path)])
+              ]),
               el('div', { className: 'search-path' }, [result.path]),
               el('div', { className: 'search-snippet' }, [result.snippet]),
               el('div', { className: 'search-meta' }, [
@@ -350,7 +390,7 @@
               ])
             ]),
             result.openable ? el('button', {
-              className: 'search-btn',
+              className: 'search-btn search-open-btn',
               textContent: 'Open',
               'data-search-open': result.path,
               onClick: function () {
@@ -377,6 +417,7 @@
           state.results = [];
           state.status = 'Enter at least 2 characters.';
           state.error = '';
+          state.providerErrors = [];
           render();
           return;
         }
@@ -393,11 +434,13 @@
           state.results = [];
           state.status = 'Enter at least 2 characters.';
           state.error = '';
+          state.providerErrors = [];
           render();
           return;
         }
         state.searching = true;
         state.error = '';
+        state.providerErrors = [];
         state.status = 'Searching...';
         var seq = searchSeq + 1;
         searchSeq = seq;
@@ -409,13 +452,12 @@
           if (seq !== searchSeq) return;
           state.results = results.concat(external.results);
           state.status = state.results.length + ' result' + (state.results.length === 1 ? '' : 's');
-          if (external.errors.length) {
-            state.status += ' - ' + external.errors.join('; ');
-          }
+          state.providerErrors = external.errors;
         } catch (err) {
           if (seq !== searchSeq) return;
           state.results = [];
           state.error = err && err.message ? err.message : String(err);
+          state.providerErrors = [];
         } finally {
           if (seq !== searchSeq) return;
           state.searching = false;

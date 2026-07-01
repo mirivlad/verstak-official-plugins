@@ -344,10 +344,18 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
       summary: 'Notes/Case.md',
       occurredAt: '2026-06-27T01:00:00Z',
       sourcePluginId: 'verstak.notes',
+    }, {
+      activityId: 'persisted-open-1',
+      type: 'file.opened',
+      title: 'Selected file',
+      summary: 'Project/Notes/Case.md',
+      occurredAt: '2026-06-27T01:05:00Z',
+      sourcePluginId: 'verstak.files',
     }],
   });
   const persisted = await mountWithApi(persistedApi);
   if (!persisted.container.textContent.includes('Saved note')) throw new Error('persisted activity was not rendered');
+  if (persisted.container.textContent.includes('Selected file')) throw new Error('low-value file activity should not be rendered');
 
   const legacyApi = makeApi({
     events: [
