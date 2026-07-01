@@ -376,10 +376,14 @@
       containerEl.appendChild(listContainer);
 
       var createPanel = el('div', { className: 'files-panel', style: { display: 'none' } });
+      var createField = el('div', { className: 'files-field-stack' });
       var createInput = el('input', { className: 'files-create-input', 'data-files-create-input': '' });
+      var createError = el('div', { className: 'files-panel-error', 'data-files-create-error': '', role: 'alert' });
       var createConfirm = el('button', { className: 'files-toolbar-btn', 'data-files-create-confirm': '' }, ['Create']);
       var createCancel = el('button', { className: 'files-toolbar-btn' }, ['Cancel']);
-      createPanel.appendChild(createInput);
+      createField.appendChild(createInput);
+      createField.appendChild(createError);
+      createPanel.appendChild(createField);
       createPanel.appendChild(createConfirm);
       createPanel.appendChild(createCancel);
       containerEl.appendChild(createPanel);
@@ -785,18 +789,37 @@
         createMode = mode;
         createInput.value = '';
         createInput.placeholder = mode === 'folder' ? 'Folder name' : (mode === 'markdown' ? 'Markdown file name' : 'Text file name');
+        setCreateError('');
         createPanel.style.display = 'flex';
         createInput.focus();
       }
 
+      function setCreateError(message) {
+        createError.textContent = message || '';
+        createError.style.display = message ? 'block' : 'none';
+        createInput.setAttribute('aria-invalid', message ? 'true' : 'false');
+      }
+
+      function validateCreateName(name) {
+        if (!name) return 'Name is required';
+        if (/[\\/:*?"<>|\x00-\x1f]/.test(name)) return 'Invalid characters in name';
+        if (name === '.' || name === '..' || name[0] === ' ' || name[name.length - 1] === ' ' || name[name.length - 1] === '.') return 'Invalid name';
+        return '';
+      }
+
       function cancelCreate() {
         createMode = '';
+        setCreateError('');
         createPanel.style.display = 'none';
       }
 
       function confirmCreate() {
         var name = createInput.value.trim();
-        if (!name) return;
+        var validationError = validateCreateName(name);
+        if (validationError) {
+          setCreateError(validationError);
+          return;
+        }
         var mode = createMode;
         if (createMode === 'markdown' && !/\.(md|markdown)$/i.test(name)) name += '.md';
         if (createMode === 'text' && !/\.[^/.]+$/.test(name)) name += '.txt';
@@ -812,8 +835,7 @@
             api.workbench.openResource({ kind: 'vault-file', path: full, mode: 'edit', extension: ext ? '.' + ext : '', context: { sourcePluginId: 'verstak.files', sourceView: 'files' } }).catch(function () {});
           }
         }).catch(function (err) {
-          createInput.value = '';
-          createInput.placeholder = 'Error: ' + ((err && err.message) ? err.message : String(err));
+          setCreateError('Error: ' + ((err && err.message) ? err.message : String(err)));
         });
       }
 
@@ -918,6 +940,7 @@
       createCancel.addEventListener('click', cancelCreate);
       renameConfirm.addEventListener('click', confirmRename);
       renameCancel.addEventListener('click', cancelRename);
+      createInput.addEventListener('input', function () { setCreateError(''); });
       createInput.addEventListener('keydown', function (event) { if (event.key === 'Enter') confirmCreate(); if (event.key === 'Escape') cancelCreate(); });
       renameInput.addEventListener('input', function () { setRenameError(''); });
       renameInput.addEventListener('keydown', function (event) { if (event.key === 'Enter') confirmRename(); if (event.key === 'Escape') cancelRename(); });
