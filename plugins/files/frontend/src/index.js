@@ -954,7 +954,10 @@
             cancelRename();
             loadEntries();
           }).catch(function (err) {
-            renameInput.value = renameTarget.name;
+            if (isConflictError(err)) {
+              setRenameError('A file with that name already exists');
+              return;
+            }
             setRenameError('Error: ' + ((err && err.message) ? err.message : String(err)));
           });
         });
