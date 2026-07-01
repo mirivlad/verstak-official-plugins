@@ -163,6 +163,7 @@
     audio: 'M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z',
     archive: 'M20.54 5.23l-1.39-1.68C18.88 3.21 18.47 3 18 3H6c-.47 0-.88.21-1.16.55L3.46 5.23C3.17 5.57 3 6.02 3 6.5V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6.5c0-.48-.17-.93-.46-1.27zM6.24 5h11.52l.81.97H5.44l.8-.97zM5 19V8h14v11H5zm8.5-8v-1.5h-3V11H8l4 4 4-4h-2.5z',
     pdf: 'M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8.5 7.5c0 .83-.67 1.5-1.5 1.5H9v2H7.5V7H10c.83 0 1.5.67 1.5 1.5v1zm5 2c0 .83-.67 1.5-1.5 1.5h-2.5V7H15c.83 0 1.5.67 1.5 1.5v3zm4-3H19v1h1.5V11H19v2h-1.5V7h3v1.5zM9 9.5h1v-1H9v1zM5 6H3v14c0 1.1.9 2 2 2h14v-2H5V6zm10 5.5h1v-3h-1v3z',
+    text: 'M6 2h9l5 5v15H6V2Zm8 1.5V8h4.5L14 3.5ZM8 12h8v1.5H8V12Zm0 3h8v1.5H8V15Zm0 3h5v1.5H8V18Z',
     document: 'M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z',
     spreadsheet: 'M8 2h8l6 6v12c0 1.1-.9 2-2 2H8c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2zm7 1.5V8h4.5L15 3.5zM10 14l-2 4h1.5l.5-1h2l.5 1h1.5l-2-4H10zm.8 2L12 14.3 13.2 16h-2.4z',
     presentation: 'M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11zm-6-3.5V13h-1.5v4h-1V13H8v-1.5h4V16.5zm1.5 0V13H15c.5 0 .75-.25.75-.5s-.25-.5-.75-.5h-1.5v-1.5H15c1.1 0 2 .9 2 2s-.9 2-2 2h-.5v1.5h-1z',
@@ -175,6 +176,7 @@
 
   var EXT_MAP = {
     md: 'markdown', markdown: 'markdown',
+    txt: 'text', text: 'text', log: 'text', rtf: 'text',
     jpg: 'image', jpeg: 'image', png: 'image', gif: 'image', webp: 'image', svg: 'image', bmp: 'image', ico: 'image',
     mp4: 'video', webm: 'video', mkv: 'video', avi: 'video', mov: 'video',
     mp3: 'audio', wav: 'audio', flac: 'audio', ogg: 'audio', m4a: 'audio', aac: 'audio',
@@ -197,10 +199,37 @@
     ttf: 'font', otf: 'font', woff: 'font', woff2: 'font'
   };
 
-  function fileIcon(entry) {
-    if (entry.type === 'folder') return svgIcon(FILE_ICONS.folder);
+  function fileIconCategory(entry) {
+    if (entry.type === 'folder') return 'folder';
     var ext = (entry.extension || extension(entry.name)).toLowerCase();
-    var category = EXT_MAP[ext] || 'generic';
+    return EXT_MAP[ext] || 'generic';
+  }
+
+  function fileIconLabel(category) {
+    var labels = {
+      folder: 'Folder',
+      markdown: 'Markdown file',
+      image: 'Image file',
+      video: 'Video file',
+      audio: 'Audio file',
+      archive: 'Archive file',
+      pdf: 'PDF file',
+      text: 'Text file',
+      document: 'Document file',
+      spreadsheet: 'Spreadsheet file',
+      presentation: 'Presentation file',
+      code: 'Code file',
+      database: 'Database file',
+      font: 'Font file',
+      config: 'Config file',
+      json: 'JSON file',
+      generic: 'File'
+    };
+    return labels[category] || labels.generic;
+  }
+
+  function fileIcon(entry) {
+    var category = fileIconCategory(entry);
     if (category === 'json') return '{ }';
     return svgIcon(FILE_ICONS[category] || FILE_ICONS.generic);
   }
@@ -552,6 +581,8 @@
         }
 
         shown.forEach(function (entry) {
+          var iconCategory = fileIconCategory(entry);
+          var iconLabel = fileIconLabel(iconCategory);
           var row = el('div', {
             className: 'files-item' + (selectedPaths[entry.relativePath] ? ' selected' : ''),
             'data-file-name': entry.name,
@@ -579,7 +610,7 @@
             onDragend: function () { row.classList.remove('files-dragging'); }
           }, [
             el('div', { className: 'files-namecell' }, [
-              el('span', { className: 'files-item-icon', innerHTML: fileIcon(entry) }),
+              el('span', { className: 'files-item-icon', 'data-file-icon': iconCategory, title: iconLabel, 'aria-label': iconLabel, innerHTML: fileIcon(entry) }),
               el('span', { className: 'files-item-name', textContent: entry.name, title: entry.name })
             ]),
             el('span', { className: 'files-item-meta' }, [typeLabel(entry)]),
