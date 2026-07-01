@@ -116,8 +116,10 @@
     open: 'M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7zM5 5h6V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6h-2v6H5V5z',
     rename: 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z',
     trash: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM8 9h8v10H8V9zm7.5-5-1-1h-5l-1 1H5v2h14V4z',
-    external: 'M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7zM5 5h6V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6h-2v6H5V5z',
+    trashView: 'M4 4h16v2H4V4zm2 4h12v12H6V8zm2 2v8h8v-8H8zm2 1.5h4V13h-4v-1.5zm0 3h4V16h-4v-1.5zM9 1h6l1 2H8l1-2z',
+    external: 'M14 3h7v7h-2V6.41l-9.83 9.83-1.41-1.41L17.59 5H14V3zM5 5h6v2H7v10h10v-4h2v6H5V5z',
     explorer: 'M3 5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v1H3V5Zm0 6h18v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7Z',
+    duplicate: 'M5 3h10v2H5v10H3V5c0-1.1.9-2 2-2zm4 4h10c1.1 0 2 .9 2 2v10c0 1.1-.9 2-2 2H9c-1.1 0-2-.9-2-2V9c0-1.1.9-2 2-2zm1 2v10h9V9h-9zm3 3h3v2h2v3h-2v2h-3v-2h-2v-3h2v-2z',
     cut: 'M9.64 7.64c.23-.5.36-1.05.36-1.64 0-2.21-1.79-4-4-4S2 3.79 2 6s1.79 4 4 4c.59 0 1.14-.13 1.64-.36L10 12l-2.36 2.36C7.14 14.13 6.59 14 6 14c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4c0-.59-.13-1.14-.36-1.64L12 14l7 7h3L9.64 7.64zM6 8c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm0 12c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm6-8.5c-.28 0-.5.22-.5.5s.22.5.5.5.5-.22.5-.5-.22-.5-.5-.5zM19 3l-6 6 2 2 7-8h-3z',
     copy: 'M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z',
     paste: 'M19 2h-4.18C14.4.84 13.3 0 12 0S9.6.84 9.18 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm7 18H5V4h2v3h10V4h2v16z',
@@ -393,7 +395,7 @@
       var openBtn = iconButton('open', 'Open', 'open', function () { openEntry(selectedEntry()); });
       var renameBtn = iconButton('rename', 'Rename', 'rename', function () { beginRename(); });
       var trashBtn = iconButton('trash', 'Move to trash', 'trash', function () { trashEntry(); });
-      var trashViewBtn = iconButton('trash-view', 'Trash metadata', 'trash', function () { loadTrashEntries(); });
+      var trashViewBtn = iconButton('trash-view', 'Trash metadata', 'trashView', function () { loadTrashEntries(); });
       var cutBtn = iconButton('cut', 'Cut', 'cut', function () { cutSelection(); });
       var copyBtn = iconButton('copy', 'Copy', 'copy', function () { copySelection(); });
       var pasteBtn = iconButton('paste', 'Paste', 'paste', function () { pasteEntry(); });
@@ -1048,6 +1050,7 @@
         return el('div', {
           className: 'files-ctx-menu-item' + (cls ? ' ' + cls : ''),
           'data-files-menu-action': action || '',
+          'data-files-menu-icon': iconKey || '',
           onClick: function (e) { e.stopPropagation(); hideCtxMenu(); onClick(); }
         }, [
           iconKey ? el('span', { innerHTML: svgIcon(ACTION_ICONS[iconKey] || ACTION_ICONS.open) }) : null,
@@ -1121,7 +1124,7 @@
           ctxMenu.appendChild(ctxSep());
           ctxMenu.appendChild(ctxItem('Rename', '', function () { beginRename(entry); }, 'rename', 'rename'));
           if (entry.type !== 'folder') {
-            ctxMenu.appendChild(ctxItem('Duplicate', '', function () { duplicateEntry(entry); }, 'duplicate', 'copy'));
+            ctxMenu.appendChild(ctxItem('Duplicate', '', function () { duplicateEntry(entry); }, 'duplicate', 'duplicate'));
           }
           ctxMenu.appendChild(ctxSep());
           ctxMenu.appendChild(ctxItem('Cut', '', function () { cutSelection(); }, 'cut', 'cut'));
