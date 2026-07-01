@@ -45,6 +45,12 @@
     '.files-item-meta{font-size:.74rem;color:#777;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
     '.files-row-actions{display:flex;align-items:center;justify-content:flex-end;gap:.35rem;white-space:nowrap}',
     '.files-empty,.files-loading{flex:1;display:flex;align-items:center;justify-content:center;color:#666;font-size:.9rem;padding:2rem}',
+    '.files-empty{flex-direction:column;gap:.75rem;text-align:center}',
+    '.files-empty-title{color:#8b8ba8}',
+    '.files-empty-actions{display:flex;align-items:center;justify-content:center;gap:.5rem;flex-wrap:wrap}',
+    '.files-empty-btn{display:inline-flex;align-items:center;justify-content:center;gap:.35rem;min-height:2rem;padding:.35rem .6rem;border:1px solid #333;border-radius:4px;background:#1a1a2e;color:#ccc;cursor:pointer;font-size:.78rem}',
+    '.files-empty-btn:hover{background:#2a2a4e;border-color:#4ecca3}',
+    '.files-empty-btn svg{width:15px;height:15px;display:block;fill:currentColor}',
     '.files-error{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#e74c3c;gap:.5rem;padding:1rem}',
     '.files-error-msg{font-size:.85rem;color:#aaa;max-width:420px;text-align:center}',
     '.files-panel{display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem;border-top:1px solid #16213e;flex-shrink:0;background:#12122a}',
@@ -119,12 +125,14 @@
   };
 
   function iconButton(action, title, iconKey, onClick, extraClass) {
+    iconKey = iconKey || action;
     return el('button', {
       className: (extraClass || 'files-toolbar-btn'),
       'data-files-action': action,
+      'data-files-icon': iconKey,
       title: title,
       'aria-label': title,
-      innerHTML: svgIcon(ACTION_ICONS[iconKey || action] || ACTION_ICONS.open),
+      innerHTML: svgIcon(ACTION_ICONS[iconKey] || ACTION_ICONS.open),
       onClick: onClick
     });
   }
@@ -561,6 +569,30 @@
         renderList();
       }
 
+      function emptyCreateAction(action, label, mode, iconKey) {
+        return el('button', {
+          className: 'files-empty-btn',
+          'data-files-empty-action': action,
+          'data-files-icon': iconKey,
+          type: 'button',
+          title: label,
+          'aria-label': label,
+          innerHTML: svgIcon(ACTION_ICONS[iconKey]) + '<span>' + label + '</span>',
+          onClick: function () { startCreate(mode); }
+        });
+      }
+
+      function renderEmptyFolderState() {
+        return el('div', { className: 'files-empty' }, [
+          el('div', { className: 'files-empty-title' }, ['Empty folder']),
+          el('div', { className: 'files-empty-actions' }, [
+            emptyCreateAction('new-folder', 'New folder', 'folder', 'folderAdd'),
+            emptyCreateAction('new-markdown', 'New markdown file', 'markdown', 'markdownAdd'),
+            emptyCreateAction('new-text', 'New text file', 'text', 'textAdd')
+          ])
+        ]);
+      }
+
       function renderList() {
         showingTrash = false;
         listContainer.innerHTML = '';
@@ -575,7 +607,7 @@
 
         var shown = visibleEntries();
         if (shown.length === 0) {
-          listContainer.appendChild(el('div', { className: 'files-empty' }, [filterText ? 'No matches' : 'Empty folder']));
+          listContainer.appendChild(filterText ? el('div', { className: 'files-empty' }, ['No matches']) : renderEmptyFolderState());
           updateButtons();
           return;
         }
