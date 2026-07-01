@@ -593,6 +593,29 @@
         ]);
       }
 
+      function renderNoMatchesState() {
+        return el('div', { className: 'files-empty' }, [
+          el('div', { className: 'files-empty-title' }, ['No matches']),
+          el('div', { className: 'files-empty-actions' }, [
+            el('button', {
+              className: 'files-empty-btn',
+              'data-files-empty-action': 'clear-filter',
+              'data-files-icon': 'refresh',
+              type: 'button',
+              title: 'Clear filter',
+              'aria-label': 'Clear filter',
+              innerHTML: svgIcon(ACTION_ICONS.refresh) + '<span>Clear filter</span>',
+              onClick: function () {
+                filterText = '';
+                filterInput.value = '';
+                renderList();
+                listContainer.focus();
+              }
+            })
+          ])
+        ]);
+      }
+
       function renderList() {
         showingTrash = false;
         listContainer.innerHTML = '';
@@ -607,7 +630,7 @@
 
         var shown = visibleEntries();
         if (shown.length === 0) {
-          listContainer.appendChild(filterText ? el('div', { className: 'files-empty' }, ['No matches']) : renderEmptyFolderState());
+          listContainer.appendChild(filterText ? renderNoMatchesState() : renderEmptyFolderState());
           updateButtons();
           return;
         }
