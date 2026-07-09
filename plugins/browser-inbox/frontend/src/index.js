@@ -52,6 +52,13 @@
     '.browser-inbox-meta-value{color:var(--vt-color-text-secondary,#b7c0d4);min-width:0;overflow-wrap:anywhere}',
     '.browser-inbox-text{border:1px solid var(--vt-color-border,#202b46);background:var(--vt-color-surface,#15152c);border-radius:var(--vt-radius-lg,8px);padding:.75rem;font-size:.85rem;line-height:1.5;color:var(--vt-color-text-primary,#f4f7fb);white-space:pre-wrap;overflow-wrap:anywhere}',
     '.browser-inbox-detail-actions{display:flex;gap:.5rem;flex-wrap:wrap}',
+    '.browser-inbox-settings{display:grid;gap:.85rem;padding:1rem;max-width:560px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:var(--vt-color-text-primary,#f4f7fb)}',
+    '.browser-inbox-settings-field{display:grid;gap:.3rem}',
+    '.browser-inbox-settings-label{font-size:.78rem;color:var(--vt-color-text-muted,#7f8aa3)}',
+    '.browser-inbox-settings-input{width:100%;box-sizing:border-box;padding:.48rem .58rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-surface,#15152c);color:var(--vt-color-text-primary,#f4f7fb);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.78rem}',
+    '.browser-inbox-settings-actions{display:flex;gap:.5rem;flex-wrap:wrap}',
+    '.browser-inbox-settings-status{min-height:1.15rem;font-size:.76rem;color:var(--vt-color-text-muted,#7f8aa3)}',
+    '.browser-inbox-settings-status.error{color:#ffc6ce}',
     '@media(max-width:760px){.browser-inbox-body{grid-template-columns:1fr}.browser-inbox-list{border-right:0;border-bottom:1px solid #16213e;max-height:45vh}.browser-inbox-meta{grid-template-columns:1fr}}'
   ].join('\n');
 
@@ -766,9 +773,145 @@
     }
   };
 
+  var BrowserInboxSettings = {
+    mount: function (containerEl, props, api) {
+      injectStyles();
+      containerEl.innerHTML = '';
+      containerEl.className = 'browser-inbox-settings';
+
+      var receiverURLInput = el('input', {
+        className: 'browser-inbox-settings-input',
+        type: 'text',
+        readonly: 'readonly',
+        spellcheck: 'false',
+        autocomplete: 'off',
+        'data-browser-inbox-pairing-url': ''
+      });
+      var receiverTokenInput = el('input', {
+        className: 'browser-inbox-settings-input',
+        type: 'text',
+        readonly: 'readonly',
+        spellcheck: 'false',
+        autocomplete: 'off',
+        'data-browser-inbox-pairing-token': ''
+      });
+      var statusEl = el('div', { className: 'browser-inbox-settings-status' });
+      var copyURLButton = el('button', {
+        className: 'browser-inbox-btn',
+        type: 'button',
+        'data-browser-inbox-settings-action': 'copy-url',
+        textContent: 'Copy URL'
+      });
+      var copyTokenButton = el('button', {
+        className: 'browser-inbox-btn',
+        type: 'button',
+        'data-browser-inbox-settings-action': 'copy-token',
+        textContent: 'Copy Token'
+      });
+      var rotateTokenButton = el('button', {
+        className: 'browser-inbox-btn danger',
+        type: 'button',
+        'data-browser-inbox-settings-action': 'rotate-token',
+        textContent: 'Rotate Token'
+      });
+
+      containerEl.appendChild(el('div', { className: 'browser-inbox-settings-field' }, [
+        el('label', { className: 'browser-inbox-settings-label', textContent: 'Receiver URL' }),
+        receiverURLInput
+      ]));
+      containerEl.appendChild(el('div', { className: 'browser-inbox-settings-field' }, [
+        el('label', { className: 'browser-inbox-settings-label', textContent: 'Pairing Token' }),
+        receiverTokenInput
+      ]));
+      containerEl.appendChild(el('div', { className: 'browser-inbox-settings-actions' }, [
+        copyURLButton,
+        copyTokenButton,
+        rotateTokenButton
+      ]));
+      containerEl.appendChild(statusEl);
+
+      function setStatus(message, isError) {
+        statusEl.textContent = message || '';
+        statusEl.className = 'browser-inbox-settings-status' + (isError ? ' error' : '');
+      }
+
+      function setBusy(busy) {
+        copyURLButton.disabled = busy;
+        copyTokenButton.disabled = busy;
+        rotateTokenButton.disabled = busy;
+      }
+
+      function pairingAPI() {
+        if (!api || !api.browserReceiver) throw new Error('Browser receiver API is unavailable');
+        return api.browserReceiver;
+      }
+
+      function applyPairing(pairing) {
+        receiverURLInput.value = text(pairing && pairing.receiverUrl).trim();
+        receiverTokenInput.value = text(pairing && pairing.receiverToken).trim();
+      }
+
+      function loadPairing() {
+        setBusy(true);
+        setStatus('Loading...', false);
+        return Promise.resolve().then(function () {
+          return pairingAPI().pairing();
+        }).then(function (pairing) {
+          applyPairing(pairing);
+          setStatus('', false);
+        }).catch(function (err) {
+          setStatus(text(err && err.message ? err.message : err), true);
+        }).then(function () {
+          setBusy(false);
+        });
+      }
+
+      function copyValue(value, label) {
+        if (!value) return;
+        if (typeof navigator === 'undefined' || !navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
+          setStatus('Clipboard unavailable', true);
+          return;
+        }
+        navigator.clipboard.writeText(value).then(function () {
+          setStatus(label + ' copied', false);
+        }).catch(function (err) {
+          setStatus(text(err && err.message ? err.message : err), true);
+        });
+      }
+
+      copyURLButton.addEventListener('click', function () {
+        copyValue(receiverURLInput.value, 'URL');
+      });
+      copyTokenButton.addEventListener('click', function () {
+        copyValue(receiverTokenInput.value, 'Token');
+      });
+      rotateTokenButton.addEventListener('click', function () {
+        if (typeof window.confirm === 'function' && !window.confirm('Rotate pairing token?')) return;
+        setBusy(true);
+        setStatus('Rotating...', false);
+        Promise.resolve().then(function () {
+          return pairingAPI().rotateToken();
+        }).then(function (pairing) {
+          applyPairing(pairing);
+          setStatus('Token rotated', false);
+        }).catch(function (err) {
+          setStatus(text(err && err.message ? err.message : err), true);
+        }).then(function () {
+          setBusy(false);
+        });
+      });
+
+      loadPairing();
+    },
+    unmount: function (containerEl) {
+      if (containerEl) containerEl.innerHTML = '';
+    }
+  };
+
   window.VerstakPluginRegister(PLUGIN_ID, {
     components: {
-      BrowserInboxView: BrowserInboxView
+      BrowserInboxView: BrowserInboxView,
+      BrowserInboxSettings: BrowserInboxSettings
     }
   });
 })();

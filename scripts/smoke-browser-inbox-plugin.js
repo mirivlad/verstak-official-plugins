@@ -110,7 +110,7 @@ function makeDocument() {
   };
 }
 
-function loadComponent(document) {
+function loadComponents(document) {
   const registry = {};
   const sandbox = {
     console,
@@ -125,7 +125,13 @@ function loadComponent(document) {
   sandbox.window.window = sandbox.window;
   sandbox.window.document = document;
   vm.runInNewContext(source, sandbox, { filename: sourcePath });
-  const component = registry['verstak.browser-inbox'] && registry['verstak.browser-inbox'].BrowserInboxView;
+  const components = registry['verstak.browser-inbox'];
+  if (!components) throw new Error('Browser Inbox components were not registered');
+  return components;
+}
+
+function loadComponent(document) {
+  const component = loadComponents(document).BrowserInboxView;
   if (!component) throw new Error('BrowserInboxView was not registered');
   return component;
 }
@@ -137,6 +143,10 @@ function makeApi(initialSettings = {}) {
   const fileWrites = [];
   const fileByteWrites = [];
   const publishedEvents = [];
+  const receiverPairing = {
+    receiverUrl: 'http://127.0.0.1:47731/api/browser-inbox/v1/captures',
+    receiverToken: 'initial-browser-token',
+  };
   let nextWriteError = null;
   return {
     settings,
@@ -185,6 +195,13 @@ function makeApi(initialSettings = {}) {
         fileByteWrites.push({ relativePath, dataBase64, options });
       },
     },
+    browserReceiver: {
+      pairing: async () => ({ ...receiverPairing }),
+      rotateToken: async () => {
+        receiverPairing.receiverToken = 'rotated-browser-token';
+        return { ...receiverPairing };
+      },
+    },
     getStoredCaptures(key = 'captures') {
       return settings[key] || [];
     },
@@ -203,8 +220,37 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   return { component, container, document };
 }
 
+async function mountSettingsWithApi(api, document = makeDocument()) {
+  const component = loadComponents(document).BrowserInboxSettings;
+  const container = new FakeNode('div');
+  component.mount(container, {}, api);
+  await flush();
+  return { component, container, document };
+}
+
 (async () => {
+  const settingsComponents = loadComponents(makeDocument());
+  if (!settingsComponents.BrowserInboxSettings) throw new Error('BrowserInboxSettings was not registered');
+
   const api = makeApi();
+  const settingsView = await mountSettingsWithApi(makeApi());
+  const receiverURLInput = walk(settingsView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-pairing-url') === '');
+  const receiverTokenInput = walk(settingsView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-pairing-token') === '');
+  if (!receiverURLInput || receiverURLInput.value !== 'http://127.0.0.1:47731/api/browser-inbox/v1/captures') {
+    throw new Error('Browser Inbox settings did not render receiver URL');
+  }
+  if (!receiverTokenInput || receiverTokenInput.value !== 'initial-browser-token') {
+    throw new Error('Browser Inbox settings did not render pairing token');
+  }
+  const rotateTokenButton = walk(settingsView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-settings-action') === 'rotate-token');
+  if (!rotateTokenButton) throw new Error('Browser Inbox settings rotate token action missing');
+  rotateTokenButton.click();
+  await flush();
+  if (receiverTokenInput.value !== 'rotated-browser-token') {
+    throw new Error('Browser Inbox settings did not update token after rotation');
+  }
+  settingsView.component.unmount && settingsView.component.unmount(settingsView.container);
+
   const { component, container } = await mountWithApi(api);
 
   for (const name of ['browser.capture.page', 'browser.capture.selection', 'browser.capture.link', 'browser.capture.file']) {

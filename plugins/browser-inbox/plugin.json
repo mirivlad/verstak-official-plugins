@@ -15,6 +15,7 @@
   "permissions": [
     "events.subscribe",
     "events.publish",
+    "browser.receiver.manage",
     "files.write",
     "storage.namespace",
     "ui.register"
@@ -46,6 +47,13 @@
         "title": "Browser Inbox",
         "icon": "inbox",
         "component": "BrowserInboxView"
+      }
+    ],
+    "settingsPanels": [
+      {
+        "id": "verstak.browser-inbox.settings",
+        "title": "Browser Inbox",
+        "component": "BrowserInboxSettings"
       }
     ]
   }
