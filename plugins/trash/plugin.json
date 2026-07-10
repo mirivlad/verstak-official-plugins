@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "verstak.trash",
+  "name": "Trash",
+  "version": "0.1.0",
+  "apiVersion": "0.1.0",
+  "description": "Global vault trash manager for restoring or permanently deleting deleted files and folders.",
+  "source": "official",
+  "icon": "trash",
+  "provides": [
+    "trash.management"
+  ],
+  "requires": [
+    "verstak/core/files/v1"
+  ],
+  "permissions": [
+    "files.delete",
+    "files.write",
+    "ui.register"
+  ],
+  "frontend": {
+    "entry": "frontend/src/index.js"
+  },
+  "contributes": {
+    "views": [
+      {
+        "id": "verstak.trash.view",
+        "title": "Trash",
+        "icon": "trash",
+        "component": "TrashView"
+      }
+    ],
+    "sidebarItems": [
+      {
+        "id": "verstak.trash.sidebar",
+        "title": "Trash",
+        "icon": "trash",
+        "view": "verstak.trash.view",
+        "position": 40
+      }
+    ]
+  }
+}

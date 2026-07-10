@@ -219,6 +219,8 @@ if command -v node &>/dev/null; then
   report "file-preview frontend behavior" $?
   node "$ROOT/scripts/smoke-files-plugin.js"
   report "files frontend behavior" $?
+  node "$ROOT/scripts/smoke-trash-plugin.js"
+  report "trash frontend behavior" $?
   node "$ROOT/scripts/smoke-activity-plugin.js"
   report "activity frontend behavior" $?
   node "$ROOT/scripts/smoke-journal-plugin.js"

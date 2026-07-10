@@ -367,21 +367,9 @@ async function flush() {
   }
 
   const trashViewButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-files-action') === 'trash-view');
-  if (!trashViewButton) throw new Error('trash metadata toolbar button not found');
-  trashViewButton.click();
-  await flush();
-  const trashRow = walk(container, (node) => node.getAttribute && node.getAttribute('data-files-trash-id') === 'mock-trash');
-  if (!trashRow || !trashRow.textContent.includes('Docs/deleted.md')) {
-    throw new Error(`trash metadata row not rendered: ${container.textContent}`);
-  }
-  const restoreTrash = walk(container, (node) => node.getAttribute && node.getAttribute('data-files-restore-trash') === 'mock-trash');
-  if (!restoreTrash) throw new Error('restore trash button not found');
-  restoreTrash.click();
-  await flush();
-  const restoredRow = walk(container, (node) => node.getAttribute && node.getAttribute('data-file-path') === 'Docs/deleted.md');
-  if (!restoredRow) {
-    throw new Error(`restored file row not rendered after restore: ${container.textContent}`);
-  }
+  if (trashViewButton) throw new Error('Files must not expose a trash metadata toolbar button');
+  const restoreTrash = walk(container, (node) => node.getAttribute && node.getAttribute('data-files-restore-trash'));
+  if (restoreTrash) throw new Error('Files must not render trash restore controls');
   api.showExternalFile();
   api.emitFileChanged({ path: 'Docs/external.md', operation: 'external.create', type: 'file' });
   await flush();
