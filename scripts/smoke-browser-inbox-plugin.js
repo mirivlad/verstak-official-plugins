@@ -143,6 +143,10 @@ function makeApi(initialSettings = {}) {
   const fileWrites = [];
   const fileByteWrites = [];
   const publishedEvents = [];
+  const workspaceEntries = [
+    { name: 'ClientA', relativePath: 'ClientA', type: 'folder' },
+    { name: 'Project', relativePath: 'Project', type: 'folder' },
+  ];
   const receiverPairing = {
     receiverUrl: 'http://127.0.0.1:47731/api/browser-inbox/v1/captures',
     receiverToken: 'initial-browser-token',
@@ -178,6 +182,7 @@ function makeApi(initialSettings = {}) {
       },
     },
     files: {
+      list: async () => workspaceEntries.map((entry) => ({ ...entry })),
       writeText: async (relativePath, content, options = {}) => {
         if (nextWriteError) {
           const err = nextWriteError;
@@ -269,6 +274,7 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
       domain: 'example.com',
       text: 'Selected text from the page',
       browserName: 'Firefox',
+      workspaceRootPath: 'Project',
     },
   });
   await flush();
@@ -276,10 +282,10 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   const projectKey = 'captures:workspace:Project';
   const clientKey = 'captures:workspace:ClientA';
   const globalKey = 'captures:global';
-  const captures = api.getStoredCaptures(projectKey);
+  const captures = api.getStoredCaptures(globalKey);
   if (captures.length !== 1) throw new Error(`expected one stored capture, got ${captures.length}`);
   if (captures[0].captureId !== 'capture-1') throw new Error('stored capture id mismatch');
-  if (api.getStoredCaptures(globalKey).length !== 0) throw new Error('workspace capture leaked into global storage');
+  if (api.getStoredCaptures(projectKey).length !== 0) throw new Error('workspace capture was stored in a legacy workspace key');
 
   const row = walk(container, (node) => node.getAttribute && node.getAttribute('data-browser-capture-id') === 'capture-1');
   if (!row) throw new Error('capture row was not rendered');
@@ -298,10 +304,11 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
       title: 'Example Article',
       domain: 'example.com',
       text: 'Duplicate selected text',
+      workspaceRootPath: 'Project',
     },
   });
   await flush();
-  if (api.getStoredCaptures(projectKey).length !== 1) throw new Error('duplicate capture was stored');
+  if (api.getStoredCaptures(globalKey).length !== 1) throw new Error('duplicate capture was stored');
 
   const clientView = await mountWithApi(api, { workspaceNode: { name: 'ClientA' }, workspaceRootPath: 'ClientA' });
   if (walk(clientView.container, (node) => node.getAttribute && node.getAttribute('data-browser-capture-id') === 'capture-1')) {
@@ -321,7 +328,9 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
     },
   });
   await flush();
-  if (api.getStoredCaptures(clientKey).length !== 1) throw new Error('ClientA capture was not stored under ClientA workspace key');
+  if (!api.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'capture-2')) {
+    throw new Error('ClientA capture was not stored in the global queue');
+  }
   if (!walk(clientView.container, (node) => node.getAttribute && node.getAttribute('data-browser-capture-id') === 'capture-2')) {
     throw new Error('ClientA capture was not rendered');
   }
@@ -334,16 +343,42 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   if (!walk(globalView.container, (node) => node.getAttribute && node.getAttribute('data-browser-capture-id') === 'capture-2')) {
     throw new Error('global browser inbox did not aggregate ClientA capture');
   }
+  await api.handlers['browser.capture.page']({
+    name: 'browser.capture.page',
+    timestamp: '2026-06-27T00:20:00Z',
+    payload: {
+      captureId: 'capture-unassigned',
+      capturedAt: '2026-06-27T00:20:00.000Z',
+      kind: 'page',
+      url: 'https://inbox.example.com/unassigned',
+      title: 'Unassigned Page',
+      domain: 'inbox.example.com',
+    },
+  });
+  await flush();
+  if (!api.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'capture-unassigned' && !capture.workspaceRootPath)) {
+    throw new Error('untagged receiver event was not retained as unassigned');
+  }
+  const unassignedWorkspace = await mountWithApi(api, { workspaceNode: { name: 'Project' }, workspaceRootPath: 'Project' });
+  if (walk(unassignedWorkspace.container, (node) => node.getAttribute && node.getAttribute('data-browser-capture-id') === 'capture-unassigned')) {
+    throw new Error('unassigned capture leaked into a workspace inbox');
+  }
+  component.unmount && component.unmount(unassignedWorkspace.container);
   component.unmount && component.unmount(globalView.container);
 
   const clearButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-action') === 'clear');
   if (!clearButton) throw new Error('clear button not found');
   clearButton.click();
   await flush();
-  if (api.getStoredCaptures(projectKey).length !== 0) throw new Error('clear action did not empty stored captures');
+  if (api.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'capture-1')) {
+    throw new Error('workspace clear action did not remove the Project capture');
+  }
+  if (!api.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'capture-2')) {
+    throw new Error('workspace clear action removed a capture from another workspace');
+  }
 
   component.unmount && component.unmount(container);
-  if (api.unsubscribed.length !== 12) throw new Error('component did not unsubscribe all capture handlers');
+  if (api.unsubscribed.length !== 16) throw new Error('component did not unsubscribe all capture handlers');
 
   const persistedApi = makeApi({ 'captures:workspace:Project': [captures[0]] });
   const persisted = await mountWithApi(persistedApi);
@@ -431,11 +466,8 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
     },
   });
   await flush();
-  if (bindingApi.getStoredCaptures('captures:workspace:ClientA').length !== 1) {
-    throw new Error('domain-bound capture was not stored under ClientA workspace key');
-  }
-  if (bindingApi.getStoredCaptures('captures:global').length !== 0) {
-    throw new Error('domain-bound capture was stored in global queue');
+  if (!bindingApi.getStoredCaptures('captures:global').some((capture) => capture.captureId === 'bound-client-capture' && capture.workspaceRootPath === 'ClientA')) {
+    throw new Error('domain-bound capture was not stored with its ClientA assignment');
   }
   const bindingClient = await mountWithApi(bindingApi, { workspaceNode: { name: 'ClientA' }, workspaceRootPath: 'ClientA' });
   if (!walk(bindingClient.container, (node) => node.getAttribute && node.getAttribute('data-browser-capture-id') === 'bound-client-capture')) {
@@ -460,15 +492,96 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
     },
   });
   await flush();
-  if (!bindingApi.getStoredCaptures('captures:workspace:Project').some((capture) => capture.captureId === 'explicit-project-capture')) {
-    throw new Error('explicit workspace capture was not stored under its payload workspace');
+  if (!bindingApi.getStoredCaptures('captures:global').some((capture) => capture.captureId === 'explicit-project-capture' && capture.workspaceRootPath === 'Project')) {
+    throw new Error('explicit workspace capture was not stored with its payload workspace');
   }
-  if (bindingApi.getStoredCaptures('captures:workspace:ClientA').some((capture) => capture.captureId === 'explicit-project-capture')) {
+  if (bindingApi.getStoredCaptures('captures:global').some((capture) => capture.captureId === 'explicit-project-capture' && capture.workspaceRootPath === 'ClientA')) {
     throw new Error('domain binding overrode explicit workspaceRootPath');
   }
   component.unmount && component.unmount(bindingGlobal.container);
   component.unmount && component.unmount(bindingClient.container);
   component.unmount && component.unmount(bindingAggregate.container);
+
+  const assignmentApi = makeApi({
+    'captures:global': [
+      {
+        captureId: 'assignment-unassigned',
+        capturedAt: '2026-06-29T00:20:00.000Z',
+        kind: 'page',
+        url: 'https://inbox.example.com/unassigned',
+        title: 'Unassigned capture',
+        domain: 'inbox.example.com',
+      },
+      {
+        captureId: 'assignment-client-processed',
+        capturedAt: '2026-06-29T00:10:00.000Z',
+        kind: 'page',
+        url: 'https://inbox.example.com/client',
+        title: 'Processed client capture',
+        domain: 'inbox.example.com',
+        workspaceRootPath: 'ClientA',
+        processed: true,
+      },
+    ],
+  });
+  const assignmentView = await mountWithApi(assignmentApi, {});
+  const statusFilter = walk(assignmentView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-filter') === 'status');
+  if (!statusFilter) throw new Error('global status filter was not rendered');
+  statusFilter.value = 'unassigned';
+  statusFilter.dispatchEvent('change');
+  await flush();
+  if (!walk(assignmentView.container, (node) => node.getAttribute && node.getAttribute('data-browser-capture-id') === 'assignment-unassigned')) {
+    throw new Error('unassigned filter did not render the unassigned capture');
+  }
+  if (walk(assignmentView.container, (node) => node.getAttribute && node.getAttribute('data-browser-capture-id') === 'assignment-client-processed')) {
+    throw new Error('unassigned filter leaked an assigned capture');
+  }
+  statusFilter.value = 'all';
+  statusFilter.dispatchEvent('change');
+  await flush();
+
+  const assignmentSelect = walk(assignmentView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-assignment') === 'assignment-unassigned');
+  if (!assignmentSelect) throw new Error('workspace assignment control was not rendered');
+  assignmentSelect.value = 'ClientA';
+  assignmentSelect.dispatchEvent('change');
+  await flush();
+  if (!assignmentApi.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'assignment-unassigned' && capture.workspaceRootPath === 'ClientA')) {
+    throw new Error('assignment did not persist ClientA workspace root path');
+  }
+  const reassignmentSelect = walk(assignmentView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-assignment') === 'assignment-unassigned');
+  reassignmentSelect.value = 'Project';
+  reassignmentSelect.dispatchEvent('change');
+  await flush();
+  if (!assignmentApi.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'assignment-unassigned' && capture.workspaceRootPath === 'Project')) {
+    throw new Error('reassignment did not persist Project workspace root path');
+  }
+  const clearAssignmentButton = walk(assignmentView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-action') === 'clear-assignment');
+  if (!clearAssignmentButton) throw new Error('clear assignment action was not rendered');
+  clearAssignmentButton.click();
+  await flush();
+  if (!assignmentApi.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'assignment-unassigned' && !capture.workspaceRootPath)) {
+    throw new Error('clear assignment did not make the capture unassigned');
+  }
+  const processedButton = walk(assignmentView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-action') === 'toggle-processed');
+  if (!processedButton) throw new Error('processed state action was not rendered');
+  processedButton.click();
+  await flush();
+  if (!assignmentApi.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'assignment-unassigned' && capture.processed === true)) {
+    throw new Error('mark processed did not persist state');
+  }
+  const unprocessedButton = walk(assignmentView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-action') === 'toggle-processed');
+  unprocessedButton.click();
+  await flush();
+  if (!assignmentApi.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'assignment-unassigned' && capture.processed === false)) {
+    throw new Error('mark unprocessed did not persist state');
+  }
+  const deleteButton = walk(assignmentView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-action') === 'remove');
+  deleteButton.click();
+  await flush();
+  if (assignmentApi.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'assignment-unassigned')) {
+    throw new Error('delete did not remove the capture from global storage');
+  }
+  component.unmount && component.unmount(assignmentView.container);
 
   const conversionApi = makeApi({
     'captures:workspace:Project': [{

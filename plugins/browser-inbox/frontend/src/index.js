@@ -26,6 +26,10 @@
     '.browser-inbox-toolbar{display:flex;align-items:center;gap:.5rem;min-height:2.75rem;padding:.5rem .75rem;border-bottom:1px solid var(--vt-color-border,#202b46);background:var(--vt-color-surface-muted,#111629);flex-shrink:0;flex-wrap:wrap}',
     '.browser-inbox-title{font-size:.82rem;font-weight:600;color:var(--vt-color-text-primary,#f4f7fb)}',
     '.browser-inbox-count{font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3)}',
+    '.browser-inbox-filters{display:flex;align-items:center;gap:.35rem;min-width:0;flex:1;flex-wrap:wrap}',
+    '.browser-inbox-input,.browser-inbox-select{box-sizing:border-box;min-height:1.85rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-surface,#15152c);color:var(--vt-color-text-secondary,#b7c0d4);font:inherit;font-size:.76rem;padding:.25rem .42rem}',
+    '.browser-inbox-input{width:min(15rem,100%)}',
+    '.browser-inbox-select{max-width:12rem}',
     '.browser-inbox-spacer{flex:1}',
     '.browser-inbox-btn{font-size:.78rem;padding:.32rem .65rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-md,6px);background:var(--vt-color-surface-hover,#1b2440);color:var(--vt-color-text-secondary,#b7c0d4);cursor:pointer}',
     '.browser-inbox-btn:hover{background:var(--vt-color-surface-hover,#1b2440);border-color:var(--vt-color-accent,#4ecca3);color:var(--vt-color-text-primary,#f4f7fb)}',
@@ -44,6 +48,9 @@
     '.browser-inbox-row-title{font-size:.86rem;color:var(--vt-color-text-primary,#f4f7fb);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '.browser-inbox-row-url{font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '.browser-inbox-row-text{font-size:.76rem;color:var(--vt-color-text-secondary,#b7c0d4);line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}',
+    '.browser-inbox-row-meta{display:flex;align-items:center;gap:.35rem;min-width:0;font-size:.68rem;color:var(--vt-color-text-muted,#7f8aa3)}',
+    '.browser-inbox-badge{display:inline-flex;align-items:center;min-height:1.1rem;padding:0 .3rem;border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-sm,4px);white-space:nowrap}',
+    '.browser-inbox-badge.unassigned{border-color:rgba(240,180,75,.5);color:#ffd37a}.browser-inbox-badge.processed{border-color:rgba(116,190,148,.45);color:#9fe0bc}',
     '.browser-inbox-detail{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:auto;padding:1rem;gap:.75rem}',
     '.browser-inbox-detail-empty{margin:auto;color:var(--vt-color-text-muted,#7f8aa3);font-size:.86rem}',
     '.browser-inbox-detail-title{font-size:1rem;font-weight:600;color:var(--vt-color-text-primary,#f4f7fb);word-break:break-word}',
@@ -52,6 +59,8 @@
     '.browser-inbox-meta-value{color:var(--vt-color-text-secondary,#b7c0d4);min-width:0;overflow-wrap:anywhere}',
     '.browser-inbox-text{border:1px solid var(--vt-color-border,#202b46);background:var(--vt-color-surface,#15152c);border-radius:var(--vt-radius-lg,8px);padding:.75rem;font-size:.85rem;line-height:1.5;color:var(--vt-color-text-primary,#f4f7fb);white-space:pre-wrap;overflow-wrap:anywhere}',
     '.browser-inbox-detail-actions{display:flex;gap:.5rem;flex-wrap:wrap}',
+    '.browser-inbox-assignment{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}',
+    '.browser-inbox-detail-note{font-size:.76rem;color:var(--vt-color-text-muted,#7f8aa3);line-height:1.4}',
     '.browser-inbox-settings{display:grid;gap:.85rem;padding:1rem;max-width:560px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:var(--vt-color-text-primary,#f4f7fb)}',
     '.browser-inbox-settings-field{display:grid;gap:.3rem}',
     '.browser-inbox-settings-label{font-size:.78rem;color:var(--vt-color-text-muted,#7f8aa3)}',
@@ -204,7 +213,7 @@
     return event.payload;
   }
 
-  function captureFromEvent(event, scope) {
+  function captureFromEvent(event) {
     var payload = eventPayload(event);
     var captureId = text(payload.captureId).trim();
     if (!captureId) {
@@ -226,8 +235,19 @@
       fileDataBase64: text(payload.fileDataBase64).trim(),
       source: text(payload.source).trim(),
       browserName: text(payload.browserName).trim(),
-      workspaceRootPath: workspaceFromPayload(payload) || (scope && scope.workspaceRoot) || ''
+      // The receiver provides the active workspace. Untagged captures remain unassigned.
+      workspaceRootPath: workspaceFromPayload(payload)
     };
+  }
+
+  function workspaceFromStorageKey(storageKey) {
+    var key = text(storageKey);
+    if (key.indexOf(WORKSPACE_PREFIX) !== 0) return '';
+    try {
+      return cleanWorkspace(decodeURIComponent(key.slice(WORKSPACE_PREFIX.length)));
+    } catch (_) {
+      return '';
+    }
   }
 
   function normalizeStoredCaptures(value, storageKey) {
@@ -235,6 +255,8 @@
     return value.filter(function (item) {
       return item && typeof item === 'object' && item.captureId;
     }).map(function (item) {
+      // Workspace root paths are the current stable identifiers; core has no immutable workspace ID yet.
+      var workspaceRootPath = cleanWorkspace(item.workspaceRootPath) || workspaceFromStorageKey(storageKey);
       return {
         captureId: text(item.captureId),
         capturedAt: text(item.capturedAt),
@@ -251,8 +273,9 @@
         fileDataBase64: text(item.fileDataBase64).trim(),
         source: text(item.source),
         browserName: text(item.browserName),
-        workspaceRootPath: cleanWorkspace(item.workspaceRootPath),
-        workspaceName: cleanWorkspace(item.workspaceName || item.workspaceRootPath),
+        workspaceRootPath: workspaceRootPath,
+        workspaceName: cleanWorkspace(item.workspaceName || workspaceRootPath),
+        processed: item.processed === true,
         _storageKey: storageKey || ''
       };
     }).slice(0, MAX_CAPTURES);
@@ -277,7 +300,8 @@
         source: item.source,
         browserName: item.browserName,
         workspaceRootPath: item.workspaceRootPath,
-        workspaceName: item.workspaceName || item.workspaceRootPath || ''
+        workspaceName: item.workspaceName || item.workspaceRootPath || '',
+        processed: item.processed === true
       };
     });
   }
@@ -296,7 +320,7 @@
   }
 
   function globalCaptureKeys(settings) {
-    var keys = [LEGACY_KEY, GLOBAL_KEY];
+    var keys = [GLOBAL_KEY, LEGACY_KEY];
     Object.keys(settings || {}).forEach(function (key) {
       if (key.indexOf(WORKSPACE_PREFIX) === 0 && keys.indexOf(key) === -1) keys.push(key);
     });
@@ -326,27 +350,73 @@
     var disposed = false;
     var unsubscribers = [];
     var domainBindings = {};
+    var workspaceOptions = [];
+    var statusFilter = 'all';
+    var workspaceFilter = '';
+    var searchQuery = '';
 
     var toolbar = el('div', { className: 'browser-inbox-toolbar' });
     var titleEl = el('span', { className: 'browser-inbox-title', textContent: scope.mode === 'global' ? 'Browser Inbox' : 'Browser Inbox · ' + scope.label });
     var countEl = el('span', { className: 'browser-inbox-count' });
     var statusEl = el('span', { className: 'browser-inbox-status' });
+    var filtersEl = el('div', { className: 'browser-inbox-filters' });
+    var statusFilterEl = el('select', {
+      className: 'browser-inbox-select',
+      'data-browser-inbox-filter': 'status',
+      'aria-label': 'Capture status filter',
+      onChange: function (event) {
+        statusFilter = text(event && event.target && event.target.value) || 'all';
+        selectedId = '';
+        render();
+      }
+    }, [
+      el('option', { value: 'all', textContent: 'All captures' }),
+      el('option', { value: 'unassigned', textContent: 'Unassigned' }),
+      el('option', { value: 'unprocessed', textContent: 'Unprocessed' }),
+      el('option', { value: 'processed', textContent: 'Processed' })
+    ]);
+    var workspaceFilterEl = el('select', {
+      className: 'browser-inbox-select',
+      'data-browser-inbox-filter': 'workspace',
+      'aria-label': 'Workspace filter',
+      onChange: function (event) {
+        workspaceFilter = cleanWorkspace(event && event.target && event.target.value);
+        selectedId = '';
+        render();
+      }
+    });
+    var searchInput = el('input', {
+      className: 'browser-inbox-input',
+      type: 'search',
+      placeholder: 'Search captures',
+      'data-browser-inbox-filter': 'search',
+      'aria-label': 'Search captures',
+      onInput: function (event) {
+        searchQuery = text(event && event.target && event.target.value).trim().toLowerCase();
+        selectedId = '';
+        renderList();
+        renderDetail();
+        renderCount();
+      }
+    });
     var clearBtn = el('button', {
       className: 'browser-inbox-btn danger',
       'data-browser-inbox-action': 'clear',
       textContent: 'Clear',
       onClick: function () {
-        if (scope.mode === 'global') {
-          clearGlobal().then(render);
-          return;
-        }
-        captures = [];
-        selectedId = '';
-        persist().then(render);
+        clearScope().then(render);
       }
     });
     toolbar.appendChild(titleEl);
     toolbar.appendChild(countEl);
+    filtersEl.appendChild(statusFilterEl);
+    if (scope.mode === 'global') {
+      filtersEl.appendChild(workspaceFilterEl);
+    } else {
+      filtersEl.appendChild(el('span', { className: 'browser-inbox-count', textContent: 'Assigned to this workspace' }));
+    }
+    filtersEl.appendChild(searchInput);
+    toolbar.appendChild(filtersEl);
     toolbar.appendChild(el('span', { className: 'browser-inbox-spacer' }));
     toolbar.appendChild(statusEl);
     toolbar.appendChild(clearBtn);
@@ -359,68 +429,106 @@
     containerEl.appendChild(toolbar);
     containerEl.appendChild(body);
 
+    function option(value, label) {
+      return el('option', { value: value, textContent: label });
+    }
+
+    function workspaceRoots() {
+      var roots = workspaceOptions.slice();
+      captures.forEach(function (capture) {
+        var root = cleanWorkspace(capture && capture.workspaceRootPath);
+        if (root && roots.indexOf(root) === -1) roots.push(root);
+      });
+      if (scope.workspaceRoot && roots.indexOf(scope.workspaceRoot) === -1) roots.push(scope.workspaceRoot);
+      return roots.sort(function (a, b) {
+        return a.localeCompare(b, undefined, { sensitivity: 'base' });
+      });
+    }
+
+    function renderWorkspaceFilterOptions() {
+      if (scope.mode !== 'global') return;
+      workspaceFilterEl.innerHTML = '';
+      workspaceFilterEl.appendChild(option('', 'All workspaces'));
+      workspaceRoots().forEach(function (root) {
+        workspaceFilterEl.appendChild(option(root, root));
+      });
+      workspaceFilterEl.value = workspaceFilter;
+    }
+
+    function visibleCaptures() {
+      return captures.filter(function (capture) {
+        var workspaceRoot = cleanWorkspace(capture && capture.workspaceRootPath);
+        if (scope.mode === 'workspace' && workspaceRoot !== scope.workspaceRoot) return false;
+        if (scope.mode === 'global' && workspaceFilter && workspaceRoot !== workspaceFilter) return false;
+        if (statusFilter === 'unassigned' && workspaceRoot) return false;
+        if (statusFilter === 'unprocessed' && capture.processed === true) return false;
+        if (statusFilter === 'processed' && capture.processed !== true) return false;
+        if (!searchQuery) return true;
+        return [displayTitle(capture), capture.url, capture.domain, capture.text, workspaceRoot].join('\n').toLowerCase().indexOf(searchQuery) !== -1;
+      });
+    }
+
     function persist() {
       if (!api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve();
-      if (scope.mode === 'global') {
-        var grouped = {};
-        captures.forEach(function (item) {
-          var key = item._storageKey || GLOBAL_KEY;
-          grouped[key] = grouped[key] || [];
-          grouped[key].push(item);
-        });
-        return Promise.all(Object.keys(grouped).map(function (key) {
-          return api.settings.write(key, storageCaptures(sortCaptures(grouped[key])));
-        })).catch(function (err) {
-          statusText = 'Could not save inbox: ' + (err && err.message ? err.message : String(err));
-          statusClass = 'error';
-        });
-      }
-      var toStore = captures;
-      return api.settings.write(scope.key, storageCaptures(toStore)).catch(function (err) {
+      return api.settings.write(GLOBAL_KEY, storageCaptures(sortCaptures(captures))).catch(function (err) {
         statusText = 'Could not save inbox: ' + (err && err.message ? err.message : String(err));
         statusClass = 'error';
       });
     }
 
-    function clearGlobal() {
+    function removeCaptures(captureIds, successText) {
+      var ids = {};
+      captureIds.forEach(function (captureId) {
+        ids[captureId] = true;
+      });
+      captures = captures.filter(function (item) {
+        return !ids[item.captureId];
+      });
+      if (ids[selectedId]) selectedId = '';
       if (!api || !api.settings || typeof api.settings.read !== 'function' || typeof api.settings.write !== 'function') {
-        captures = [];
-        selectedId = '';
-        return Promise.resolve();
+        return persist().then(function () {
+          statusText = successText;
+          statusClass = '';
+        });
       }
       return api.settings.read().then(function (settings) {
         var keys = globalCaptureKeys(settings || {});
-        captures = [];
-        selectedId = '';
         return Promise.all(keys.map(function (key) {
-          return api.settings.write(key, []);
+          var next = normalizeStoredCaptures((settings || {})[key], key).filter(function (item) {
+            return !ids[item.captureId];
+          });
+          return api.settings.write(key, storageCaptures(next));
         }));
       }).then(function () {
-        statusText = 'Inbox cleared';
+        statusText = successText;
         statusClass = '';
       }).catch(function (err) {
-        statusText = 'Could not clear inbox: ' + (err && err.message ? err.message : String(err));
+        statusText = 'Could not update inbox: ' + (err && err.message ? err.message : String(err));
         statusClass = 'error';
       });
     }
 
+    function clearScope() {
+      var ids = scope.mode === 'global'
+        ? captures.map(function (capture) { return capture.captureId; })
+        : captures.filter(function (capture) { return capture.workspaceRootPath === scope.workspaceRoot; }).map(function (capture) { return capture.captureId; });
+      return removeCaptures(ids, scope.mode === 'global' ? 'Inbox cleared' : 'Workspace captures cleared');
+    }
+
     function selectedCapture() {
-      for (var i = 0; i < captures.length; i += 1) {
-        if (captures[i].captureId === selectedId) return captures[i];
+      var visible = visibleCaptures();
+      for (var i = 0; i < visible.length; i += 1) {
+        if (visible[i].captureId === selectedId) return visible[i];
       }
-      return captures[0] || null;
+      return visible[0] || null;
     }
 
     function addCapture(capture) {
       capture = applyDomainBinding(capture);
-      if (scope.mode === 'workspace' && capture.workspaceRootPath && capture.workspaceRootPath !== scope.workspaceRoot) {
-        return Promise.resolve();
-      }
       var existing = captures.some(function (item) {
         return item.captureId === capture.captureId;
       });
       if (existing) return Promise.resolve();
-      capture._storageKey = storageKeyForCapture(capture);
       captures = sortCaptures([capture].concat(captures));
       selectedId = capture.captureId;
       statusText = 'Capture received';
@@ -437,27 +545,33 @@
       return capture;
     }
 
-    function storageKeyForCapture(capture) {
-      var workspaceRoot = cleanWorkspace(capture && capture.workspaceRootPath);
-      if (workspaceRoot) return WORKSPACE_PREFIX + encodeKey(workspaceRoot);
-      return scope.key;
+    function assignWorkspace(captureId, workspaceRoot) {
+      workspaceRoot = cleanWorkspace(workspaceRoot);
+      captures = captures.map(function (capture) {
+        if (capture.captureId !== captureId) return capture;
+        return Object.assign({}, capture, {
+          workspaceRootPath: workspaceRoot,
+          workspaceName: workspaceRoot
+        });
+      });
+      if (workspaceRoot && workspaceOptions.indexOf(workspaceRoot) === -1) workspaceOptions.push(workspaceRoot);
+      statusText = workspaceRoot ? 'Capture assigned to ' + workspaceRoot : 'Capture is unassigned';
+      statusClass = '';
+      return persist().then(render);
     }
 
     function removeCapture(captureId) {
-      captures = captures.filter(function (item) {
-        return item.captureId !== captureId;
+      return removeCaptures([captureId], 'Capture deleted');
+    }
+
+    function setProcessed(captureId, processed) {
+      captures = captures.map(function (capture) {
+        if (capture.captureId !== captureId) return capture;
+        return Object.assign({}, capture, { processed: processed === true });
       });
-      if (selectedId === captureId) selectedId = captures[0] ? captures[0].captureId : '';
-      if (scope.mode !== 'global') return persist().then(render);
-      if (!api || !api.settings || typeof api.settings.read !== 'function' || typeof api.settings.write !== 'function') return persist().then(render);
-      return api.settings.read().then(function (settings) {
-        return Promise.all(globalCaptureKeys(settings || {}).map(function (key) {
-          var next = normalizeStoredCaptures((settings || {})[key], key).filter(function (item) {
-            return item.captureId !== captureId;
-          });
-          return api.settings.write(key, storageCaptures(next));
-        }));
-      }).then(render);
+      statusText = processed ? 'Capture marked processed' : 'Capture marked unprocessed';
+      statusClass = '';
+      return persist().then(render);
     }
 
     function createNoteFromCapture(capture) {
@@ -589,13 +703,18 @@
 
     function renderList() {
       listEl.innerHTML = '';
-      if (captures.length === 0) {
-        listEl.appendChild(el('div', { className: 'browser-inbox-empty', textContent: 'No browser captures yet. Keep this view open, then send a page, selection, or link from the extension.' }));
+      var visible = visibleCaptures();
+      if (visible.length === 0) {
+        var emptyText = captures.length === 0
+          ? 'No browser captures yet. Keep this view open, then send a page, selection, or link from the extension.'
+          : 'No captures match the current filters.';
+        listEl.appendChild(el('div', { className: 'browser-inbox-empty', textContent: emptyText }));
         return;
       }
-      captures.forEach(function (capture) {
+      visible.forEach(function (capture) {
+        var workspaceRoot = cleanWorkspace(capture.workspaceRootPath);
         var row = el('div', {
-          className: 'browser-inbox-row' + (capture.captureId === selectedId ? ' selected' : ''),
+          className: 'browser-inbox-row' + (capture.captureId === selectedId ? ' selected' : '') + (capture.processed ? ' processed' : ''),
           'data-browser-capture-id': capture.captureId,
           onClick: function () {
             selectedId = capture.captureId;
@@ -608,6 +727,16 @@
           ]),
           el('div', { className: 'browser-inbox-row-url', textContent: capture.url || capture.domain || capture.captureId })
         ]);
+        row.appendChild(el('div', { className: 'browser-inbox-row-meta' }, [
+          el('span', {
+            className: 'browser-inbox-badge' + (workspaceRoot ? '' : ' unassigned'),
+            textContent: workspaceRoot || 'Unassigned'
+          }),
+          el('span', {
+            className: 'browser-inbox-badge' + (capture.processed ? ' processed' : ''),
+            textContent: capture.processed ? 'Processed' : 'Unprocessed'
+          })
+        ]));
         if (capture.text) {
           row.appendChild(el('div', { className: 'browser-inbox-row-text', textContent: capture.text }));
         }
@@ -634,8 +763,43 @@
         el('div', { className: 'browser-inbox-meta-label', textContent: 'Captured' }),
         el('div', { className: 'browser-inbox-meta-value', textContent: formatDate(capture.capturedAt) || '-' }),
         el('div', { className: 'browser-inbox-meta-label', textContent: 'Browser' }),
-        el('div', { className: 'browser-inbox-meta-value', textContent: capture.browserName || capture.source || '-' })
+        el('div', { className: 'browser-inbox-meta-value', textContent: capture.browserName || capture.source || '-' }),
+        el('div', { className: 'browser-inbox-meta-label', textContent: 'Workspace' }),
+        el('div', { className: 'browser-inbox-meta-value', textContent: capture.workspaceRootPath || 'Unassigned' }),
+        el('div', { className: 'browser-inbox-meta-label', textContent: 'Status' }),
+        el('div', { className: 'browser-inbox-meta-value', textContent: capture.processed ? 'Processed' : 'Unprocessed' })
       ]));
+      var assignmentSelect = el('select', {
+        className: 'browser-inbox-select',
+        'data-browser-inbox-assignment': capture.captureId,
+        'aria-label': 'Assign capture workspace',
+        onChange: function (event) {
+          assignWorkspace(capture.captureId, event && event.target && event.target.value);
+        }
+      });
+      assignmentSelect.appendChild(option('', 'Unassigned'));
+      workspaceRoots().forEach(function (workspaceRoot) {
+        assignmentSelect.appendChild(option(workspaceRoot, workspaceRoot));
+      });
+      assignmentSelect.value = capture.workspaceRootPath || '';
+      var assignmentControls = [
+        el('span', { className: 'browser-inbox-meta-label', textContent: 'Assign workspace' }),
+        assignmentSelect
+      ];
+      if (capture.workspaceRootPath) {
+        assignmentControls.push(el('button', {
+          className: 'browser-inbox-btn',
+          'data-browser-inbox-action': 'clear-assignment',
+          textContent: 'Clear assignment',
+          onClick: function () {
+            assignWorkspace(capture.captureId, '');
+          }
+        }));
+      }
+      detailEl.appendChild(el('div', { className: 'browser-inbox-assignment' }, assignmentControls));
+      if (!capture.workspaceRootPath) {
+        detailEl.appendChild(el('div', { className: 'browser-inbox-detail-note', textContent: 'Assign a workspace before creating a note, link, or file.' }));
+      }
       if (capture.text) {
         detailEl.appendChild(el('div', { className: 'browser-inbox-text', textContent: capture.text }));
       }
@@ -643,6 +807,14 @@
         detailEl.appendChild(el('div', { className: 'browser-inbox-text', textContent: capture.fileText }));
       }
       var actionButtons = [];
+      actionButtons.push(el('button', {
+        className: 'browser-inbox-btn',
+        'data-browser-inbox-action': 'toggle-processed',
+        textContent: capture.processed ? 'Mark Unprocessed' : 'Mark Processed',
+        onClick: function () {
+          setProcessed(capture.captureId, !capture.processed);
+        }
+      }));
       if (capture.workspaceRootPath) {
         actionButtons.push(el('button', {
           className: 'browser-inbox-btn',
@@ -676,7 +848,7 @@
       actionButtons.push(el('button', {
           className: 'browser-inbox-btn danger',
           'data-browser-inbox-action': 'remove',
-          textContent: 'Remove',
+          textContent: 'Delete',
           onClick: function () {
             removeCapture(capture.captureId);
           }
@@ -684,9 +856,23 @@
       detailEl.appendChild(el('div', { className: 'browser-inbox-detail-actions' }, actionButtons));
     }
 
+    function renderCount() {
+      var visibleCount = visibleCaptures().length;
+      var total = captures.length;
+      countEl.textContent = visibleCount === total
+        ? total + ' item' + (total === 1 ? '' : 's')
+        : visibleCount + ' of ' + total + ' items';
+      var scopeCount = scope.mode === 'global'
+        ? total
+        : captures.filter(function (capture) { return capture.workspaceRootPath === scope.workspaceRoot; }).length;
+      clearBtn.disabled = scopeCount === 0;
+    }
+
     function render() {
-      countEl.textContent = captures.length + ' item' + (captures.length === 1 ? '' : 's');
-      clearBtn.disabled = captures.length === 0;
+      statusFilterEl.value = statusFilter;
+      searchInput.value = searchQuery;
+      renderWorkspaceFilterOptions();
+      renderCount();
       statusEl.textContent = statusText;
       statusEl.className = 'browser-inbox-status' + (statusClass ? ' ' + statusClass : '');
       renderList();
@@ -695,34 +881,38 @@
 
     function loadStored() {
       if (!api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve();
-      if (scope.mode === 'global') {
-        return api.settings.read().then(function (settings) {
-          domainBindings = normalizeDomainBindings((settings || {}).domainBindings);
-          var all = [];
-          globalCaptureKeys(settings || {}).forEach(function (key) {
-            all = all.concat(normalizeStoredCaptures((settings || {})[key], key));
-          });
-          captures = sortCaptures(all);
-          if (!selectedId && captures[0]) selectedId = captures[0].captureId;
-        }).catch(function (err) {
-          statusText = 'Could not load inbox: ' + (err && err.message ? err.message : String(err));
-          statusClass = 'error';
-        });
-      }
       return api.settings.read().then(function (settings) {
         domainBindings = normalizeDomainBindings((settings || {}).domainBindings);
-        var scopedCaptures = normalizeStoredCaptures((settings || {})[scope.key], scope.key);
-        var globalCaptures = normalizeStoredCaptures((settings || {})[GLOBAL_KEY], GLOBAL_KEY).filter(function (item) {
-          return item.workspaceRootPath === scope.workspaceRoot;
+        var keys = globalCaptureKeys(settings || {});
+        var all = [];
+        var hasLegacyCaptures = false;
+        keys.forEach(function (key) {
+          var stored = normalizeStoredCaptures((settings || {})[key], key);
+          if (key !== GLOBAL_KEY && stored.length > 0) hasLegacyCaptures = true;
+          all = all.concat(stored);
         });
-        var legacyCaptures = normalizeStoredCaptures((settings || {})[LEGACY_KEY], LEGACY_KEY).filter(function (item) {
-          return item.workspaceRootPath === scope.workspaceRoot;
-        });
-        captures = sortCaptures(scopedCaptures.concat(globalCaptures, legacyCaptures));
+        captures = sortCaptures(all);
         if (!selectedId && captures[0]) selectedId = captures[0].captureId;
+        // Keep legacy records readable, then mirror the canonical state into the global queue.
+        return hasLegacyCaptures ? persist() : undefined;
       }).catch(function (err) {
         statusText = 'Could not load inbox: ' + (err && err.message ? err.message : String(err));
         statusClass = 'error';
+      });
+    }
+
+    function loadWorkspaceOptions() {
+      if (!api || !api.files || typeof api.files.list !== 'function') return Promise.resolve();
+      return api.files.list('').then(function (entries) {
+        workspaceOptions = (Array.isArray(entries) ? entries : []).filter(function (entry) {
+          return text(entry && entry.type).toLowerCase() === 'folder';
+        }).map(function (entry) {
+          return cleanWorkspace(entry.relativePath || entry.name);
+        }).filter(function (workspaceRoot) {
+          return workspaceRoot && workspaceRoot.indexOf('/') === -1;
+        });
+      }).catch(function () {
+        workspaceOptions = [];
       });
     }
 
@@ -730,9 +920,7 @@
       if (!api || !api.events || typeof api.events.subscribe !== 'function') return Promise.resolve();
       return Promise.all(CAPTURE_EVENTS.map(function (eventName) {
         return api.events.subscribe(eventName, function (event) {
-          var eventWorkspace = workspaceFromPayload(eventPayload(event));
-          if (scope.mode === 'workspace' && eventWorkspace && eventWorkspace !== scope.workspaceRoot) return Promise.resolve();
-          return addCapture(captureFromEvent(event, scope));
+          return addCapture(captureFromEvent(event));
         }).then(function (unsubscribe) {
           if (typeof unsubscribe === 'function') unsubscribers.push(unsubscribe);
         });
@@ -746,7 +934,7 @@
     }
 
     render();
-    loadStored().then(function () {
+    Promise.all([loadStored(), loadWorkspaceOptions()]).then(function () {
       if (disposed) return;
       render();
       return subscribeEvents();

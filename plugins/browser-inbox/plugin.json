@@ -4,7 +4,7 @@
   "name": "Browser Inbox",
   "version": "0.1.0",
   "apiVersion": "0.1.0",
-  "description": "Workspace-scoped inbox for browser captures delivered through the local receiver event protocol.",
+  "description": "Global browser capture queue with explicit workspace assignment delivered through the local receiver event protocol.",
   "source": "official",
   "icon": "inbox",
   "provides": [
@@ -16,6 +16,7 @@
     "events.subscribe",
     "events.publish",
     "browser.receiver.manage",
+    "files.read",
     "files.write",
     "storage.namespace",
     "ui.register"
