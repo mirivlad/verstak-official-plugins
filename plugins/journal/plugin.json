@@ -4,16 +4,13 @@
   "name": "Journal",
   "version": "0.1.0",
   "apiVersion": "0.1.0",
-  "description": "Workspace-scoped worklog journal with manual entries and Activity suggestion import.",
+  "description": "Workspace-scoped journal with user-authored entries and optional Activity links.",
   "source": "official",
   "icon": "book-open",
   "provides": [
     "worklog",
     "journal",
     "report.worklog"
-  ],
-  "optionalRequires": [
-    "activity.reconstruction"
   ],
   "permissions": [
     "storage.namespace",

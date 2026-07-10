@@ -270,19 +270,32 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   if (!container.textContent.includes('Example Article')) throw new Error('browser capture title was not rendered');
   if (!container.textContent.includes('browser.capture.selection')) throw new Error('event type was not rendered');
   if (!container.textContent.includes('browser.capture.converted')) throw new Error('conversion event type was not rendered');
-  if (!container.textContent.includes('Worklog suggestions')) throw new Error('worklog suggestions section was not rendered');
-  if (!container.textContent.includes('Project work on 2026-06-27')) throw new Error('workspace worklog suggestion title was not rendered');
-  if (!container.textContent.includes('30 min')) throw new Error('workspace worklog suggestion duration was not rendered');
-  const suggestionNode = walk(container, (node) => node.getAttribute && node.getAttribute('data-worklog-suggestion') === 'worklog:Project:2026-06-27');
-  if (!suggestionNode) throw new Error('worklog suggestion data attribute was not rendered');
+  if (!container.textContent.includes('Possible journal entries')) throw new Error('work session candidate section was not rendered');
+  if (container.textContent.includes('Project work on 2026-06-27')) throw new Error('candidate must not invent a worklog title');
+  const candidateNode = walk(container, (node) => node.getAttribute && node.getAttribute('data-work-session-candidate'));
+  if (!candidateNode) throw new Error('work session candidate data attribute was not rendered');
+  if (!candidateNode.textContent.includes('Workspace: Project')) throw new Error('candidate workspace was not rendered');
+  if (!candidateNode.textContent.includes('Estimated duration: 30 min')) throw new Error('candidate duration was not rendered');
+  if (!candidateNode.textContent.includes('Activities: 3')) throw new Error('candidate activity count was not rendered');
+  if (!walk(candidateNode, (node) => node.getAttribute && node.getAttribute('data-work-session-action') === 'review')) throw new Error('candidate review action was not rendered');
+  if (!walk(candidateNode, (node) => node.getAttribute && node.getAttribute('data-work-session-action') === 'dismiss')) throw new Error('candidate dismiss action was not rendered');
 
   const commandResult = await api.commandHandlers.get(WORKLOG_COMMAND_ID)({ workspaceRootPath: 'Project' });
-  const suggestions = commandResult && commandResult.suggestions;
-  if (!Array.isArray(suggestions) || suggestions.length !== 1) throw new Error('worklog suggestion command returned unexpected suggestions');
-  if (suggestions[0].suggestionId !== 'worklog:Project:2026-06-27') throw new Error('worklog suggestion id mismatch');
-  if (suggestions[0].minutes !== 30) throw new Error(`expected 30 suggested minutes, got ${suggestions[0].minutes}`);
-  if (!suggestions[0].summary.includes('Example Article') || !suggestions[0].summary.includes('Saved note')) throw new Error('worklog suggestion summary did not include event titles');
-  if (suggestions[0].eventIds.join(',') !== 'capture-1,note-1,capture-1:browser.capture.converted') throw new Error('worklog suggestion event ids mismatch');
+  const candidates = commandResult && commandResult.candidates;
+  if (!Array.isArray(candidates) || candidates.length !== 1) throw new Error('work session command returned unexpected candidates');
+  const candidate = candidates[0];
+  if (!candidate.candidateId) throw new Error('candidate id is missing');
+  if (candidate.workspaceRootPath !== 'Project') throw new Error('candidate workspace mismatch');
+  if (candidate.startedAt !== '2026-06-27T00:00:00.000Z' || candidate.endedAt !== '2026-06-27T00:30:00.000Z') throw new Error('candidate range mismatch');
+  if (candidate.estimatedMinutes !== 30) throw new Error(`expected 30 candidate minutes, got ${candidate.estimatedMinutes}`);
+  if (candidate.activityCount !== 3) throw new Error(`expected three candidate activities, got ${candidate.activityCount}`);
+  if (candidate.activityIds.join(',') !== 'capture-1,note-1,capture-1:browser.capture.converted') throw new Error('candidate activity ids mismatch');
+  if (!Array.isArray(candidate.activities) || candidate.activities.length !== 3) throw new Error('candidate activity list is missing');
+  if ('title' in candidate || 'summary' in candidate || 'description' in candidate) throw new Error('candidate contains non-factual journal fields');
+  const cachedCandidates = api.storedEvents('work-session-candidates:workspace:Project');
+  if (!Array.isArray(cachedCandidates) || cachedCandidates.length !== 1 || cachedCandidates[0].candidateId !== candidate.candidateId) {
+    throw new Error('candidate cache was not persisted for Overview');
+  }
 
   const clientView = await mountWithApi(api, { workspaceNode: { name: 'ClientA' }, workspaceRootPath: 'ClientA' });
   if (clientView.container.textContent.includes('Example Article')) throw new Error('Project activity leaked into ClientA workspace view');
@@ -313,15 +326,21 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   await flush();
   if (api.storedEvents(clientKey).length !== 1) throw new Error('ClientA activity was not stored under ClientA workspace key');
   if (!clientView.container.textContent.includes('Client note')) throw new Error('ClientA activity was not rendered');
-  if (!clientView.container.textContent.includes('ClientA work on 2026-06-27')) throw new Error('ClientA worklog suggestion was not rendered');
+  if (clientView.container.textContent.includes('Possible journal entries')) throw new Error('a single activity must not create a work session candidate');
   component.unmount && component.unmount(clientView.container);
 
   const globalView = await mountWithApi(api, {});
   if (!globalView.container.textContent.includes('Example Article')) throw new Error('global activity did not aggregate Project activity');
   if (!globalView.container.textContent.includes('Client note')) throw new Error('global activity did not aggregate ClientA activity');
-  if (!globalView.container.textContent.includes('Project work on 2026-06-27')) throw new Error('global activity did not render Project worklog suggestion');
-  if (!globalView.container.textContent.includes('ClientA work on 2026-06-27')) throw new Error('global activity did not render ClientA worklog suggestion');
+  if (!globalView.container.textContent.includes('Possible journal entries')) throw new Error('global activity did not render work session candidates');
   component.unmount && component.unmount(globalView.container);
+
+  const dismissButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-work-session-action') === 'dismiss');
+  if (!dismissButton) throw new Error('candidate dismiss action was not available');
+  dismissButton.click();
+  await flush();
+  if (container.textContent.includes('Possible journal entries')) throw new Error('dismiss action did not remove the candidate from Activity');
+  if (api.storedEvents('work-session-candidates:workspace:Project').length !== 0) throw new Error('dismiss action did not update the candidate cache');
 
   const manualButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-activity-action') === 'manual');
   if (manualButton) throw new Error('manual activity button should not be rendered');
@@ -331,7 +350,7 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   clearButton.click();
   await flush();
   if (api.storedEvents(projectKey).length !== 0) throw new Error('clear action did not remove activity events');
-  if (container.textContent.includes('Project work on 2026-06-27')) throw new Error('clear action did not remove worklog suggestions');
+  if (api.storedEvents('work-session-candidates:workspace:Project').length !== 0) throw new Error('clear action did not remove cached candidates');
 
   component.unmount && component.unmount(container);
   if (api.unsubscribed.length !== 33) throw new Error(`expected 33 unsubscribers, got ${api.unsubscribed.length}`);
@@ -355,7 +374,7 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   });
   const persisted = await mountWithApi(persistedApi);
   if (!persisted.container.textContent.includes('Saved note')) throw new Error('persisted activity was not rendered');
-  if (persisted.container.textContent.includes('Selected file')) throw new Error('low-value file activity should not be rendered');
+  if (!persisted.container.textContent.includes('Selected file')) throw new Error('raw Activity log must retain low-value technical events');
 
   const legacyApi = makeApi({
     events: [
@@ -401,6 +420,34 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   if (!taggedGlobalProject.container.textContent.includes('Global project capture')) throw new Error('workspace did not render workspace-tagged global activity');
   const taggedGlobalClient = await mountWithApi(taggedGlobalApi, { workspaceNode: { name: 'ClientA' }, workspaceRootPath: 'ClientA' });
   if (taggedGlobalClient.container.textContent.includes('Global project capture')) throw new Error('workspace-tagged global activity leaked into another workspace');
+
+  const sessionsApi = makeApi({
+    'events:workspace:Project': [
+      { activityId: 'project-first', type: 'note.saved', occurredAt: '2026-06-27T00:00:00Z', workspaceRootPath: 'Project' },
+      { activityId: 'project-second', type: 'file.changed', occurredAt: '2026-06-27T00:10:00Z', workspaceRootPath: 'Project' },
+      { activityId: 'project-after-switch-first', type: 'note.saved', occurredAt: '2026-06-27T00:24:00Z', workspaceRootPath: 'Project' },
+      { activityId: 'project-after-switch-second', type: 'file.changed', occurredAt: '2026-06-27T00:34:00Z', workspaceRootPath: 'Project' },
+      { activityId: 'project-after-idle-first', type: 'note.saved', occurredAt: '2026-06-27T01:10:00Z', workspaceRootPath: 'Project' },
+      { activityId: 'project-after-idle-second', type: 'file.changed', occurredAt: '2026-06-27T01:22:00Z', workspaceRootPath: 'Project' },
+    ],
+    'events:workspace:ClientA': [
+      { activityId: 'client-first', type: 'note.saved', occurredAt: '2026-06-27T00:12:00Z', workspaceRootPath: 'ClientA' },
+      { activityId: 'client-second', type: 'file.changed', occurredAt: '2026-06-27T00:22:00Z', workspaceRootPath: 'ClientA' },
+    ],
+  });
+  const sessionView = await mountWithApi(sessionsApi, {});
+  const sessionResult = await sessionsApi.commandHandlers.get(WORKLOG_COMMAND_ID)({});
+  const sessionCandidates = sessionResult && sessionResult.candidates;
+  if (!Array.isArray(sessionCandidates) || sessionCandidates.length !== 4) throw new Error('workspace switches and idle gaps must split candidates');
+  const projectCandidates = sessionCandidates.filter((item) => item.workspaceRootPath === 'Project');
+  if (projectCandidates.length !== 3) throw new Error('workspace switch must close the prior Project candidate');
+  if (!projectCandidates.some((item) => item.activityIds.join(',') === 'project-after-idle-first,project-after-idle-second')) {
+    throw new Error('idle gap must start a separate Project candidate');
+  }
+  if (sessionCandidates.some((item) => 'title' in item || 'summary' in item || 'description' in item)) {
+    throw new Error('session candidates must contain only factual fields');
+  }
+  component.unmount && component.unmount(sessionView.container);
 
   console.log('activity plugin smoke passed');
 })().catch((err) => {

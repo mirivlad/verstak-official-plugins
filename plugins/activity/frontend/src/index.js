@@ -8,11 +8,17 @@
 
   var PLUGIN_ID = 'verstak.activity';
   var MAX_EVENTS = 250;
-  var MAX_SUGGESTIONS = 12;
+  var MAX_CANDIDATES = 12;
   var LEGACY_KEY = 'events';
   var GLOBAL_KEY = 'events:global';
   var WORKSPACE_PREFIX = 'events:workspace:';
+  var CANDIDATE_PREFIX = 'work-session-candidates:workspace:';
+  var DISMISSAL_PREFIX = 'work-session-dismissals:workspace:';
   var WORKLOG_COMMAND_ID = 'verstak.activity.suggestWorklog';
+  var MIN_SESSION_DURATION_MINUTES = 10;
+  var MIN_SESSION_ACTIVITY_COUNT = 2;
+  var MAX_IDLE_GAP_MINUTES = 20;
+  var MAX_SESSION_DURATION_MINUTES = 120;
   var ACTIVITY_EVENTS = [
     'file.opened',
     'file.changed',
@@ -68,12 +74,14 @@
     '.activity-btn.danger{border-color:rgba(233,69,96,.42);color:#ff9a9a}',
     '.activity-status{font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3);white-space:nowrap}',
     '.activity-status.error{display:inline-flex;border:1px solid rgba(233,69,96,.45);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-danger-muted,rgba(233,69,96,.14));color:#ffc6ce;padding:.18rem .4rem}',
-    '.activity-suggestions{border-bottom:1px solid rgba(32,43,70,.72);background:var(--vt-color-surface-muted,#111629);padding:.65rem .75rem;display:grid;gap:.5rem}',
-    '.activity-suggestions-title{font-size:.76rem;font-weight:600;color:var(--vt-color-text-muted,#7f8aa3);text-transform:uppercase;letter-spacing:.04em}',
-    '.activity-suggestion{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.65rem;align-items:start;padding:.65rem .75rem;border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface,#15152c)}',
-    '.activity-suggestion-title{font-size:.84rem;color:var(--vt-color-text-primary,#f4f7fb);font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-    '.activity-suggestion-summary{margin-top:.22rem;font-size:.76rem;color:var(--vt-color-text-secondary,#b7c0d4);line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere}',
-    '.activity-suggestion-minutes{font-size:.76rem;color:var(--vt-color-accent,#4ecca3);white-space:nowrap}',
+    '.activity-candidates{border-bottom:1px solid rgba(32,43,70,.72);background:var(--vt-color-surface-muted,#111629);padding:.65rem .75rem;display:grid;gap:.5rem}',
+    '.activity-candidates-title{font-size:.76rem;font-weight:600;color:var(--vt-color-text-muted,#7f8aa3);text-transform:uppercase;letter-spacing:.04em}',
+    '.activity-candidate{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.65rem;align-items:start;padding:.65rem .75rem;border:1px solid rgba(78,204,163,.34);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface,#15152c)}',
+    '.activity-candidate-title{font-size:.84rem;color:var(--vt-color-text-primary,#f4f7fb);font-weight:600}',
+    '.activity-candidate-facts{margin-top:.28rem;display:grid;gap:.16rem;font-size:.76rem;color:var(--vt-color-text-secondary,#b7c0d4)}',
+    '.activity-candidate-activities{margin-top:.38rem;font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3)}.activity-candidate-activities summary{cursor:pointer}.activity-candidate-activity{margin-top:.2rem;overflow-wrap:anywhere}',
+    '.activity-candidate-actions{display:flex;gap:.35rem;align-items:center;flex-wrap:wrap;justify-content:flex-end}',
+    '.activity-candidate-duration{font-size:.76rem;color:var(--vt-color-accent,#4ecca3);white-space:nowrap}',
     '.activity-list{flex:1;min-height:0;overflow:auto;background:var(--vt-color-background,#101020)}',
     '.activity-empty{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.35rem;color:var(--vt-color-text-muted,#7f8aa3);font-size:.86rem;padding:2rem;text-align:center}',
     '.activity-empty-title{color:var(--vt-color-text-secondary,#b7c0d4);font-weight:650}',
@@ -87,7 +95,7 @@
     '.activity-summary{margin-top:.25rem;font-size:.78rem;line-height:1.4;color:var(--vt-color-text-secondary,#b7c0d4);white-space:pre-wrap;overflow-wrap:anywhere}',
     '.activity-source{margin-top:.25rem;font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3)}',
     '.activity-details{margin-top:.25rem;font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3)}.activity-details summary{cursor:pointer}',
-    '@media(max-width:760px){.activity-row,.activity-suggestion{grid-template-columns:1fr;gap:.25rem}.activity-toolbar{align-items:stretch}.activity-status{width:100%}}'
+    '@media(max-width:760px){.activity-row,.activity-candidate{grid-template-columns:1fr;gap:.25rem}.activity-candidate-actions{justify-content:flex-start}.activity-toolbar{align-items:stretch}.activity-status{width:100%}}'
   ].join('\n');
 
   function el(tag, attrs, children) {
@@ -213,32 +221,80 @@
     return date && !isNaN(date.getTime()) ? date.getTime() : 0;
   }
 
-  function eventDay(activity) {
-    var value = activity && (activity.occurredAt || activity.receivedAt);
-    var date = value ? new Date(value) : null;
-    if (date && !isNaN(date.getTime())) return date.toISOString().slice(0, 10);
-    return text(value).slice(0, 10) || 'unknown-date';
+  function candidateWorkspace(activity) {
+    return cleanWorkspace(activity && (activity.workspaceRootPath || workspaceFromPayload(activity.payload || {})));
   }
 
-  function suggestionWorkspace(activity) {
-    return cleanWorkspace(activity && (activity.workspaceRootPath || workspaceFromPayload(activity.payload || {}))) || 'Global';
+  function toISOTime(time) {
+    var date = new Date(time);
+    return isNaN(date.getTime()) ? '' : date.toISOString();
   }
 
-  function roundUpQuarterHour(minutes) {
-    return Math.ceil(minutes / 15) * 15;
+  function candidateId(workspaceRootPath, firstActivity, lastActivity) {
+    return 'work-session:' + encodeKey(workspaceRootPath) + ':' + encodeKey(firstActivity.activityId) + ':' + encodeKey(lastActivity.activityId);
   }
 
-  function estimateMinutes(groupEvents) {
-    if (!groupEvents.length) return 0;
-    if (groupEvents.length === 1) return 15;
-    var first = eventTimeMs(groupEvents[0]);
-    var last = eventTimeMs(groupEvents[groupEvents.length - 1]);
-    if (!first || !last || last <= first) return 15;
-    return Math.max(15, Math.min(480, roundUpQuarterHour((last - first) / 60000)));
+  function candidateActivity(activity) {
+    return {
+      activityId: text(activity.activityId),
+      type: text(activity.type),
+      occurredAt: toISOTime(eventTimeMs(activity)),
+      sourcePluginId: text(activity.sourcePluginId),
+      workspaceRootPath: candidateWorkspace(activity)
+    };
   }
 
-  function eventLabel(activity) {
-    return humanEventTitle(activity);
+  function buildCandidate(session) {
+    var first = session.activities[0];
+    var last = session.activities[session.activities.length - 1];
+    var duration = Math.round((eventTimeMs(last) - eventTimeMs(first)) / 60000);
+    if (session.activities.length < MIN_SESSION_ACTIVITY_COUNT || duration < MIN_SESSION_DURATION_MINUTES) return null;
+    return {
+      candidateId: candidateId(session.workspaceRootPath, first, last),
+      workspaceRootPath: session.workspaceRootPath,
+      startedAt: toISOTime(eventTimeMs(first)),
+      endedAt: toISOTime(eventTimeMs(last)),
+      estimatedMinutes: duration,
+      activityCount: session.activities.length,
+      activityIds: session.activities.map(function (activity) { return activity.activityId; }).filter(Boolean),
+      activities: session.activities.map(candidateActivity)
+    };
+  }
+
+  function buildWorkSessionCandidates(activityList, workspaceFilter) {
+    var filter = cleanWorkspace(workspaceFilter);
+    var ordered = sortEvents(activityList || []).filter(function (activity) {
+      return isMeaningfulActivity(activity) && candidateWorkspace(activity) && eventTimeMs(activity);
+    }).slice().sort(function (a, b) {
+      return eventTimeMs(a) - eventTimeMs(b);
+    });
+    var sessions = [];
+    var current = null;
+    ordered.forEach(function (activity) {
+      var workspace = candidateWorkspace(activity);
+      var time = eventTimeMs(activity);
+      if (!current) {
+        current = { workspaceRootPath: workspace, activities: [activity] };
+        return;
+      }
+      var firstTime = eventTimeMs(current.activities[0]);
+      var lastTime = eventTimeMs(current.activities[current.activities.length - 1]);
+      var switchedWorkspace = current.workspaceRootPath !== workspace;
+      var idleGap = time - lastTime > MAX_IDLE_GAP_MINUTES * 60 * 1000;
+      var exceededMaximum = time - firstTime > MAX_SESSION_DURATION_MINUTES * 60 * 1000;
+      if (switchedWorkspace || idleGap || exceededMaximum) {
+        sessions.push(current);
+        current = { workspaceRootPath: workspace, activities: [activity] };
+        return;
+      }
+      current.activities.push(activity);
+    });
+    if (current) sessions.push(current);
+    return sessions.map(buildCandidate).filter(function (candidate) {
+      return candidate && (!filter || candidate.workspaceRootPath === filter);
+    }).sort(function (a, b) {
+      return b.endedAt.localeCompare(a.endedAt) || a.workspaceRootPath.localeCompare(b.workspaceRootPath);
+    }).slice(0, MAX_CANDIDATES);
   }
 
   function humanEventType(type) {
@@ -262,49 +318,6 @@
     return 'Activity';
   }
 
-  function summarizeEvents(groupEvents) {
-    var labels = [];
-    groupEvents.forEach(function (activity) {
-      var label = eventLabel(activity);
-      if (label && labels.indexOf(label) === -1) labels.push(label);
-    });
-    var visible = labels.slice(0, 3);
-    var suffix = labels.length > 3 ? ' +' + (labels.length - 3) + ' more' : '';
-    return (visible.join('; ') || groupEvents.length + ' activity events') + suffix;
-  }
-
-  function buildWorklogSuggestions(activityList, workspaceFilter) {
-    var filter = cleanWorkspace(workspaceFilter);
-    var groups = {};
-    sortEvents(activityList || []).filter(isMeaningfulActivity).forEach(function (activity) {
-      var workspace = suggestionWorkspace(activity);
-      if (filter && workspace !== filter) return;
-      var day = eventDay(activity);
-      var key = workspace + '|' + day;
-      groups[key] = groups[key] || { workspaceRootPath: workspace, date: day, events: [] };
-      groups[key].events.push(activity);
-    });
-    return Object.keys(groups).map(function (key) {
-      var group = groups[key];
-      var ordered = group.events.slice().sort(function (a, b) {
-        return eventTimeMs(a) - eventTimeMs(b);
-      });
-      var eventIds = ordered.map(function (activity) { return activity.activityId; }).filter(Boolean);
-      var suggestionId = 'worklog:' + group.workspaceRootPath + ':' + group.date;
-      return {
-        suggestionId: suggestionId,
-        workspaceRootPath: group.workspaceRootPath,
-        date: group.date,
-        title: group.workspaceRootPath + ' work on ' + group.date,
-        summary: summarizeEvents(ordered),
-        minutes: estimateMinutes(ordered),
-        eventIds: eventIds
-      };
-    }).sort(function (a, b) {
-      return b.date.localeCompare(a.date) || a.workspaceRootPath.localeCompare(b.workspaceRootPath);
-    }).slice(0, MAX_SUGGESTIONS);
-  }
-
   function globalEventKeys(settings) {
     var keys = [LEGACY_KEY, GLOBAL_KEY];
     Object.keys(settings || {}).forEach(function (key) {
@@ -321,7 +334,7 @@
       globalEventKeys(settings).forEach(function (key) {
         all = all.concat(normalizeStoredEvents(settings[key], key));
       });
-      return sortEvents(all).filter(isMeaningfulActivity);
+      return sortEvents(all);
     }
     var workspaceKey = WORKSPACE_PREFIX + encodeKey(workspace);
     var scopedEvents = normalizeStoredEvents(settings[workspaceKey], workspaceKey);
@@ -331,7 +344,49 @@
     var legacyEvents = normalizeStoredEvents(settings[LEGACY_KEY], LEGACY_KEY).filter(function (item) {
       return item.workspaceRootPath === workspace;
     });
-    return sortEvents(scopedEvents.concat(globalEvents, legacyEvents)).filter(isMeaningfulActivity);
+    return sortEvents(scopedEvents.concat(globalEvents, legacyEvents));
+  }
+
+  function candidateStorageKey(workspaceRoot) {
+    return CANDIDATE_PREFIX + encodeKey(workspaceRoot);
+  }
+
+  function dismissalStorageKey(workspaceRoot) {
+    return DISMISSAL_PREFIX + encodeKey(workspaceRoot);
+  }
+
+  function decodeStoredWorkspace(key, prefix) {
+    if (key.indexOf(prefix) !== 0) return '';
+    try {
+      return cleanWorkspace(decodeURIComponent(key.slice(prefix.length)));
+    } catch (err) {
+      return cleanWorkspace(key.slice(prefix.length));
+    }
+  }
+
+  function dismissedCandidatesFromSettings(settings) {
+    var dismissed = {};
+    Object.keys(settings || {}).forEach(function (key) {
+      if (key.indexOf(DISMISSAL_PREFIX) !== 0 || !Array.isArray(settings[key])) return;
+      var workspace = decodeStoredWorkspace(key, DISMISSAL_PREFIX);
+      if (!workspace) return;
+      dismissed[workspace] = {};
+      settings[key].forEach(function (candidateId) {
+        candidateId = text(candidateId).trim();
+        if (candidateId) dismissed[workspace][candidateId] = true;
+      });
+    });
+    return dismissed;
+  }
+
+  function isCandidateDismissed(candidate, dismissedByWorkspace) {
+    return !!(candidate && dismissedByWorkspace && dismissedByWorkspace[candidate.workspaceRootPath] && dismissedByWorkspace[candidate.workspaceRootPath][candidate.candidateId]);
+  }
+
+  function visibleCandidates(activityList, workspaceFilter, dismissedByWorkspace) {
+    return buildWorkSessionCandidates(activityList, workspaceFilter).filter(function (candidate) {
+      return !isCandidateDismissed(candidate, dismissedByWorkspace);
+    });
   }
 
   function formatDate(value) {
@@ -351,7 +406,9 @@
 
     var scope = scopeFromProps(props || {});
     var events = [];
-    var suggestions = [];
+    var candidateSourceEvents = [];
+    var candidates = [];
+    var dismissedByWorkspace = {};
     var statusText = 'Loading activity...';
     var statusClass = '';
     var disposed = false;
@@ -371,7 +428,10 @@
           return;
         }
         events = [];
-        updateSuggestions();
+        candidateSourceEvents = candidateSourceEvents.filter(function (activity) {
+          return candidateWorkspace(activity) !== scope.workspaceRoot;
+        });
+        updateCandidates();
         persist().then(render);
       }
     });
@@ -381,17 +441,46 @@
     toolbar.appendChild(statusEl);
     toolbar.appendChild(clearBtn);
 
-    var suggestionsEl = el('div', {
-      className: 'activity-suggestions',
-      'data-activity-section': 'worklog-suggestions'
+    var candidatesEl = el('div', {
+      className: 'activity-candidates',
+      'data-activity-section': 'work-session-candidates'
     });
     var listEl = el('div', { className: 'activity-list' });
     containerEl.appendChild(toolbar);
-    containerEl.appendChild(suggestionsEl);
+    containerEl.appendChild(candidatesEl);
     containerEl.appendChild(listEl);
 
-    function updateSuggestions() {
-      suggestions = buildWorklogSuggestions(events, scope.mode === 'workspace' ? scope.workspaceRoot : '');
+    function candidatesForWorkspace(workspaceRoot) {
+      return visibleCandidates(candidateSourceEvents, workspaceRoot, dismissedByWorkspace);
+    }
+
+    function updateCandidates() {
+      candidates = candidatesForWorkspace(scope.mode === 'workspace' ? scope.workspaceRoot : '');
+    }
+
+    function candidateWorkspaces() {
+      var workspaces = {};
+      candidateSourceEvents.forEach(function (activity) {
+        var workspace = candidateWorkspace(activity);
+        if (workspace) workspaces[workspace] = true;
+      });
+      if (scope.mode === 'workspace' && scope.workspaceRoot) workspaces[scope.workspaceRoot] = true;
+      return Object.keys(workspaces);
+    }
+
+    function persistCandidateCache(workspaceRoot) {
+      if (!workspaceRoot || !api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve();
+      return api.settings.write(candidateStorageKey(workspaceRoot), candidatesForWorkspace(workspaceRoot));
+    }
+
+    function persistCandidateCaches() {
+      return Promise.all(candidateWorkspaces().map(persistCandidateCache));
+    }
+
+    function persistDismissals(workspaceRoot) {
+      if (!workspaceRoot || !api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve();
+      var dismissed = dismissedByWorkspace[workspaceRoot] || {};
+      return api.settings.write(dismissalStorageKey(workspaceRoot), Object.keys(dismissed));
     }
 
     function persist() {
@@ -399,7 +488,7 @@
       var toStore = scope.mode === 'global'
         ? events.filter(function (item) { return !item._storageKey || item._storageKey === GLOBAL_KEY; })
         : events;
-      return api.settings.write(scope.key, storageEvents(toStore)).catch(function (err) {
+      return api.settings.write(scope.key, storageEvents(toStore)).then(persistCandidateCaches).catch(function (err) {
         statusText = 'Could not save activity: ' + (err && err.message ? err.message : String(err));
         statusClass = 'error';
       });
@@ -411,9 +500,16 @@
         return Promise.resolve();
       }
       return api.settings.read().then(function (settings) {
-        var keys = globalEventKeys(settings || {});
+        var keys = globalEventKeys(settings || {}).concat(Object.keys(settings || {}).filter(function (key) {
+          return key.indexOf(CANDIDATE_PREFIX) === 0 || key.indexOf(DISMISSAL_PREFIX) === 0;
+        }));
         events = [];
-        return Promise.all(keys.map(function (key) {
+        candidateSourceEvents = [];
+        candidates = [];
+        dismissedByWorkspace = {};
+        return Promise.all(keys.filter(function (key, index, all) {
+          return all.indexOf(key) === index;
+        }).map(function (key) {
           return api.settings.write(key, []);
         }));
       }).then(function () {
@@ -455,25 +551,70 @@
       });
     }
 
-    function renderSuggestions() {
-      suggestionsEl.innerHTML = '';
-      if (!suggestions.length) {
-        suggestionsEl.setAttribute('hidden', 'hidden');
+    function candidateTimeRange(candidate) {
+      return formatDate(candidate.startedAt) + ' - ' + formatDate(candidate.endedAt);
+    }
+
+    function reviewCandidate(candidate) {
+      if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function' || typeof CustomEvent !== 'function') return;
+      window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', {
+        detail: {
+          kind: 'journal',
+          toolRequest: { type: 'work-session-candidate', candidate: candidate }
+        }
+      }));
+    }
+
+    function dismissCandidate(candidate) {
+      if (!candidate || !candidate.workspaceRootPath || !candidate.candidateId) return;
+      dismissedByWorkspace[candidate.workspaceRootPath] = dismissedByWorkspace[candidate.workspaceRootPath] || {};
+      dismissedByWorkspace[candidate.workspaceRootPath][candidate.candidateId] = true;
+      updateCandidates();
+      Promise.all([
+        persistDismissals(candidate.workspaceRootPath),
+        persistCandidateCache(candidate.workspaceRootPath)
+      ]).then(function () {
+        statusText = 'Candidate dismissed';
+        statusClass = '';
+      }).catch(function (err) {
+        statusText = 'Could not dismiss candidate: ' + (err && err.message ? err.message : String(err));
+        statusClass = 'error';
+      }).then(render);
+    }
+
+    function renderCandidates() {
+      candidatesEl.innerHTML = '';
+      if (!candidates.length) {
+        candidatesEl.setAttribute('hidden', 'hidden');
         return;
       }
-      if (typeof suggestionsEl.removeAttribute === 'function') suggestionsEl.removeAttribute('hidden');
-      else delete suggestionsEl.attributes.hidden;
-      suggestionsEl.appendChild(el('div', { className: 'activity-suggestions-title', textContent: 'Worklog suggestions' }));
-      suggestions.forEach(function (suggestion) {
-        suggestionsEl.appendChild(el('div', {
-          className: 'activity-suggestion',
-          'data-worklog-suggestion': suggestion.suggestionId
+      if (typeof candidatesEl.removeAttribute === 'function') candidatesEl.removeAttribute('hidden');
+      else delete candidatesEl.attributes.hidden;
+      candidatesEl.appendChild(el('div', { className: 'activity-candidates-title', textContent: 'Possible journal entries' }));
+      candidates.forEach(function (candidate) {
+        candidatesEl.appendChild(el('div', {
+          className: 'activity-candidate',
+          'data-work-session-candidate': candidate.candidateId
         }, [
           el('div', {}, [
-            el('div', { className: 'activity-suggestion-title', textContent: suggestion.title }),
-            el('div', { className: 'activity-suggestion-summary', textContent: suggestion.summary })
+            el('div', { className: 'activity-candidate-title', textContent: 'Possible journal entry' }),
+            el('div', { className: 'activity-candidate-facts' }, [
+              el('div', { textContent: 'Workspace: ' + candidate.workspaceRootPath }),
+              el('div', { textContent: 'Time: ' + candidateTimeRange(candidate) }),
+              el('div', { textContent: 'Estimated duration: ' + candidate.estimatedMinutes + ' min' }),
+              el('div', { textContent: 'Activities: ' + candidate.activityCount })
+            ]),
+            el('details', { className: 'activity-candidate-activities' }, [
+              el('summary', { textContent: 'Included activities (' + candidate.activityCount + ')' })
+            ].concat(candidate.activities.map(function (activity) {
+                return el('div', { className: 'activity-candidate-activity', textContent: activity.occurredAt + ' · ' + activity.type + ' · ' + activity.activityId });
+            })))
           ]),
-          el('div', { className: 'activity-suggestion-minutes', textContent: suggestion.minutes + ' min' })
+          el('div', { className: 'activity-candidate-actions' }, [
+            el('div', { className: 'activity-candidate-duration', textContent: candidate.estimatedMinutes + ' min' }),
+            el('button', { className: 'activity-btn', type: 'button', 'data-work-session-action': 'review', textContent: 'Review', onClick: function () { reviewCandidate(candidate); } }),
+            el('button', { className: 'activity-btn', type: 'button', 'data-work-session-action': 'dismiss', textContent: 'Dismiss', onClick: function () { dismissCandidate(candidate); } })
+          ])
         ]));
       });
     }
@@ -483,45 +624,41 @@
       clearBtn.disabled = events.length === 0;
       statusEl.textContent = statusText;
       statusEl.className = 'activity-status' + (statusClass ? ' ' + statusClass : '');
-      updateSuggestions();
-      renderSuggestions();
+      renderCandidates();
       renderList();
     }
 
     function loadStored() {
       if (!api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve();
-      if (scope.mode === 'global') {
-        return api.settings.read().then(function (settings) {
-          events = eventsFromSettings(settings || {}, '');
-        }).catch(function (err) {
-          statusText = 'Could not load activity: ' + (err && err.message ? err.message : String(err));
-          statusClass = 'error';
-        });
-      }
       return api.settings.read().then(function (settings) {
-        events = eventsFromSettings(settings || {}, scope.workspaceRoot);
+        settings = settings || {};
+        candidateSourceEvents = eventsFromSettings(settings, '');
+        events = eventsFromSettings(settings, scope.mode === 'workspace' ? scope.workspaceRoot : '');
+        dismissedByWorkspace = dismissedCandidatesFromSettings(settings);
+        updateCandidates();
+        return persistCandidateCaches();
       }).catch(function (err) {
         statusText = 'Could not load activity: ' + (err && err.message ? err.message : String(err));
         statusClass = 'error';
       });
     }
 
-    function suggestWorklog(args) {
+    function listWorkSessionCandidates(args) {
       var workspace = cleanWorkspace(args && args.workspaceRootPath);
       if (!api || !api.settings || typeof api.settings.read !== 'function') {
-        return Promise.resolve({ suggestions: buildWorklogSuggestions(events, workspace || (scope.mode === 'workspace' ? scope.workspaceRoot : '')) });
+        return Promise.resolve({ candidates: visibleCandidates(candidateSourceEvents, workspace || (scope.mode === 'workspace' ? scope.workspaceRoot : ''), dismissedByWorkspace) });
       }
       return api.settings.read().then(function (settings) {
-        var sourceEvents = eventsFromSettings(settings || {}, workspace);
-        return { suggestions: buildWorklogSuggestions(sourceEvents, workspace) };
+        settings = settings || {};
+        return { candidates: visibleCandidates(eventsFromSettings(settings, ''), workspace, dismissedCandidatesFromSettings(settings)) };
       }).catch(function () {
-        return { suggestions: [] };
+        return { candidates: [] };
       });
     }
 
     function registerCommands() {
       if (!api || !api.commands || typeof api.commands.register !== 'function') return Promise.resolve();
-      return api.commands.register(WORKLOG_COMMAND_ID, suggestWorklog).then(function (unregister) {
+      return api.commands.register(WORKLOG_COMMAND_ID, listWorkSessionCandidates).then(function (unregister) {
         if (typeof unregister === 'function') unsubscribers.push(unregister);
       }).catch(function (err) {
         statusText = 'Activity commands unavailable: ' + (err && err.message ? err.message : String(err));

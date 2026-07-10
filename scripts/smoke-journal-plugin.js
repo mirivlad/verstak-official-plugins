@@ -90,6 +90,12 @@ function walk(node, fn) {
   return null;
 }
 
+function walkAll(node, fn, matches = []) {
+  if (fn(node)) matches.push(node);
+  for (const child of node.children) walkAll(child, fn, matches);
+  return matches;
+}
+
 function makeDocument() {
   return {
     body: new FakeNode('body'),
@@ -127,38 +133,12 @@ function loadComponent(document) {
 
 function makeApi(initialSettings = {}) {
   const settings = { ...initialSettings };
-  const commandCalls = [];
   return {
-    commandCalls,
     settings: {
       read: async (key) => (key ? settings[key] : { ...settings }),
       write: async (key, value) => {
         settings[key] = value;
         return { ...settings };
-      },
-    },
-    commands: {
-      executeFor: async (pluginId, commandId, args) => {
-        commandCalls.push({ pluginId, commandId, args });
-        if (pluginId !== 'verstak.activity' || commandId !== 'verstak.activity.suggestWorklog') {
-          throw new Error(`unexpected command ${pluginId}:${commandId}`);
-        }
-        return {
-          status: 'handled',
-          pluginId,
-          commandId,
-          result: {
-            suggestions: [{
-              suggestionId: 'worklog:Project:2026-06-27',
-              workspaceRootPath: 'Project',
-              date: '2026-06-27',
-              title: 'Project work on 2026-06-27',
-              summary: 'Example Article; Saved note',
-              minutes: 30,
-              eventIds: ['capture-1', 'note-1'],
-            }],
-          },
-        };
       },
     },
     storedEntries(key) {
@@ -190,7 +170,7 @@ function byData(container, attr, value) {
   for (const capability of ['worklog', 'journal', 'report.worklog']) {
     if (!manifest.provides.includes(capability)) throw new Error(`journal manifest missing capability ${capability}`);
   }
-  if (!manifest.optionalRequires.includes('activity.reconstruction')) throw new Error('journal manifest must optionally require activity.reconstruction');
+  if ((manifest.optionalRequires || []).includes('activity.reconstruction')) throw new Error('Journal must remain available without Activity');
   if (!manifest.permissions.includes('storage.namespace')) throw new Error('journal manifest must request storage.namespace');
   if (!manifest.permissions.includes('ui.register')) throw new Error('journal manifest must request ui.register');
   if (!(manifest.contributes.workspaceItems || []).some((item) => item.component === 'JournalView')) throw new Error('journal workspace item missing');
@@ -199,6 +179,10 @@ function byData(container, attr, value) {
   const api = makeApi();
   const { component, container } = await mountWithApi(api);
   const projectKey = 'worklog:workspace:Project';
+
+  if (walk(container, (node) => node.getAttribute && node.getAttribute('data-journal-action') === 'import-activity')) {
+    throw new Error('Journal must not provide direct Activity import');
+  }
 
   byData(container, 'data-journal-action', 'add').click();
   await flush();
@@ -210,6 +194,7 @@ function byData(container, attr, value) {
   await flush();
 
   if (api.storedEntries(projectKey).length !== 1) throw new Error('manual journal entry was not stored');
+  if (api.storedEntries(projectKey)[0].activityIds.length !== 0) throw new Error('manual journal entry must not require activity links');
   if (!container.textContent.includes('Draft brief')) throw new Error('manual journal entry was not rendered');
   if (!container.textContent.includes('45 min')) throw new Error('manual journal entry minutes were not rendered');
 
@@ -225,28 +210,60 @@ function byData(container, attr, value) {
   if (api.storedEntries(projectKey)[0].title !== 'Draft brief updated') throw new Error('journal entry title was not updated');
   if (!container.textContent.includes('60 min')) throw new Error('edited journal entry minutes were not rendered');
 
-  byData(container, 'data-journal-action', 'import-activity').click();
+  const candidate = {
+    candidateId: 'work-session:Project:capture-1:note-1',
+    workspaceRootPath: 'Project',
+    startedAt: '2026-06-27T10:12:00.000Z',
+    endedAt: '2026-06-27T11:03:00.000Z',
+    estimatedMinutes: 51,
+    activityCount: 2,
+    activityIds: ['capture-1', 'note-1'],
+    activities: [
+      { activityId: 'capture-1', type: 'browser.capture.selection', occurredAt: '2026-06-27T10:12:00.000Z', sourcePluginId: 'verstak.browser-inbox' },
+      { activityId: 'note-1', type: 'note.saved', occurredAt: '2026-06-27T11:03:00.000Z', sourcePluginId: 'verstak.notes' },
+    ],
+  };
+  const candidateView = await mountWithApi(api, {
+    workspaceNode: { name: 'Project' },
+    workspaceRootPath: 'Project',
+    toolRequest: { type: 'work-session-candidate', candidate },
+  });
+  if (!candidateView.container.textContent.includes('Review possible journal entry')) throw new Error('candidate review modal was not opened');
+  if (!candidateView.container.textContent.includes('Workspace: Project')) throw new Error('candidate workspace was not shown for review');
+  if (!candidateView.container.textContent.includes('Estimated duration: 51 min')) throw new Error('candidate duration was not shown for review');
+  if (byData(candidateView.container, 'data-journal-input', 'title').value !== '') throw new Error('candidate review must start with an empty title');
+  if (byData(candidateView.container, 'data-journal-input', 'summary').value !== '') throw new Error('candidate review must start with an empty body');
+  if (byData(candidateView.container, 'data-journal-input', 'minutes').value !== '51') throw new Error('candidate review must prefill the factual duration');
+  const linkedActivityInputs = walkAll(candidateView.container, (node) => node.getAttribute && node.getAttribute('data-journal-candidate-activity'));
+  if (linkedActivityInputs.length !== 2 || linkedActivityInputs.some((node) => node.checked !== true)) throw new Error('candidate activities were not available for review');
+  byData(candidateView.container, 'data-journal-input', 'title').value = 'Review research capture';
+  byData(candidateView.container, 'data-journal-input', 'summary').value = 'Read the capture and updated the project note.';
+  linkedActivityInputs[1].checked = false;
+  byData(candidateView.container, 'data-journal-action', 'save-entry').click();
   await flush();
 
-  if (api.commandCalls.length !== 1) throw new Error('activity suggestion command was not called');
-  if (api.commandCalls[0].args.workspaceRootPath !== 'Project') throw new Error('activity suggestion command used wrong workspace');
-  if (api.storedEntries(projectKey).length !== 2) throw new Error('activity suggestion was not imported as a journal entry');
-  if (!container.textContent.includes('Project work on 2026-06-27')) throw new Error('imported activity suggestion was not rendered');
+  if (api.storedEntries(projectKey).length !== 2) throw new Error('reviewed candidate was not saved as a journal entry');
+  const linkedEntry = api.storedEntries(projectKey).find((entry) => entry.sourceCandidateId === candidate.candidateId);
+  if (!linkedEntry) throw new Error('candidate reference was not stored on the journal entry');
+  if (linkedEntry.title !== 'Review research capture' || linkedEntry.summary !== 'Read the capture and updated the project note.') {
+    throw new Error('candidate review did not keep the user-authored entry fields');
+  }
+  if (linkedEntry.activityIds.join(',') !== 'capture-1') throw new Error('candidate review did not persist selected activity ids');
+  if (walk(candidateView.container, (node) => node.getAttribute && node.getAttribute('data-journal-action') === 'view-activity')) {
+    throw new Error('journal rows must not navigate to Activity by default');
+  }
 
-  byData(container, 'data-journal-action', 'import-activity').click();
-  await flush();
-  if (api.storedEntries(projectKey).length !== 2) throw new Error('duplicate activity suggestion was imported');
-
-  byData(container, 'data-journal-action', 'delete').click();
+  byData(candidateView.container, 'data-journal-action', 'delete').click();
   await flush();
   if (api.storedEntries(projectKey).length !== 1) throw new Error('journal entry was not deleted');
 
   const globalView = await mountWithApi(api, {});
-  if (!globalView.container.textContent.includes('Project work on 2026-06-27') && !globalView.container.textContent.includes('Draft brief updated')) {
+  if (!globalView.container.textContent.includes('Review research capture') && !globalView.container.textContent.includes('Draft brief updated')) {
     throw new Error('global journal did not aggregate remaining entries');
   }
 
   component.unmount && component.unmount(container);
+  component.unmount && component.unmount(candidateView.container);
   component.unmount && component.unmount(globalView.container);
 
   console.log('journal plugin smoke passed');

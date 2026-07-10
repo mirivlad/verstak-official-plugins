@@ -8,8 +8,6 @@
 
   var PLUGIN_ID = 'verstak.journal';
   var WORKLOG_PREFIX = 'worklog:workspace:';
-  var ACTIVITY_PLUGIN_ID = 'verstak.activity';
-  var ACTIVITY_WORKLOG_COMMAND = 'verstak.activity.suggestWorklog';
 
   function injectStyles() {
     if (document.getElementById('journal-style-injected')) return;
@@ -57,6 +55,11 @@
     '.journal-modal-grid{display:grid;grid-template-columns:1fr 8rem;gap:.6rem}',
     '.journal-field{display:grid;gap:.3rem;font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3)}',
     '.journal-field.wide{grid-column:1/-1}',
+    '.journal-candidate-context{display:grid;gap:.22rem;padding:.65rem .7rem;border:1px solid rgba(78,204,163,.34);border-radius:var(--vt-radius-md,6px);background:var(--vt-color-surface-muted,#111629);font-size:.76rem;color:var(--vt-color-text-secondary,#b7c0d4)}',
+    '.journal-candidate-context strong{color:var(--vt-color-text-primary,#f4f7fb)}',
+    '.journal-candidate-activities{display:grid;gap:.35rem;margin:0;padding:.65rem .7rem;border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-md,6px);font-size:.74rem;color:var(--vt-color-text-secondary,#b7c0d4)}',
+    '.journal-candidate-activities legend{padding:0 .2rem;color:var(--vt-color-text-muted,#7f8aa3)}',
+    '.journal-candidate-activity{display:flex;align-items:flex-start;gap:.45rem;line-height:1.35;overflow-wrap:anywhere}',
     '.journal-modal-actions{display:flex;justify-content:flex-end;gap:.5rem}',
     '.journal-btn.primary{background:var(--vt-color-accent,#4ecca3);border-color:var(--vt-color-accent,#4ecca3);color:#101827}',
     '.journal-btn.ghost{background:transparent}',
@@ -127,8 +130,10 @@
       summary: text(value.summary),
       minutes: Math.max(0, Number(value.minutes || 0)),
       billable: value.billable === true,
-      sourceSuggestionId: text(value.sourceSuggestionId),
-      eventIds: Array.isArray(value.eventIds) ? value.eventIds.map(text) : []
+      sourceCandidateId: text(value.sourceCandidateId || value.sourceSuggestionId),
+      activityIds: Array.isArray(value.activityIds)
+        ? value.activityIds.map(text)
+        : (Array.isArray(value.eventIds) ? value.eventIds.map(text) : [])
     };
   }
 
@@ -156,8 +161,8 @@
         summary: entry.summary,
         minutes: entry.minutes,
         billable: entry.billable,
-        sourceSuggestionId: entry.sourceSuggestionId,
-        eventIds: entry.eventIds || []
+        sourceCandidateId: entry.sourceCandidateId,
+        activityIds: entry.activityIds || []
       };
     });
   }
@@ -165,7 +170,7 @@
   function sortEntries(entryList) {
     var seen = {};
     return entryList.filter(function (entry) {
-      var key = entry.sourceSuggestionId || entry.entryId;
+      var key = entry.sourceCandidateId || entry.entryId;
       if (!key || seen[key]) return false;
       seen[key] = true;
       return true;
@@ -182,6 +187,50 @@
 
   function entryId(workspaceRoot, date, title) {
     return 'journal:' + cleanWorkspace(workspaceRoot || 'Global') + ':' + text(date) + ':' + encodeKey(title).slice(0, 48) + ':' + Date.now();
+  }
+
+  function candidateDate(value) {
+    var date = new Date(value || '');
+    return isNaN(date.getTime()) ? today() : date.toISOString().slice(0, 10);
+  }
+
+  function candidateTime(value) {
+    var date = new Date(value || '');
+    if (isNaN(date.getTime())) return text(value);
+    return date.toLocaleString(undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function candidateFromRequest(request, workspaceRoot) {
+    var value = request && request.type === 'work-session-candidate' ? request.candidate : null;
+    if (!value || typeof value !== 'object') return null;
+    var workspace = cleanWorkspace(value.workspaceRootPath);
+    if (!workspace || workspace !== cleanWorkspace(workspaceRoot) || !text(value.candidateId).trim()) return null;
+    var activities = Array.isArray(value.activities) ? value.activities.filter(function (activity) {
+      return activity && text(activity.activityId).trim();
+    }).map(function (activity) {
+      return {
+        activityId: text(activity.activityId),
+        type: text(activity.type || 'activity.event'),
+        occurredAt: text(activity.occurredAt),
+        sourcePluginId: text(activity.sourcePluginId)
+      };
+    }) : [];
+    var activityIds = Array.isArray(value.activityIds) ? value.activityIds.map(text).filter(Boolean) : activities.map(function (activity) { return activity.activityId; });
+    if (!activities.length) {
+      activities = activityIds.map(function (activityId) {
+        return { activityId: activityId, type: 'activity.event', occurredAt: '', sourcePluginId: '' };
+      });
+    }
+    return {
+      candidateId: text(value.candidateId),
+      workspaceRootPath: workspace,
+      startedAt: text(value.startedAt),
+      endedAt: text(value.endedAt),
+      estimatedMinutes: Math.max(0, Number(value.estimatedMinutes || 0)),
+      activityCount: Math.max(0, Number(value.activityCount || activities.length)),
+      activityIds: activityIds,
+      activities: activities
+    };
   }
 
   var ICONS = {
@@ -212,12 +261,6 @@
     var titleEl = el('span', { className: 'journal-title', textContent: scope.mode === 'global' ? 'Journal' : 'Journal · ' + scope.label });
     var countEl = el('span', { className: 'journal-count' });
     var statusEl = el('span', { className: 'journal-status' });
-    var importBtn = el('button', {
-      className: 'journal-btn',
-      'data-journal-action': 'import-activity',
-      textContent: 'Import Activity',
-      onClick: importActivity
-    });
     var addBtn = el('button', {
       className: 'journal-btn primary',
       'data-journal-action': 'add',
@@ -229,7 +272,6 @@
     toolbar.appendChild(el('span', { className: 'journal-spacer' }));
     toolbar.appendChild(statusEl);
     toolbar.appendChild(addBtn);
-    toolbar.appendChild(importBtn);
 
     var listEl = el('div', { className: 'journal-list' });
     containerEl.appendChild(toolbar);
@@ -276,16 +318,22 @@
       modalHost.setAttribute('hidden', 'hidden');
     }
 
-    function showEntryModal(existingEntry) {
+    function showEntryModal(existingEntry, candidate) {
       if (scope.mode !== 'workspace') return;
       var editing = !!existingEntry;
-      var dateInput = el('input', { className: 'journal-input', type: 'date', value: editing ? existingEntry.date : today(), 'data-journal-input': 'date' });
+      var reviewingCandidate = !editing && !!candidate;
+      var dateInput = el('input', { className: 'journal-input', type: 'date', value: editing ? existingEntry.date : (reviewingCandidate ? candidateDate(candidate.startedAt) : today()), 'data-journal-input': 'date' });
       var titleInput = el('input', { className: 'journal-input', type: 'text', placeholder: 'Work item', value: editing ? existingEntry.title : '', 'data-journal-input': 'title' });
-      var summaryInput = el('textarea', { className: 'journal-input textarea', placeholder: 'Summary', 'data-journal-input': 'summary' });
+      var summaryInput = el('textarea', { className: 'journal-input textarea', placeholder: 'Body', 'data-journal-input': 'summary' });
       summaryInput.value = editing ? existingEntry.summary : '';
-      var minutesInput = el('input', { className: 'journal-input', type: 'number', min: '0', step: '15', value: editing ? existingEntry.minutes : '30', 'data-journal-input': 'minutes' });
+      var minutesInput = el('input', { className: 'journal-input', type: 'number', min: '0', step: '1', value: editing ? existingEntry.minutes : (reviewingCandidate ? candidate.estimatedMinutes : '30'), 'data-journal-input': 'minutes' });
       var billableInput = el('input', { type: 'checkbox', 'data-journal-input': 'billable' });
       billableInput.checked = editing ? existingEntry.billable === true : false;
+      var activityInputs = reviewingCandidate ? candidate.activities.map(function (activity) {
+        var input = el('input', { type: 'checkbox', value: activity.activityId, checked: 'checked', 'data-journal-candidate-activity': activity.activityId });
+        input.checked = true;
+        return { input: input, activity: activity };
+      }) : [];
 
       function saveEntry() {
         addOrUpdateEntry(existingEntry, {
@@ -293,9 +341,27 @@
           title: titleInput.value,
           summary: summaryInput.value,
           minutes: minutesInput.value,
-          billable: billableInput.checked === true
+          billable: billableInput.checked === true,
+          sourceCandidateId: reviewingCandidate ? candidate.candidateId : (existingEntry ? existingEntry.sourceCandidateId : ''),
+          activityIds: reviewingCandidate
+            ? activityInputs.filter(function (item) { return item.input.checked === true; }).map(function (item) { return item.activity.activityId; })
+            : (existingEntry ? existingEntry.activityIds : [])
         });
       }
+
+      var candidateContext = reviewingCandidate ? el('div', { className: 'journal-candidate-context', 'data-journal-candidate': candidate.candidateId }, [
+        el('strong', { textContent: 'Possible journal entry' }),
+        el('div', { textContent: 'Workspace: ' + candidate.workspaceRootPath }),
+        el('div', { textContent: 'Time: ' + candidateTime(candidate.startedAt) + ' - ' + candidateTime(candidate.endedAt) }),
+        el('div', { textContent: 'Estimated duration: ' + candidate.estimatedMinutes + ' min' }),
+        el('div', { textContent: 'Activities: ' + candidate.activityCount })
+      ]) : null;
+      var candidateActivities = reviewingCandidate ? el('fieldset', { className: 'journal-candidate-activities' }, [
+        el('legend', { textContent: 'Linked activities' })
+      ].concat(activityInputs.map(function (item) {
+        var detail = (item.activity.occurredAt ? candidateTime(item.activity.occurredAt) + ' · ' : '') + item.activity.type + ' · ' + item.activity.activityId;
+        return el('label', { className: 'journal-candidate-activity' }, [item.input, detail]);
+      }))) : null;
 
       modalHost.innerHTML = '';
       if (typeof modalHost.removeAttribute === 'function') modalHost.removeAttribute('hidden');
@@ -304,14 +370,16 @@
         if (event.target === event.currentTarget) closeEntryModal();
       } }, [
         el('div', { className: 'journal-modal' }, [
-          el('div', { className: 'journal-modal-title', textContent: editing ? 'Edit journal entry' : 'Add journal entry' }),
+          el('div', { className: 'journal-modal-title', textContent: editing ? 'Edit journal entry' : (reviewingCandidate ? 'Review possible journal entry' : 'Add journal entry') }),
+          candidateContext,
           el('div', { className: 'journal-modal-grid' }, [
             el('label', { className: 'journal-field' }, ['Date', dateInput]),
             el('label', { className: 'journal-field' }, ['Minutes', minutesInput]),
             el('label', { className: 'journal-field wide' }, ['Title', titleInput]),
-            el('label', { className: 'journal-field wide' }, ['Summary', summaryInput]),
+            el('label', { className: 'journal-field wide' }, ['Body', summaryInput]),
             el('label', { className: 'journal-billable' }, [billableInput, 'Billable'])
           ]),
+          candidateActivities,
           el('div', { className: 'journal-modal-actions' }, [
             el('button', { className: 'journal-btn ghost', type: 'button', textContent: 'Cancel', onClick: closeEntryModal }),
             el('button', { className: 'journal-btn primary', type: 'button', 'data-journal-action': 'save-entry', textContent: editing ? 'Save changes' : 'Add entry', onClick: saveEntry })
@@ -330,6 +398,13 @@
         render();
         return;
       }
+      var sourceCandidateId = text(formValue && formValue.sourceCandidateId || (existingEntry && existingEntry.sourceCandidateId)).trim();
+      if (!existingEntry && sourceCandidateId && entries.some(function (entry) { return entry.sourceCandidateId === sourceCandidateId; })) {
+        statusText = 'A journal entry already references this candidate';
+        statusClass = 'error';
+        render();
+        return;
+      }
       var entry = normalizeEntry({
         entryId: existingEntry ? existingEntry.entryId : entryId(scope.workspaceRoot, formValue.date || today(), title),
         workspaceRootPath: scope.workspaceRoot,
@@ -338,8 +413,8 @@
         summary: formValue.summary,
         minutes: Number(formValue.minutes || 0),
         billable: formValue.billable === true,
-        sourceSuggestionId: existingEntry ? existingEntry.sourceSuggestionId : '',
-        eventIds: existingEntry ? existingEntry.eventIds : []
+        sourceCandidateId: sourceCandidateId,
+        activityIds: Array.isArray(formValue.activityIds) ? formValue.activityIds : (existingEntry ? existingEntry.activityIds : [])
       }, scope.key);
       if (existingEntry) {
         entries = entries.map(function (item) {
@@ -363,61 +438,6 @@
       persist().then(render);
     }
 
-    function suggestionToEntry(suggestion) {
-      return normalizeEntry({
-        entryId: 'journal:' + suggestion.suggestionId,
-        workspaceRootPath: suggestion.workspaceRootPath || scope.workspaceRoot,
-        date: suggestion.date || today(),
-        title: suggestion.title || 'Activity work',
-        summary: suggestion.summary || '',
-        minutes: Number(suggestion.minutes || 0),
-        billable: false,
-        sourceSuggestionId: suggestion.suggestionId,
-        eventIds: suggestion.eventIds || []
-      }, scope.key);
-    }
-
-    function importActivity() {
-      if (scope.mode !== 'workspace') return;
-      if (!api || !api.commands || typeof api.commands.executeFor !== 'function') {
-        statusText = 'Activity suggestions unavailable';
-        statusClass = 'error';
-        render();
-        return;
-      }
-      importBtn.disabled = true;
-      statusText = 'Importing activity...';
-      statusClass = '';
-      render();
-      api.commands.executeFor(ACTIVITY_PLUGIN_ID, ACTIVITY_WORKLOG_COMMAND, {
-        workspaceRootPath: scope.workspaceRoot
-      }).then(function (response) {
-        var suggestions = response && response.result && Array.isArray(response.result.suggestions)
-          ? response.result.suggestions
-          : [];
-        var imported = 0;
-        suggestions.forEach(function (suggestion) {
-          if (!suggestion || !suggestion.suggestionId) return;
-          var exists = entries.some(function (entry) {
-            return entry.sourceSuggestionId === suggestion.suggestionId;
-          });
-          if (exists) return;
-          entries.push(suggestionToEntry(suggestion));
-          imported += 1;
-        });
-        entries = sortEntries(entries);
-        statusText = imported ? 'Imported ' + imported + ' activity suggestion' + (imported === 1 ? '' : 's') : 'No new activity suggestions';
-        statusClass = '';
-        return persist();
-      }).catch(function (err) {
-        statusText = 'Activity suggestions unavailable: ' + (err && err.message ? err.message : String(err));
-        statusClass = 'error';
-      }).then(function () {
-        importBtn.disabled = false;
-        render();
-      });
-    }
-
     function renderList() {
       listEl.innerHTML = '';
       if (!entries.length) {
@@ -433,7 +453,7 @@
           el('div', { className: 'journal-main' }, [
             el('div', { className: 'journal-entry-title', textContent: entry.title }),
             entry.summary ? el('div', { className: 'journal-summary', textContent: entry.summary }) : null,
-            el('div', { className: 'journal-meta', textContent: entry.workspaceRootPath + (entry.billable ? ' · billable' : ' · non-billable') })
+            el('div', { className: 'journal-meta', textContent: entry.workspaceRootPath + (entry.billable ? ' · billable' : ' · non-billable') + (entry.activityIds.length ? ' · ' + entry.activityIds.length + ' linked activities' : '') })
           ]),
           el('div', { className: 'journal-minutes', textContent: entry.minutes + ' min' }),
           scope.mode === 'workspace' ? el('div', { className: 'journal-row-actions' }, [
@@ -449,12 +469,15 @@
       statusEl.textContent = statusText;
       statusEl.className = 'journal-status' + (statusClass ? ' ' + statusClass : '');
       addBtn.disabled = scope.mode !== 'workspace';
-      importBtn.disabled = scope.mode !== 'workspace' || importBtn.disabled;
       renderList();
     }
 
     render();
-    loadStored().then(render);
+    loadStored().then(function () {
+      render();
+      var candidate = candidateFromRequest(props && props.toolRequest, scope.workspaceRoot);
+      if (candidate) showEntryModal(null, candidate);
+    });
   };
 
   JournalView.unmount = function (containerEl) {

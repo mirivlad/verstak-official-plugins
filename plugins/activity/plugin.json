@@ -50,7 +50,7 @@
     "commands": [
       {
         "id": "verstak.activity.suggestWorklog",
-        "title": "Suggest Worklog From Activity",
+        "title": "List Possible Journal Entries",
         "handler": "verstak.activity.suggestWorklog"
       }
     ],
