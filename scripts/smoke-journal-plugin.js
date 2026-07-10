@@ -257,6 +257,56 @@ function byData(container, attr, value) {
   await flush();
   if (api.storedEntries(projectKey).length !== 1) throw new Error('journal entry was not deleted');
 
+  const completedTodo = {
+    id: 'todo:Project:project-review',
+    title: 'Prepare project review',
+    description: 'Collect factual review notes.',
+    workspaceRootPath: 'Project',
+    completedAt: '2026-06-27T11:15:00.000Z',
+  };
+  const todoView = await mountWithApi(api, {
+    workspaceNode: { name: 'Project' },
+    workspaceRootPath: 'Project',
+    toolRequest: { type: 'completed-todo', todo: completedTodo },
+  });
+  if (!todoView.container.textContent.includes('Create journal entry from completed todo')) {
+    throw new Error('completed Todo did not open the Journal conversion form');
+  }
+  if (!byData(todoView.container, 'data-journal-todo', completedTodo.id)) {
+    throw new Error('completed Todo context was not shown in the Journal form');
+  }
+  if (byData(todoView.container, 'data-journal-input', 'title').value !== completedTodo.title) {
+    throw new Error('completed Todo Journal form did not prefill the exact title');
+  }
+  if (byData(todoView.container, 'data-journal-input', 'summary').value !== completedTodo.description) {
+    throw new Error('completed Todo Journal form did not prefill the exact description');
+  }
+  if (byData(todoView.container, 'data-journal-input', 'minutes').value !== '0') {
+    throw new Error('completed Todo Journal form must not invent a duration');
+  }
+  byData(todoView.container, 'data-journal-input', 'title').value = 'Prepare project review for handoff';
+  byData(todoView.container, 'data-journal-input', 'summary').value = 'Reviewed factual project notes before handoff.';
+  byData(todoView.container, 'data-journal-action', 'save-entry').click();
+  await flush();
+
+  if (api.storedEntries(projectKey).length !== 2) throw new Error('completed Todo Journal entry was not saved');
+  const todoEntry = api.storedEntries(projectKey).find((entry) => entry.sourceTodoId === completedTodo.id);
+  if (!todoEntry) throw new Error('completed Todo reference was not stored on the Journal entry');
+  if (todoEntry.title !== 'Prepare project review for handoff' || todoEntry.summary !== 'Reviewed factual project notes before handoff.') {
+    throw new Error('completed Todo Journal form did not preserve the user-edited fields');
+  }
+
+  const duplicateTodoView = await mountWithApi(api, {
+    workspaceNode: { name: 'Project' },
+    workspaceRootPath: 'Project',
+    toolRequest: { type: 'completed-todo', todo: completedTodo },
+  });
+  byData(duplicateTodoView.container, 'data-journal-action', 'save-entry').click();
+  await flush();
+  if (api.storedEntries(projectKey).filter((entry) => entry.sourceTodoId === completedTodo.id).length !== 1) {
+    throw new Error('completed Todo Journal conversion created a duplicate entry');
+  }
+
   const globalView = await mountWithApi(api, {});
   if (!globalView.container.textContent.includes('Review research capture') && !globalView.container.textContent.includes('Draft brief updated')) {
     throw new Error('global journal did not aggregate remaining entries');
@@ -264,6 +314,8 @@ function byData(container, attr, value) {
 
   component.unmount && component.unmount(container);
   component.unmount && component.unmount(candidateView.container);
+  component.unmount && component.unmount(todoView.container);
+  component.unmount && component.unmount(duplicateTodoView.container);
   component.unmount && component.unmount(globalView.container);
 
   console.log('journal plugin smoke passed');

@@ -488,6 +488,26 @@
       window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', { detail: { kind: 'todo' } }));
     }
 
+    function createJournalEntry(todo) {
+      if (!todo || todo.status !== 'done' || scope.mode !== 'workspace') return;
+      if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function' || typeof CustomEvent === 'undefined') return;
+      window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', {
+        detail: {
+          kind: 'journal',
+          toolRequest: {
+            type: 'completed-todo',
+            todo: {
+              id: todo.id,
+              title: todo.title,
+              description: todo.description,
+              workspaceRootPath: scope.workspaceRoot,
+              completedAt: todo.completedAt
+            }
+          }
+        }
+      }));
+    }
+
     function renderTodoMeta(todo) {
       var meta = [];
       var workspace = cleanWorkspace(todo.workspaceRootPath);
@@ -521,6 +541,9 @@
           actionButtons.push(el('button', { className: 'todo-btn', type: 'button', 'data-todo-action': 'cancel', textContent: 'Cancel', onClick: function () { setTodoStatus(todo, 'cancelled'); } }));
         } else {
           actionButtons.push(el('button', { className: 'todo-btn', type: 'button', 'data-todo-action': 'reopen', textContent: 'Reopen', onClick: function () { setTodoStatus(todo, 'open'); } }));
+        }
+        if (scope.mode === 'workspace' && todo.status === 'done') {
+          actionButtons.push(el('button', { className: 'todo-btn', type: 'button', 'data-todo-action': 'create-journal-entry', textContent: 'Create Journal Entry', onClick: function () { createJournalEntry(todo); } }));
         }
         actionButtons.push(el('button', { className: 'todo-btn', type: 'button', 'data-todo-action': 'edit', textContent: 'Edit', onClick: function () { showTodoModal(todo); } }));
         actionButtons.push(el('button', { className: 'todo-btn danger', type: 'button', 'data-todo-action': 'delete', textContent: 'Delete', onClick: function () { deleteTodo(todo); } }));

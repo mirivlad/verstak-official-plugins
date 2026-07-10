@@ -116,16 +116,25 @@ function makeDocument() {
   };
 }
 
-function loadComponent(document) {
+function FakeCustomEvent(type, options = {}) {
+  this.type = type;
+  this.detail = options.detail;
+}
+
+function loadComponent(document, emittedEvents) {
   const registry = {};
   const window = {
     VerstakPluginRegister(pluginId, bundle) {
       registry[pluginId] = bundle.components || {};
     },
+    dispatchEvent(event) {
+      emittedEvents.push(event);
+    },
   };
   window.window = window;
   window.document = document;
-  vm.runInNewContext(source, { console, Date, Math, document, window }, { filename: sourcePath });
+  window.CustomEvent = FakeCustomEvent;
+  vm.runInNewContext(source, { console, Date, Math, CustomEvent: FakeCustomEvent, document, window }, { filename: sourcePath });
   const component = registry['verstak.todo'] && registry['verstak.todo'].TodoView;
   if (!component) throw new Error('TodoView was not registered');
   return component;
@@ -158,12 +167,12 @@ async function flush() {
   for (let index = 0; index < 10; index += 1) await Promise.resolve();
 }
 
-async function mountWithApi(apiState, props, document = makeDocument()) {
-  const component = loadComponent(document);
+async function mountWithApi(apiState, props, emittedEvents = [], document = makeDocument()) {
+  const component = loadComponent(document, emittedEvents);
   const container = new FakeNode('div');
   component.mount(container, props, apiState.api);
   await flush();
-  return { component, container, document };
+  return { component, container, document, emittedEvents };
 }
 
 (async () => {
@@ -208,6 +217,24 @@ async function mountWithApi(apiState, props, document = makeDocument()) {
     throw new Error('mark done did not persist completed state');
   }
   if (!byData(container, 'data-todo-action', 'reopen')) throw new Error('done Todo did not expose reopen action');
+  if (!byData(container, 'data-todo-action', 'create-journal-entry')) throw new Error('done workspace Todo did not expose Journal conversion');
+
+  byData(container, 'data-todo-action', 'create-journal-entry').click();
+  const journalEvent = workspaceView.emittedEvents.find((event) => event.type === 'verstak:workspace-open-tool');
+  if (!journalEvent || !journalEvent.detail || journalEvent.detail.kind !== 'journal') {
+    throw new Error('Todo Journal conversion did not request the Journal workspace tool');
+  }
+  const journalRequest = journalEvent.detail.toolRequest;
+  if (!journalRequest || journalRequest.type !== 'completed-todo' || !journalRequest.todo) {
+    throw new Error('Todo Journal conversion did not send a completed-todo request');
+  }
+  if (journalRequest.todo.id !== createdTodo.id
+    || journalRequest.todo.title !== 'Prepare project review updated'
+    || journalRequest.todo.description !== 'Collect factual review notes.'
+    || journalRequest.todo.workspaceRootPath !== 'Project'
+    || !journalRequest.todo.completedAt) {
+    throw new Error('Todo Journal conversion did not preserve factual completed Todo fields');
+  }
 
   apiState.settings['todos:global'].push({
     id: 'todo-client',
