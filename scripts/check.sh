@@ -227,6 +227,8 @@ if command -v node &>/dev/null; then
   report "journal frontend behavior" $?
   node "$ROOT/scripts/smoke-browser-inbox-plugin.js"
   report "browser inbox frontend behavior" $?
+  node "$ROOT/scripts/smoke-todo-plugin.js"
+  report "todo frontend behavior" $?
   node "$ROOT/scripts/smoke-search-plugin.js"
   report "search frontend behavior" $?
   node "$ROOT/scripts/smoke-secrets-plugin.js"

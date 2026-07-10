@@ -1,0 +1,569 @@
+/* ===========================================================
+   Todo Plugin - Verstak v2 Frontend Bundle
+   Contract: window.VerstakPluginRegister(id, { components })
+   =========================================================== */
+
+(function () {
+  'use strict';
+
+  var PLUGIN_ID = 'verstak.todo';
+  var GLOBAL_KEY = 'todos:global';
+  var MAX_TODOS = 500;
+  var STATUS_VALUES = ['open', 'done', 'cancelled'];
+  var PRIORITY_VALUES = ['low', 'normal', 'high'];
+
+  var STYLES = [
+    '.todo-root{display:flex;flex-direction:column;height:100%;min-height:0;background:var(--vt-color-background,#101020);color:var(--vt-color-text-primary,#f4f7fb);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}',
+    '.todo-toolbar{display:flex;align-items:center;gap:.5rem;min-height:2.75rem;padding:.5rem .75rem;border-bottom:1px solid var(--vt-color-border,#202b46);background:var(--vt-color-surface-muted,#111629);flex-wrap:wrap;flex-shrink:0}',
+    '.todo-title{font-size:.86rem;font-weight:600}.todo-count,.todo-status,.todo-scope{font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3)}.todo-spacer{flex:1}',
+    '.todo-filters{display:flex;align-items:center;gap:.35rem;min-width:0;flex:1;flex-wrap:wrap}',
+    '.todo-input,.todo-select{box-sizing:border-box;min-height:1.9rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-surface,#15152c);color:var(--vt-color-text-primary,#f4f7fb);font:inherit;font-size:.78rem;padding:.32rem .45rem}',
+    '.todo-input.search{width:min(15rem,100%)}.todo-input.textarea{min-height:6.5rem;resize:vertical;line-height:1.4}.todo-select{max-width:12rem}',
+    '.todo-btn{min-height:1.9rem;padding:.32rem .62rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-md,6px);background:var(--vt-color-surface-hover,#1b2440);color:var(--vt-color-text-secondary,#b7c0d4);font-size:.78rem;cursor:pointer}.todo-btn:hover{border-color:var(--vt-color-accent,#4ecca3);color:var(--vt-color-text-primary,#f4f7fb)}.todo-btn.primary{background:var(--vt-color-accent,#4ecca3);border-color:var(--vt-color-accent,#4ecca3);color:#101827}.todo-btn.danger{border-color:rgba(233,69,96,.5);color:#ff9a9a}.todo-btn:disabled{opacity:.45;cursor:default}',
+    '.todo-list{flex:1;min-height:0;overflow:auto;padding:.5rem .75rem .85rem}.todo-empty{height:100%;display:flex;align-items:center;justify-content:center;padding:2rem;text-align:center;color:var(--vt-color-text-muted,#7f8aa3);font-size:.86rem}',
+    '.todo-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.75rem;align-items:start;margin-top:.5rem;padding:.75rem .85rem;border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface,#15152c)}.todo-row:hover{background:var(--vt-color-surface-hover,#1b2440)}.todo-row.done .todo-row-title{text-decoration:line-through;color:var(--vt-color-text-muted,#7f8aa3)}',
+    '.todo-row-main{min-width:0;display:grid;gap:.3rem}.todo-row-head{display:flex;align-items:center;gap:.45rem;min-width:0}.todo-row-title{font-size:.88rem;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.todo-row-description{font-size:.78rem;line-height:1.4;color:var(--vt-color-text-secondary,#b7c0d4);white-space:pre-wrap;overflow-wrap:anywhere}.todo-row-meta{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap;font-size:.71rem;color:var(--vt-color-text-muted,#7f8aa3)}',
+    '.todo-badge{display:inline-flex;align-items:center;min-height:1.2rem;padding:0 .32rem;border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-sm,4px);white-space:nowrap}.todo-badge.high{border-color:rgba(233,69,96,.55);color:#ffadb8}.todo-badge.low{color:#9fb0c8}.todo-badge.overdue,.todo-badge.reminder-due{border-color:rgba(233,69,96,.55);color:#ffadb8}.todo-badge.due-soon{border-color:rgba(255,200,87,.55);color:#ffd77f}',
+    '.todo-row-actions{display:flex;gap:.35rem;flex-wrap:wrap;justify-content:flex-end}.todo-row-actions .todo-btn{padding:.25rem .45rem;font-size:.72rem}',
+    '.todo-modal-host[hidden]{display:none}.todo-modal-overlay{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:1rem;background:rgba(0,0,0,.58)}.todo-modal{width:560px;max-width:96vw;display:grid;gap:.75rem;padding:1rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface,#15152c);box-shadow:0 18px 44px rgba(0,0,0,.38)}.todo-modal-title{font-size:.95rem;font-weight:650}.todo-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:.65rem}.todo-field{display:grid;gap:.3rem;font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3)}.todo-field.wide{grid-column:1/-1}.todo-modal-actions{display:flex;justify-content:flex-end;gap:.5rem}',
+    '@media(max-width:820px){.todo-toolbar{align-items:stretch}.todo-filters{width:100%}.todo-input.search{flex:1}.todo-row{grid-template-columns:1fr}.todo-row-actions{justify-content:flex-start}.todo-form-grid{grid-template-columns:1fr}.todo-field.wide{grid-column:auto}}'
+  ].join('\n');
+
+  function injectStyles() {
+    if (document.getElementById('todo-style-injected')) return;
+    var style = document.createElement('style');
+    style.id = 'todo-style-injected';
+    style.textContent = STYLES;
+    document.head.appendChild(style);
+  }
+
+  function el(tag, attrs, children) {
+    var elem = document.createElement(tag);
+    if (attrs) {
+      Object.keys(attrs).forEach(function (key) {
+        if (attrs[key] == null) return;
+        if (key === 'className') elem.className = attrs[key];
+        else if (key === 'textContent') elem.textContent = attrs[key];
+        else if (key === 'value') elem.value = attrs[key];
+        else if (key === 'checked') elem.checked = attrs[key] === true;
+        else if (key === 'disabled') elem.disabled = attrs[key] === true;
+        else if (key.slice(0, 2) === 'on') elem.addEventListener(key.slice(2).toLowerCase(), attrs[key]);
+        else elem.setAttribute(key, attrs[key]);
+      });
+    }
+    if (children) {
+      (Array.isArray(children) ? children : [children]).forEach(function (child) {
+        if (child == null) return;
+        elem.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
+      });
+    }
+    return elem;
+  }
+
+  function text(value) {
+    return String(value == null ? '' : value);
+  }
+
+  function cleanWorkspace(value) {
+    return text(value).trim().replace(/^\/+|\/+$/g, '');
+  }
+
+  function workspaceFromProps(props) {
+    var node = props && props.workspaceNode;
+    return cleanWorkspace((props && (props.workspaceRootPath || props.workspaceName || props.workspaceNodeId))
+      || (node && (node.rootPath || node.name || node.id)));
+  }
+
+  function scopeFromProps(props) {
+    var workspaceRoot = workspaceFromProps(props || {});
+    return workspaceRoot
+      ? { mode: 'workspace', workspaceRoot: workspaceRoot, label: workspaceRoot }
+      : { mode: 'global', workspaceRoot: '', label: 'All workspaces' };
+  }
+
+  function now() {
+    return new Date().toISOString();
+  }
+
+  function cleanStatus(value) {
+    value = text(value).trim().toLowerCase();
+    return STATUS_VALUES.indexOf(value) === -1 ? 'open' : value;
+  }
+
+  function cleanPriority(value) {
+    value = text(value).trim().toLowerCase();
+    return PRIORITY_VALUES.indexOf(value) === -1 ? 'normal' : value;
+  }
+
+  function cleanDate(value) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(text(value).trim()) ? text(value).trim() : '';
+  }
+
+  function cleanDateTime(value) {
+    value = text(value).trim();
+    if (!value) return '';
+    var date = new Date(value);
+    return isNaN(date.getTime()) ? '' : value;
+  }
+
+  function todoId(workspaceRoot, title) {
+    return 'todo:' + (cleanWorkspace(workspaceRoot) || 'global') + ':' + Date.now() + ':' + Math.random().toString(36).slice(2, 8) + ':' + text(title).trim().slice(0, 20).replace(/\s+/g, '-');
+  }
+
+  function normalizeTodo(value) {
+    value = value || {};
+    var status = cleanStatus(value.status);
+    var createdAt = text(value.createdAt).trim() || now();
+    var completedAt = status === 'done' ? (text(value.completedAt).trim() || createdAt) : '';
+    return {
+      id: text(value.id || todoId(value.workspaceRootPath, value.title)).trim(),
+      title: text(value.title).trim(),
+      description: text(value.description || value.body),
+      workspaceRootPath: cleanWorkspace(value.workspaceRootPath || value.workspaceName),
+      workspaceName: cleanWorkspace(value.workspaceName || value.workspaceRootPath),
+      status: status,
+      priority: cleanPriority(value.priority),
+      dueAt: cleanDate(value.dueAt || value.dueDate),
+      reminderAt: cleanDateTime(value.reminderAt || value.reminderDateTime),
+      createdAt: createdAt,
+      updatedAt: text(value.updatedAt).trim() || createdAt,
+      completedAt: completedAt,
+      sourceUrl: text(value.sourceUrl),
+      linkedJournalEntryId: text(value.linkedJournalEntryId)
+    };
+  }
+
+  function normalizeTodos(value) {
+    if (!Array.isArray(value)) return [];
+    return value.filter(function (item) {
+      return item && typeof item === 'object';
+    }).map(normalizeTodo).filter(function (todo) {
+      return todo.id;
+    }).slice(0, MAX_TODOS);
+  }
+
+  function storageTodos(todoList) {
+    return todoList.map(function (todo) {
+      return {
+        id: todo.id,
+        title: todo.title,
+        description: todo.description,
+        workspaceRootPath: todo.workspaceRootPath,
+        workspaceName: todo.workspaceName || todo.workspaceRootPath || '',
+        status: todo.status,
+        priority: todo.priority,
+        dueAt: todo.dueAt,
+        reminderAt: todo.reminderAt,
+        createdAt: todo.createdAt,
+        updatedAt: todo.updatedAt,
+        completedAt: todo.completedAt,
+        sourceUrl: todo.sourceUrl,
+        linkedJournalEntryId: todo.linkedJournalEntryId
+      };
+    });
+  }
+
+  function sortTodos(todoList) {
+    var seen = {};
+    return todoList.filter(function (todo) {
+      if (!todo || !todo.id || seen[todo.id]) return false;
+      seen[todo.id] = true;
+      return true;
+    }).slice(0, MAX_TODOS);
+  }
+
+  function dateTimeValue(value, endOfDay) {
+    if (!value) return 0;
+    var date = new Date(endOfDay && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value + 'T23:59:59' : value);
+    return isNaN(date.getTime()) ? 0 : date.getTime();
+  }
+
+  function formatDate(value) {
+    if (!value) return '';
+    var date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? value + 'T00:00:00' : value);
+    return isNaN(date.getTime()) ? value : date.toLocaleString(undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: /^\d{4}-\d{2}-\d{2}$/.test(value) ? undefined : '2-digit', minute: /^\d{4}-\d{2}-\d{2}$/.test(value) ? undefined : '2-digit' });
+  }
+
+  function dueState(todo) {
+    if (!todo || todo.status !== 'open') return '';
+    var current = Date.now();
+    var due = dateTimeValue(todo.dueAt, true);
+    if (due && due < current) return 'overdue';
+    if (due && due - current <= 3 * 24 * 60 * 60 * 1000) return 'due-soon';
+    return '';
+  }
+
+  function reminderIsDue(todo) {
+    return !!(todo && todo.status === 'open' && todo.reminderAt && dateTimeValue(todo.reminderAt, false) <= Date.now());
+  }
+
+  function TodoView() {}
+
+  TodoView.mount = function (containerEl, props, api) {
+    injectStyles();
+    containerEl.innerHTML = '';
+    containerEl.className = 'todo-root';
+    containerEl.setAttribute('data-plugin-id', PLUGIN_ID);
+
+    var scope = scopeFromProps(props || {});
+    var todos = [];
+    var workspaceOptions = [];
+    var statusFilter = 'all';
+    var workspaceFilter = '';
+    var sortMode = 'due';
+    var searchQuery = '';
+    var statusText = '';
+    var statusClass = '';
+
+    var toolbar = el('div', { className: 'todo-toolbar' });
+    var titleEl = el('span', { className: 'todo-title', textContent: scope.mode === 'global' ? 'Todos' : 'Todos · ' + scope.label });
+    var countEl = el('span', { className: 'todo-count' });
+    var statusEl = el('span', { className: 'todo-status' });
+    var filtersEl = el('div', { className: 'todo-filters' });
+    var statusFilterEl = el('select', {
+      className: 'todo-select',
+      'data-todo-filter': 'status',
+      onChange: function (event) {
+        statusFilter = cleanStatusFilter(event.target.value);
+        render();
+      }
+    }, [
+      option('all', 'All statuses'),
+      option('open', 'Open'),
+      option('done', 'Done'),
+      option('cancelled', 'Cancelled')
+    ]);
+    var workspaceFilterEl = el('select', {
+      className: 'todo-select',
+      'data-todo-filter': 'workspace',
+      onChange: function (event) {
+        workspaceFilter = cleanWorkspace(event.target.value);
+        render();
+      }
+    });
+    var sortEl = el('select', {
+      className: 'todo-select',
+      'data-todo-filter': 'sort',
+      onChange: function (event) {
+        sortMode = text(event.target.value) || 'due';
+        render();
+      }
+    }, [
+      option('due', 'Sort by due date'),
+      option('reminder', 'Sort by reminder'),
+      option('updated', 'Sort by updated')
+    ]);
+    var searchInput = el('input', {
+      className: 'todo-input search',
+      type: 'search',
+      placeholder: 'Search todos',
+      'data-todo-filter': 'search',
+      onInput: function (event) {
+        searchQuery = text(event.target.value).trim().toLowerCase();
+        render();
+      }
+    });
+    var addBtn = el('button', {
+      className: 'todo-btn primary',
+      type: 'button',
+      'data-todo-action': 'add',
+      textContent: 'Add Todo',
+      onClick: function () { showTodoModal(null); }
+    });
+    var listEl = el('div', { className: 'todo-list' });
+    var modalHost = el('div', { className: 'todo-modal-host', hidden: 'hidden' });
+
+    toolbar.appendChild(titleEl);
+    toolbar.appendChild(countEl);
+    filtersEl.appendChild(statusFilterEl);
+    if (scope.mode === 'global') filtersEl.appendChild(workspaceFilterEl);
+    filtersEl.appendChild(sortEl);
+    filtersEl.appendChild(searchInput);
+    toolbar.appendChild(filtersEl);
+    toolbar.appendChild(el('span', { className: 'todo-spacer' }));
+    toolbar.appendChild(statusEl);
+    toolbar.appendChild(addBtn);
+    containerEl.appendChild(toolbar);
+    containerEl.appendChild(listEl);
+    containerEl.appendChild(modalHost);
+
+    function option(value, label) {
+      return el('option', { value: value, textContent: label });
+    }
+
+    function cleanStatusFilter(value) {
+      value = text(value).trim().toLowerCase();
+      return value === 'all' || STATUS_VALUES.indexOf(value) !== -1 ? value : 'all';
+    }
+
+    function workspaceRoots() {
+      var roots = workspaceOptions.slice();
+      todos.forEach(function (todo) {
+        var workspace = cleanWorkspace(todo.workspaceRootPath);
+        if (workspace && roots.indexOf(workspace) === -1) roots.push(workspace);
+      });
+      if (scope.workspaceRoot && roots.indexOf(scope.workspaceRoot) === -1) roots.push(scope.workspaceRoot);
+      return roots.sort(function (a, b) { return a.localeCompare(b, undefined, { sensitivity: 'base' }); });
+    }
+
+    function renderWorkspaceFilterOptions() {
+      if (scope.mode !== 'global') return;
+      workspaceFilterEl.innerHTML = '';
+      workspaceFilterEl.appendChild(option('', 'All workspaces'));
+      workspaceFilterEl.appendChild(option('__unassigned__', 'Unassigned'));
+      workspaceRoots().forEach(function (workspace) {
+        workspaceFilterEl.appendChild(option(workspace, workspace));
+      });
+      workspaceFilterEl.value = workspaceFilter;
+    }
+
+    function visibleTodos() {
+      var filtered = todos.filter(function (todo) {
+        var workspace = cleanWorkspace(todo.workspaceRootPath);
+        if (scope.mode === 'workspace' && workspace !== scope.workspaceRoot) return false;
+        if (scope.mode === 'global' && workspaceFilter === '__unassigned__' && workspace) return false;
+        if (scope.mode === 'global' && workspaceFilter && workspaceFilter !== '__unassigned__' && workspace !== workspaceFilter) return false;
+        if (statusFilter !== 'all' && todo.status !== statusFilter) return false;
+        if (!searchQuery) return true;
+        return [todo.title, todo.description, todo.workspaceRootPath].join('\n').toLowerCase().indexOf(searchQuery) !== -1;
+      });
+      return filtered.sort(function (a, b) {
+        if (sortMode === 'updated') return text(b.updatedAt).localeCompare(text(a.updatedAt));
+        var aValue = dateTimeValue(sortMode === 'reminder' ? a.reminderAt : a.dueAt, sortMode !== 'reminder') || Number.MAX_SAFE_INTEGER;
+        var bValue = dateTimeValue(sortMode === 'reminder' ? b.reminderAt : b.dueAt, sortMode !== 'reminder') || Number.MAX_SAFE_INTEGER;
+        return aValue - bValue || text(b.updatedAt).localeCompare(text(a.updatedAt));
+      });
+    }
+
+    function persist() {
+      if (!api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve();
+      return api.settings.write(GLOBAL_KEY, storageTodos(sortTodos(todos))).catch(function (err) {
+        statusText = 'Could not save todos: ' + (err && err.message ? err.message : String(err));
+        statusClass = 'error';
+      });
+    }
+
+    function loadStored() {
+      if (!api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve();
+      return api.settings.read().then(function (settings) {
+        todos = sortTodos(normalizeTodos((settings || {})[GLOBAL_KEY]));
+      }).catch(function (err) {
+        statusText = 'Could not load todos: ' + (err && err.message ? err.message : String(err));
+        statusClass = 'error';
+      });
+    }
+
+    function loadWorkspaceOptions() {
+      if (!api || !api.files || typeof api.files.list !== 'function') return Promise.resolve();
+      return api.files.list('').then(function (entries) {
+        workspaceOptions = (Array.isArray(entries) ? entries : []).filter(function (entry) {
+          return text(entry && entry.type).toLowerCase() === 'folder';
+        }).map(function (entry) {
+          return cleanWorkspace(entry.relativePath || entry.name);
+        }).filter(function (workspace) {
+          return workspace && workspace.indexOf('/') === -1;
+        });
+      }).catch(function () {
+        workspaceOptions = [];
+      });
+    }
+
+    function closeTodoModal() {
+      modalHost.innerHTML = '';
+      modalHost.setAttribute('hidden', 'hidden');
+    }
+
+    function showTodoModal(existingTodo) {
+      var editing = !!existingTodo;
+      var titleInput = el('input', { className: 'todo-input', type: 'text', value: editing ? existingTodo.title : '', placeholder: 'Todo title', 'data-todo-input': 'title' });
+      var descriptionInput = el('textarea', { className: 'todo-input textarea', placeholder: 'Optional description', 'data-todo-input': 'description' });
+      descriptionInput.value = editing ? existingTodo.description : '';
+      var priorityInput = el('select', { className: 'todo-select', 'data-todo-input': 'priority' }, [option('low', 'Low'), option('normal', 'Normal'), option('high', 'High')]);
+      priorityInput.value = editing ? existingTodo.priority : 'normal';
+      var dueInput = el('input', { className: 'todo-input', type: 'date', value: editing ? existingTodo.dueAt : '', 'data-todo-input': 'dueAt' });
+      var reminderInput = el('input', { className: 'todo-input', type: 'datetime-local', value: editing ? existingTodo.reminderAt : '', 'data-todo-input': 'reminderAt' });
+      var workspaceInput = null;
+      var workspace = editing ? existingTodo.workspaceRootPath : scope.workspaceRoot;
+      if (scope.mode === 'global') {
+        workspaceInput = el('select', { className: 'todo-select', 'data-todo-input': 'workspaceRootPath' });
+        workspaceInput.appendChild(option('', 'Unassigned'));
+        workspaceRoots().forEach(function (workspaceRoot) {
+          workspaceInput.appendChild(option(workspaceRoot, workspaceRoot));
+        });
+        workspaceInput.value = workspace || '';
+      }
+
+      function saveTodo() {
+        var title = text(titleInput.value).trim();
+        if (!title) {
+          statusText = 'Title is required';
+          statusClass = 'error';
+          render();
+          return;
+        }
+        var workspaceRoot = scope.mode === 'workspace' ? scope.workspaceRoot : cleanWorkspace(workspaceInput && workspaceInput.value);
+        var timestamp = now();
+        var next = normalizeTodo({
+          id: editing ? existingTodo.id : todoId(workspaceRoot, title),
+          title: title,
+          description: descriptionInput.value,
+          workspaceRootPath: workspaceRoot,
+          workspaceName: workspaceRoot,
+          status: editing ? existingTodo.status : 'open',
+          priority: priorityInput.value,
+          dueAt: dueInput.value,
+          reminderAt: reminderInput.value,
+          createdAt: editing ? existingTodo.createdAt : timestamp,
+          updatedAt: timestamp,
+          completedAt: editing ? existingTodo.completedAt : '',
+          sourceUrl: editing ? existingTodo.sourceUrl : '',
+          linkedJournalEntryId: editing ? existingTodo.linkedJournalEntryId : ''
+        });
+        if (editing) {
+          todos = todos.map(function (todo) { return todo.id === existingTodo.id ? next : todo; });
+        } else {
+          todos = [next].concat(todos);
+        }
+        todos = sortTodos(todos);
+        if (workspaceRoot && workspaceOptions.indexOf(workspaceRoot) === -1) workspaceOptions.push(workspaceRoot);
+        closeTodoModal();
+        statusText = editing ? 'Todo updated' : 'Todo added';
+        statusClass = '';
+        persist().then(render);
+      }
+
+      var fields = [
+        el('label', { className: 'todo-field wide' }, ['Title', titleInput]),
+        el('label', { className: 'todo-field wide' }, ['Description', descriptionInput]),
+        el('label', { className: 'todo-field' }, ['Priority', priorityInput]),
+        el('label', { className: 'todo-field' }, ['Due date', dueInput]),
+        el('label', { className: 'todo-field' }, ['Reminder', reminderInput])
+      ];
+      if (workspaceInput) fields.push(el('label', { className: 'todo-field' }, ['Workspace', workspaceInput]));
+      else fields.push(el('div', { className: 'todo-field', textContent: 'Workspace: ' + scope.workspaceRoot }));
+
+      modalHost.innerHTML = '';
+      if (typeof modalHost.removeAttribute === 'function') modalHost.removeAttribute('hidden');
+      modalHost.appendChild(el('div', { className: 'todo-modal-overlay', onClick: function (event) {
+        if (event.target === event.currentTarget) closeTodoModal();
+      } }, [
+        el('div', { className: 'todo-modal' }, [
+          el('div', { className: 'todo-modal-title', textContent: editing ? 'Edit Todo' : 'Add Todo' }),
+          el('div', { className: 'todo-form-grid' }, fields),
+          el('div', { className: 'todo-modal-actions' }, [
+            el('button', { className: 'todo-btn', type: 'button', textContent: 'Cancel', onClick: closeTodoModal }),
+            el('button', { className: 'todo-btn primary', type: 'button', 'data-todo-action': 'save', textContent: editing ? 'Save changes' : 'Add Todo', onClick: saveTodo })
+          ])
+        ])
+      ]));
+      titleInput.focus && titleInput.focus();
+    }
+
+    function setTodoStatus(todo, nextStatus) {
+      var timestamp = now();
+      todos = todos.map(function (item) {
+        if (item.id !== todo.id) return item;
+        return Object.assign({}, item, {
+          status: nextStatus,
+          completedAt: nextStatus === 'done' ? timestamp : '',
+          updatedAt: timestamp
+        });
+      });
+      statusText = nextStatus === 'done' ? 'Todo marked done' : (nextStatus === 'cancelled' ? 'Todo cancelled' : 'Todo reopened');
+      statusClass = '';
+      persist().then(render);
+    }
+
+    function deleteTodo(todo) {
+      todos = todos.filter(function (item) { return item.id !== todo.id; });
+      statusText = 'Todo deleted';
+      statusClass = '';
+      persist().then(render);
+    }
+
+    function openWorkspace(todo) {
+      var workspaceRoot = cleanWorkspace(todo && todo.workspaceRootPath);
+      if (!workspaceRoot || typeof window === 'undefined' || typeof window.dispatchEvent !== 'function' || typeof CustomEvent === 'undefined') return;
+      window.dispatchEvent(new CustomEvent('verstak:workspace-selected', { detail: { workspaceName: workspaceRoot } }));
+      window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', { detail: { kind: 'todo' } }));
+    }
+
+    function renderTodoMeta(todo) {
+      var meta = [];
+      var workspace = cleanWorkspace(todo.workspaceRootPath);
+      var due = dueState(todo);
+      var reminderDue = reminderIsDue(todo);
+      if (scope.mode === 'global') meta.push(el('span', { className: 'todo-badge', textContent: workspace || 'Unassigned' }));
+      meta.push(el('span', { className: 'todo-badge ' + todo.priority, textContent: todo.priority + ' priority' }));
+      meta.push(el('span', { className: 'todo-badge', textContent: todo.status }));
+      if (todo.dueAt) meta.push(el('span', { className: 'todo-badge ' + due, textContent: (due === 'overdue' ? 'Overdue · ' : (due === 'due-soon' ? 'Due soon · ' : '')) + 'Due ' + formatDate(todo.dueAt) }));
+      if (todo.reminderAt) meta.push(el('span', { className: 'todo-badge ' + (reminderDue ? 'reminder-due' : ''), textContent: (reminderDue ? 'Reminder due ' : 'Reminder ') + formatDate(todo.reminderAt) }));
+      return el('div', { className: 'todo-row-meta' }, meta);
+    }
+
+    function renderList() {
+      listEl.innerHTML = '';
+      var visible = visibleTodos();
+      if (!visible.length) {
+        listEl.appendChild(el('div', {
+          className: 'todo-empty',
+          textContent: todos.length ? 'No todos match the current filters.' : 'No todos yet.'
+        }));
+        return;
+      }
+      visible.forEach(function (todo) {
+        var actionButtons = [];
+        if (scope.mode === 'global' && todo.workspaceRootPath) {
+          actionButtons.push(el('button', { className: 'todo-btn', type: 'button', 'data-todo-action': 'open-workspace', textContent: 'Open workspace', onClick: function () { openWorkspace(todo); } }));
+        }
+        if (todo.status === 'open') {
+          actionButtons.push(el('button', { className: 'todo-btn', type: 'button', 'data-todo-action': 'mark-done', textContent: 'Done', onClick: function () { setTodoStatus(todo, 'done'); } }));
+          actionButtons.push(el('button', { className: 'todo-btn', type: 'button', 'data-todo-action': 'cancel', textContent: 'Cancel', onClick: function () { setTodoStatus(todo, 'cancelled'); } }));
+        } else {
+          actionButtons.push(el('button', { className: 'todo-btn', type: 'button', 'data-todo-action': 'reopen', textContent: 'Reopen', onClick: function () { setTodoStatus(todo, 'open'); } }));
+        }
+        actionButtons.push(el('button', { className: 'todo-btn', type: 'button', 'data-todo-action': 'edit', textContent: 'Edit', onClick: function () { showTodoModal(todo); } }));
+        actionButtons.push(el('button', { className: 'todo-btn danger', type: 'button', 'data-todo-action': 'delete', textContent: 'Delete', onClick: function () { deleteTodo(todo); } }));
+        listEl.appendChild(el('div', { className: 'todo-row' + (todo.status === 'done' ? ' done' : ''), 'data-todo-id': todo.id }, [
+          el('div', { className: 'todo-row-main' }, [
+            el('div', { className: 'todo-row-head' }, [
+              el('div', { className: 'todo-row-title', textContent: todo.title || 'Untitled todo' })
+            ]),
+            todo.description ? el('div', { className: 'todo-row-description', textContent: todo.description }) : null,
+            renderTodoMeta(todo)
+          ]),
+          el('div', { className: 'todo-row-actions' }, actionButtons)
+        ]));
+      });
+    }
+
+    function render() {
+      var visible = visibleTodos();
+      countEl.textContent = visible.length === todos.length
+        ? todos.length + ' todo' + (todos.length === 1 ? '' : 's')
+        : visible.length + ' of ' + todos.length + ' todos';
+      statusFilterEl.value = statusFilter;
+      sortEl.value = sortMode;
+      searchInput.value = searchQuery;
+      renderWorkspaceFilterOptions();
+      statusEl.textContent = statusText;
+      statusEl.className = 'todo-status' + (statusClass ? ' ' + statusClass : '');
+      renderList();
+    }
+
+    render();
+    Promise.all([loadStored(), loadWorkspaceOptions()]).then(function () {
+      render();
+    });
+  };
+
+  TodoView.unmount = function (containerEl) {
+    if (containerEl) containerEl.innerHTML = '';
+  };
+
+  window.VerstakPluginRegister(PLUGIN_ID, {
+    components: {
+      TodoView: TodoView
+    }
+  });
+})();

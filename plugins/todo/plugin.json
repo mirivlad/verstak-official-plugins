@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "id": "verstak.todo",
+  "name": "Todos",
+  "version": "0.1.0",
+  "apiVersion": "0.1.0",
+  "description": "Global and workspace todo tracking with due and reminder metadata.",
+  "source": "official",
+  "icon": "list-todo",
+  "provides": [
+    "todo.list",
+    "todo.workspace"
+  ],
+  "permissions": [
+    "files.read",
+    "storage.namespace",
+    "ui.register"
+  ],
+  "frontend": {
+    "entry": "frontend/src/index.js"
+  },
+  "contributes": {
+    "views": [
+      {
+        "id": "verstak.todo.view",
+        "title": "Todos",
+        "icon": "list-todo",
+        "component": "TodoView"
+      }
+    ],
+    "sidebarItems": [
+      {
+        "id": "verstak.todo.sidebar",
+        "title": "Todos",
+        "icon": "list-todo",
+        "view": "verstak.todo.view",
+        "position": 35
+      }
+    ],
+    "workspaceItems": [
+      {
+        "id": "verstak.todo.workspace",
+        "title": "Todos",
+        "icon": "list-todo",
+        "component": "TodoView"
+      }
+    ]
+  }
+}
