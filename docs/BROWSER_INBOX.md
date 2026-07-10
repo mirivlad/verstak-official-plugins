@@ -11,9 +11,9 @@ can be assigned, reassigned, made unassigned, marked processed or unprocessed, a
 deleted.
 
 The local browser receiver adds the currently active workspace before publishing a
-capture event. When it has no active workspace, the capture remains unassigned. The
-frontend never assigns an untagged capture merely because a workspace view happens
-to be open.
+capture event. When it has no active workspace, the capture remains unassigned
+unless an explicit existing domain binding matches it. The frontend never assigns an
+untagged capture merely because a workspace view happens to be open.
 
 Workspace assignment currently uses the top-level vault folder path as the
 identifier because the core workspace model has no separate immutable ID. In the
