@@ -1,0 +1,9 @@
+{
+  "manifest.name": "File Preview",
+  "manifest.description": "Read-only inline image preview provider for vault files.",
+  "contributions.openProviders.verstak.file-preview.image.title": "Image Preview",
+  "ui.openExternal": "Open External",
+  "ui.preview": "Preview",
+  "ui.loading": "Loading...",
+  "ui.error": "Preview error: {error}"
+}

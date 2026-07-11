@@ -315,6 +315,11 @@
       var statusEl = null;
       var alertEl = null;
       var resultsEl = null;
+      function tr(key, params, fallback) {
+        if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
+        return fallback || key;
+      }
+      state.status = tr('ui.minChars', null, 'Enter at least 2 characters.');
 
       function ensureLayout() {
         if (input) return;
@@ -325,7 +330,7 @@
         input = el('input', {
           className: 'search-input',
           type: 'search',
-          placeholder: 'Search files, folders, text',
+          placeholder: tr('ui.placeholder', null, 'Search files, folders, text'),
           value: state.query,
           'data-search-input': 'query',
           onInput: function (event) {
@@ -341,7 +346,7 @@
         containerEl.appendChild(el('div', { className: 'search-toolbar' }, [
           input,
           button,
-          el('span', { className: 'search-scope', title: rootPath || 'Vault' }, [rootPath || 'Vault'])
+          el('span', { className: 'search-scope', title: rootPath || tr('ui.vault', null, 'Vault') }, [rootPath || tr('ui.vault', null, 'Vault')])
         ]));
 
         statusEl = el('div', { className: 'search-status' });
@@ -357,7 +362,7 @@
         if (document.activeElement !== input && input.value !== state.query) {
           input.value = state.query;
         }
-        button.textContent = state.searching ? 'Searching...' : 'Search';
+        button.textContent = state.searching ? tr('ui.searching', null, 'Searching...') : tr('ui.search', null, 'Search');
         button.disabled = !!state.searching;
         statusEl.className = 'search-status' + (state.error ? ' error' : '');
         statusEl.textContent = state.error || state.status;
@@ -365,7 +370,7 @@
         if (state.providerErrors && state.providerErrors.length) {
           if (typeof alertEl.removeAttribute === 'function') alertEl.removeAttribute('hidden');
           alertEl.appendChild(el('details', {}, [
-            el('summary', {}, ['Some plugin search providers did not respond']),
+            el('summary', {}, [tr('ui.providersFailed', null, 'Some plugin search providers did not respond')]),
             el('div', {}, [state.providerErrors.join('; ')])
           ]));
         } else if (typeof alertEl.setAttribute === 'function') {
@@ -373,7 +378,7 @@
         }
         resultsEl.innerHTML = '';
         if (!state.results.length) {
-          resultsEl.appendChild(el('div', { className: 'search-empty' }, [state.searching ? 'Searching...' : 'No results']));
+          resultsEl.appendChild(el('div', { className: 'search-empty' }, [state.searching ? tr('ui.searching', null, 'Searching...') : tr('ui.noResults', null, 'No results')]));
           return;
         }
         state.results.forEach(function (result) {
@@ -391,7 +396,7 @@
             ]),
             result.openable ? el('button', {
               className: 'search-btn search-open-btn',
-              textContent: 'Open',
+              textContent: tr('ui.open', null, 'Open'),
               'data-search-open': result.path,
               onClick: function () {
                 api.workbench.openResource({
@@ -415,7 +420,7 @@
         if (query.length < 2) {
           state.searching = false;
           state.results = [];
-          state.status = 'Enter at least 2 characters.';
+          state.status = tr('ui.minChars', null, 'Enter at least 2 characters.');
           state.error = '';
           state.providerErrors = [];
           render();
@@ -432,7 +437,7 @@
         state.query = String(state.query || '').trim();
         if (state.query.length < 2) {
           state.results = [];
-          state.status = 'Enter at least 2 characters.';
+          state.status = tr('ui.minChars', null, 'Enter at least 2 characters.');
           state.error = '';
           state.providerErrors = [];
           render();
@@ -441,7 +446,7 @@
         state.searching = true;
         state.error = '';
         state.providerErrors = [];
-        state.status = 'Searching...';
+        state.status = tr('ui.searching', null, 'Searching...');
         var seq = searchSeq + 1;
         searchSeq = seq;
         render();
@@ -451,7 +456,7 @@
           var external = await runExternalProviders(api, rootPath, state.query, MAX_RESULTS - results.length);
           if (seq !== searchSeq) return;
           state.results = results.concat(external.results);
-          state.status = state.results.length + ' result' + (state.results.length === 1 ? '' : 's');
+          state.status = tr('ui.count', { count: state.results.length }, state.results.length + ' result' + (state.results.length === 1 ? '' : 's'));
           state.providerErrors = external.errors;
         } catch (err) {
           if (seq !== searchSeq) return;
@@ -507,6 +512,12 @@
 
       setupIntegrations();
       render();
+      if (api.i18n && typeof api.i18n.onDidChangeLocale === 'function') {
+        cleanupFns.push(api.i18n.onDidChangeLocale(function () {
+          if (input) input.setAttribute('placeholder', tr('ui.placeholder', null, 'Search files, folders, text'));
+          render();
+        }));
+      }
       containerEl.__verstakSearchCleanup = function () {
         if (searchTimer) clearTimeout(searchTimer);
         searchSeq += 1;

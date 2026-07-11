@@ -1,0 +1,16 @@
+{
+  "manifest.name": "Поиск",
+  "manifest.description": "Поиск текста в хранилище в пределах рабочего пространства.",
+  "contributions.workspaceItems.verstak.search.workspace.title": "Поиск",
+  "contributions.commands.verstak.search.searchVaultText.title": "Искать текст в хранилище",
+  "contributions.searchProviders.verstak.search.vault-text.label": "Поиск по тексту хранилища",
+  "ui.minChars": "Введите не менее 2 символов.",
+  "ui.placeholder": "Поиск файлов, папок и текста",
+  "ui.vault": "Хранилище",
+  "ui.searching": "Поиск...",
+  "ui.search": "Искать",
+  "ui.providersFailed": "Некоторые поставщики поиска не ответили",
+  "ui.noResults": "Ничего не найдено",
+  "ui.open": "Открыть",
+  "ui.count": "Результатов: {count}"
+}

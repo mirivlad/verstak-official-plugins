@@ -291,6 +291,10 @@
       var linesEl = null;
       var previewEl = null;
       var secretLinksAvailable = false;
+      function tr(key, params, fallback) {
+        if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
+        return fallback || key;
+      }
 
       containerEl.setAttribute('data-editor-mode', editorMode);
       containerEl.setAttribute('data-resource-path', resourcePath);
@@ -298,13 +302,13 @@
 
       var modeLabel = el('span', { className: 'de-toolbar-mode' }, [editorMode]);
       var contextLabel = el('span', { className: 'de-toolbar-context', title: resourcePath }, [resourcePath || fileName(resourcePath)]);
-      var notesBadge = editorMode === 'notes-markdown' ? el('span', { className: 'de-notes-badge', 'data-notes-badge': '' }, ['notes context']) : null;
+      var notesBadge = editorMode === 'notes-markdown' ? el('span', { className: 'de-notes-badge', 'data-notes-badge': '' }, [tr('ui.notesContext', null, 'notes context')]) : null;
       var spacer = el('span', { className: 'de-toolbar-spacer' });
-      var editBtn = isMarkdown ? el('button', { className: 'de-toolbar-btn', 'data-editor-mode-button': 'edit' }, ['Edit']) : null;
-      var previewBtn = isMarkdown ? el('button', { className: 'de-toolbar-btn', 'data-editor-mode-button': 'preview' }, ['Preview']) : null;
-      var splitBtn = isMarkdown ? el('button', { className: 'de-toolbar-btn', 'data-editor-mode-button': 'split' }, ['Split']) : null;
-      var reloadBtn = el('button', { className: 'de-toolbar-btn', 'data-editor-action': 'reload' }, ['Reload']);
-      var saveBtn = el('button', { className: 'de-toolbar-btn', 'data-editor-action': 'save' }, ['Save']);
+      var editBtn = isMarkdown ? el('button', { className: 'de-toolbar-btn', 'data-editor-mode-button': 'edit' }, [tr('ui.edit', null, 'Edit')]) : null;
+      var previewBtn = isMarkdown ? el('button', { className: 'de-toolbar-btn', 'data-editor-mode-button': 'preview' }, [tr('ui.preview', null, 'Preview')]) : null;
+      var splitBtn = isMarkdown ? el('button', { className: 'de-toolbar-btn', 'data-editor-mode-button': 'split' }, [tr('ui.split', null, 'Split')]) : null;
+      var reloadBtn = el('button', { className: 'de-toolbar-btn', 'data-editor-action': 'reload' }, [tr('ui.reload', null, 'Reload')]);
+      var saveBtn = el('button', { className: 'de-toolbar-btn', 'data-editor-action': 'save' }, [tr('ui.save', null, 'Save')]);
       var statusEl = el('span', { className: 'de-status', 'data-save-state': '' });
       var toolbarChildren = [modeLabel, contextLabel];
       if (notesBadge) toolbarChildren.push(notesBadge);
@@ -336,7 +340,7 @@
       containerEl.appendChild(editorWrap);
 
       if (editorMode === 'notes-markdown') {
-        containerEl.appendChild(el('div', { className: 'de-notes-info' }, ['Notes context active. Note actions, backlinks, and graph tools are reserved for the future Notes plugin.']));
+        containerEl.appendChild(el('div', { className: 'de-notes-info' }, [tr('ui.notesInfo', null, 'Notes context active. Note actions, backlinks, and graph tools are reserved for the future Notes plugin.')]));
       }
 
       function updateLineNumbers() {
@@ -349,16 +353,16 @@
 
       function updateStatus() {
         if (saveState === 'saving') {
-          statusEl.textContent = 'Saving...';
+          statusEl.textContent = tr('ui.saving', null, 'Saving...');
           statusEl.className = 'de-status saving';
         } else if (saveState === 'error') {
-          statusEl.textContent = 'Error saving';
+          statusEl.textContent = tr('ui.saveError', null, 'Error saving');
           statusEl.className = 'de-status error';
         } else if (dirty) {
-          statusEl.textContent = 'Modified';
+          statusEl.textContent = tr('ui.modified', null, 'Modified');
           statusEl.className = 'de-status dirty';
         } else if (lastSavedAt) {
-          statusEl.textContent = saveState === 'saved' ? 'Saved ' + lastSavedAt : 'Saved';
+          statusEl.textContent = saveState === 'saved' ? tr('ui.savedAt', { time: lastSavedAt }, 'Saved ' + lastSavedAt) : tr('ui.saved', null, 'Saved');
           statusEl.className = 'de-status saved';
         } else {
           statusEl.textContent = '';
@@ -475,9 +479,9 @@
       }
 
       function reloadFromDisk() {
-        if (dirty && !window.confirm('Discard unsaved changes and reload from disk?')) return;
+        if (dirty && !window.confirm(tr('ui.discardConfirm', null, 'Discard unsaved changes and reload from disk?'))) return;
         editorWrap.innerHTML = '';
-        editorWrap.appendChild(el('div', { className: 'de-loading' }, ['Loading...']));
+        editorWrap.appendChild(el('div', { className: 'de-loading' }, [tr('ui.loading', null, 'Loading...')]));
         var readPromise = api.files.readText(resourcePath);
         readPromise.then(function (content) {
           if (disposed) return;
@@ -490,7 +494,7 @@
           if (disposed) return;
           editorWrap.innerHTML = '';
           editorWrap.appendChild(el('div', { className: 'de-error' }, [
-            el('div', {}, ['Failed to load file']),
+            el('div', {}, [tr('ui.loadFailed', null, 'Failed to load file')]),
             el('div', { className: 'de-error-msg' }, [(err && err.message) ? err.message : String(err)])
           ]));
         });
@@ -534,6 +538,17 @@
 
       loadSecretProviderAvailability();
       reloadFromDisk();
+      var localeUnsubscribe = api.i18n && typeof api.i18n.onDidChangeLocale === 'function'
+        ? api.i18n.onDidChangeLocale(function () {
+          if (notesBadge) notesBadge.textContent = tr('ui.notesContext', null, 'notes context');
+          if (editBtn) editBtn.textContent = tr('ui.edit', null, 'Edit');
+          if (previewBtn) previewBtn.textContent = tr('ui.preview', null, 'Preview');
+          if (splitBtn) splitBtn.textContent = tr('ui.split', null, 'Split');
+          reloadBtn.textContent = tr('ui.reload', null, 'Reload');
+          saveBtn.textContent = tr('ui.save', null, 'Save');
+          updateStatus();
+        })
+        : null;
 
       containerEl.addEventListener('click', function (event) {
         var secretLink = event.target.closest('.secret-link');
@@ -582,6 +597,7 @@
 
       containerEl.__deCleanup = function () {
         disposed = true;
+        if (typeof localeUnsubscribe === 'function') localeUnsubscribe();
         if (saveTimer) clearTimeout(saveTimer);
       };
     },

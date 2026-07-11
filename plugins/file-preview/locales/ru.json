@@ -1,0 +1,9 @@
+{
+  "manifest.name": "Просмотр файлов",
+  "manifest.description": "Встроенный просмотр изображений из хранилища без редактирования.",
+  "contributions.openProviders.verstak.file-preview.image.title": "Просмотр изображения",
+  "ui.openExternal": "Открыть во внешнем приложении",
+  "ui.preview": "Просмотр",
+  "ui.loading": "Загрузка...",
+  "ui.error": "Ошибка просмотра: {error}"
+}

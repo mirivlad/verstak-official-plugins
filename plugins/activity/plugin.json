@@ -5,6 +5,7 @@
   "version": "0.1.0",
   "apiVersion": "0.1.0",
   "description": "Workspace-scoped activity log for public plugin events.",
+  "localization": { "defaultLocale": "en", "locales": { "en": "locales/en.json", "ru": "locales/ru.json" } },
   "source": "official",
   "icon": "activity",
   "provides": [

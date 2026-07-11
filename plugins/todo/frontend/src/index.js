@@ -215,8 +215,13 @@
     var statusText = '';
     var statusClass = '';
 
+    function tr(key, params, fallback) {
+      if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
+      return fallback || key;
+    }
+
     var toolbar = el('div', { className: 'todo-toolbar' });
-    var titleEl = el('span', { className: 'todo-title', textContent: scope.mode === 'global' ? 'Todos' : 'Todos · ' + scope.label });
+    var titleEl = el('span', { className: 'todo-title', textContent: scope.mode === 'global' ? tr('ui.title', null, 'Todos') : tr('ui.workspaceTitle', { workspace: scope.label }, 'Todos · ' + scope.label) });
     var countEl = el('span', { className: 'todo-count' });
     var statusEl = el('span', { className: 'todo-status' });
     var filtersEl = el('div', { className: 'todo-filters' });
@@ -228,10 +233,10 @@
         render();
       }
     }, [
-      option('all', 'All statuses'),
-      option('open', 'Open'),
-      option('done', 'Done'),
-      option('cancelled', 'Cancelled')
+      option('all', tr('ui.allStatuses', null, 'All statuses')),
+      option('open', tr('ui.status.open', null, 'Open')),
+      option('done', tr('ui.status.done', null, 'Done')),
+      option('cancelled', tr('ui.status.cancelled', null, 'Cancelled'))
     ]);
     var workspaceFilterEl = el('select', {
       className: 'todo-select',
@@ -249,14 +254,14 @@
         render();
       }
     }, [
-      option('due', 'Sort by due date'),
-      option('reminder', 'Sort by reminder'),
-      option('updated', 'Sort by updated')
+      option('due', tr('ui.sort.due', null, 'Sort by due date')),
+      option('reminder', tr('ui.sort.reminder', null, 'Sort by reminder')),
+      option('updated', tr('ui.sort.updated', null, 'Sort by updated'))
     ]);
     var searchInput = el('input', {
       className: 'todo-input search',
       type: 'search',
-      placeholder: 'Search todos',
+      placeholder: tr('ui.search', null, 'Search todos'),
       'data-todo-filter': 'search',
       onInput: function (event) {
         searchQuery = text(event.target.value).trim().toLowerCase();
@@ -267,7 +272,7 @@
       className: 'todo-btn primary',
       type: 'button',
       'data-todo-action': 'add',
-      textContent: 'Add Todo',
+      textContent: tr('ui.add', null, 'Add Todo'),
       onClick: function () { showTodoModal(null); }
     });
     var listEl = el('div', { className: 'todo-list' });
@@ -309,8 +314,8 @@
     function renderWorkspaceFilterOptions() {
       if (scope.mode !== 'global') return;
       workspaceFilterEl.innerHTML = '';
-      workspaceFilterEl.appendChild(option('', 'All workspaces'));
-      workspaceFilterEl.appendChild(option('__unassigned__', 'Unassigned'));
+      workspaceFilterEl.appendChild(option('', tr('ui.allWorkspaces', null, 'All workspaces')));
+      workspaceFilterEl.appendChild(option('__unassigned__', tr('ui.unassigned', null, 'Unassigned')));
       workspaceRoots().forEach(function (workspace) {
         workspaceFilterEl.appendChild(option(workspace, workspace));
       });
@@ -338,7 +343,7 @@
     function persist() {
       if (!api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve();
       return api.settings.write(GLOBAL_KEY, storageTodos(sortTodos(todos))).catch(function (err) {
-        statusText = 'Could not save todos: ' + (err && err.message ? err.message : String(err));
+        statusText = tr('ui.saveError', { error: err && err.message ? err.message : String(err) }, 'Could not save todos: ' + (err && err.message ? err.message : String(err)));
         statusClass = 'error';
       });
     }
@@ -348,7 +353,7 @@
       return api.settings.read().then(function (settings) {
         todos = sortTodos(normalizeTodos((settings || {})[GLOBAL_KEY]));
       }).catch(function (err) {
-        statusText = 'Could not load todos: ' + (err && err.message ? err.message : String(err));
+        statusText = tr('ui.loadError', { error: err && err.message ? err.message : String(err) }, 'Could not load todos: ' + (err && err.message ? err.message : String(err)));
         statusClass = 'error';
       });
     }
@@ -375,10 +380,10 @@
 
     function showTodoModal(existingTodo) {
       var editing = !!existingTodo;
-      var titleInput = el('input', { className: 'todo-input', type: 'text', value: editing ? existingTodo.title : '', placeholder: 'Todo title', 'data-todo-input': 'title' });
-      var descriptionInput = el('textarea', { className: 'todo-input textarea', placeholder: 'Optional description', 'data-todo-input': 'description' });
+      var titleInput = el('input', { className: 'todo-input', type: 'text', value: editing ? existingTodo.title : '', placeholder: tr('ui.titlePlaceholder', null, 'Todo title'), 'data-todo-input': 'title' });
+      var descriptionInput = el('textarea', { className: 'todo-input textarea', placeholder: tr('ui.descriptionPlaceholder', null, 'Optional description'), 'data-todo-input': 'description' });
       descriptionInput.value = editing ? existingTodo.description : '';
-      var priorityInput = el('select', { className: 'todo-select', 'data-todo-input': 'priority' }, [option('low', 'Low'), option('normal', 'Normal'), option('high', 'High')]);
+      var priorityInput = el('select', { className: 'todo-select', 'data-todo-input': 'priority' }, [option('low', tr('ui.priority.low', null, 'Low')), option('normal', tr('ui.priority.normal', null, 'Normal')), option('high', tr('ui.priority.high', null, 'High'))]);
       priorityInput.value = editing ? existingTodo.priority : 'normal';
       var dueInput = el('input', { className: 'todo-input', type: 'date', value: editing ? existingTodo.dueAt : '', 'data-todo-input': 'dueAt' });
       var reminderInput = el('input', { className: 'todo-input', type: 'datetime-local', value: editing ? existingTodo.reminderAt : '', 'data-todo-input': 'reminderAt' });
@@ -386,7 +391,7 @@
       var workspace = editing ? existingTodo.workspaceRootPath : scope.workspaceRoot;
       if (scope.mode === 'global') {
         workspaceInput = el('select', { className: 'todo-select', 'data-todo-input': 'workspaceRootPath' });
-        workspaceInput.appendChild(option('', 'Unassigned'));
+        workspaceInput.appendChild(option('', tr('ui.unassigned', null, 'Unassigned')));
         workspaceRoots().forEach(function (workspaceRoot) {
           workspaceInput.appendChild(option(workspaceRoot, workspaceRoot));
         });
@@ -396,7 +401,7 @@
       function saveTodo() {
         var title = text(titleInput.value).trim();
         if (!title) {
-          statusText = 'Title is required';
+          statusText = tr('ui.titleRequired', null, 'Title is required');
           statusClass = 'error';
           render();
           return;
@@ -427,20 +432,20 @@
         todos = sortTodos(todos);
         if (workspaceRoot && workspaceOptions.indexOf(workspaceRoot) === -1) workspaceOptions.push(workspaceRoot);
         closeTodoModal();
-        statusText = editing ? 'Todo updated' : 'Todo added';
+        statusText = editing ? tr('ui.updated', null, 'Todo updated') : tr('ui.added', null, 'Todo added');
         statusClass = '';
         persist().then(render);
       }
 
       var fields = [
-        el('label', { className: 'todo-field wide' }, ['Title', titleInput]),
-        el('label', { className: 'todo-field wide' }, ['Description', descriptionInput]),
-        el('label', { className: 'todo-field' }, ['Priority', priorityInput]),
-        el('label', { className: 'todo-field' }, ['Due date', dueInput]),
-        el('label', { className: 'todo-field' }, ['Reminder', reminderInput])
+        el('label', { className: 'todo-field wide' }, [tr('ui.field.title', null, 'Title'), titleInput]),
+        el('label', { className: 'todo-field wide' }, [tr('ui.field.description', null, 'Description'), descriptionInput]),
+        el('label', { className: 'todo-field' }, [tr('ui.field.priority', null, 'Priority'), priorityInput]),
+        el('label', { className: 'todo-field' }, [tr('ui.field.due', null, 'Due date'), dueInput]),
+        el('label', { className: 'todo-field' }, [tr('ui.field.reminder', null, 'Reminder'), reminderInput])
       ];
-      if (workspaceInput) fields.push(el('label', { className: 'todo-field' }, ['Workspace', workspaceInput]));
-      else fields.push(el('div', { className: 'todo-field', textContent: 'Workspace: ' + scope.workspaceRoot }));
+      if (workspaceInput) fields.push(el('label', { className: 'todo-field' }, [tr('ui.field.workspace', null, 'Workspace'), workspaceInput]));
+      else fields.push(el('div', { className: 'todo-field', textContent: tr('ui.workspaceValue', { workspace: scope.workspaceRoot }, 'Workspace: ' + scope.workspaceRoot) }));
 
       modalHost.innerHTML = '';
       if (typeof modalHost.removeAttribute === 'function') modalHost.removeAttribute('hidden');
@@ -448,11 +453,11 @@
         if (event.target === event.currentTarget) closeTodoModal();
       } }, [
         el('div', { className: 'todo-modal' }, [
-          el('div', { className: 'todo-modal-title', textContent: editing ? 'Edit Todo' : 'Add Todo' }),
+          el('div', { className: 'todo-modal-title', textContent: editing ? tr('ui.edit', null, 'Edit Todo') : tr('ui.add', null, 'Add Todo') }),
           el('div', { className: 'todo-form-grid' }, fields),
           el('div', { className: 'todo-modal-actions' }, [
-            el('button', { className: 'todo-btn', type: 'button', textContent: 'Cancel', onClick: closeTodoModal }),
-            el('button', { className: 'todo-btn primary', type: 'button', 'data-todo-action': 'save', textContent: editing ? 'Save changes' : 'Add Todo', onClick: saveTodo })
+            el('button', { className: 'todo-btn', type: 'button', textContent: tr('ui.cancel', null, 'Cancel'), onClick: closeTodoModal }),
+            el('button', { className: 'todo-btn primary', type: 'button', 'data-todo-action': 'save', textContent: editing ? tr('ui.saveChanges', null, 'Save changes') : tr('ui.add', null, 'Add Todo'), onClick: saveTodo })
           ])
         ])
       ]));
@@ -469,14 +474,14 @@
           updatedAt: timestamp
         });
       });
-      statusText = nextStatus === 'done' ? 'Todo marked done' : (nextStatus === 'cancelled' ? 'Todo cancelled' : 'Todo reopened');
+      statusText = nextStatus === 'done' ? tr('ui.markedDone', null, 'Todo marked done') : (nextStatus === 'cancelled' ? tr('ui.cancelled', null, 'Todo cancelled') : tr('ui.reopened', null, 'Todo reopened'));
       statusClass = '';
       persist().then(render);
     }
 
     function deleteTodo(todo) {
       todos = todos.filter(function (item) { return item.id !== todo.id; });
-      statusText = 'Todo deleted';
+      statusText = tr('ui.deleted', null, 'Todo deleted');
       statusClass = '';
       persist().then(render);
     }
@@ -513,11 +518,11 @@
       var workspace = cleanWorkspace(todo.workspaceRootPath);
       var due = dueState(todo);
       var reminderDue = reminderIsDue(todo);
-      if (scope.mode === 'global') meta.push(el('span', { className: 'todo-badge', textContent: workspace || 'Unassigned' }));
-      meta.push(el('span', { className: 'todo-badge ' + todo.priority, textContent: todo.priority + ' priority' }));
-      meta.push(el('span', { className: 'todo-badge', textContent: todo.status }));
-      if (todo.dueAt) meta.push(el('span', { className: 'todo-badge ' + due, textContent: (due === 'overdue' ? 'Overdue · ' : (due === 'due-soon' ? 'Due soon · ' : '')) + 'Due ' + formatDate(todo.dueAt) }));
-      if (todo.reminderAt) meta.push(el('span', { className: 'todo-badge ' + (reminderDue ? 'reminder-due' : ''), textContent: (reminderDue ? 'Reminder due ' : 'Reminder ') + formatDate(todo.reminderAt) }));
+      if (scope.mode === 'global') meta.push(el('span', { className: 'todo-badge', textContent: workspace || tr('ui.unassigned', null, 'Unassigned') }));
+      meta.push(el('span', { className: 'todo-badge ' + todo.priority, textContent: tr('ui.priorityValue', { priority: tr('ui.priority.' + todo.priority, null, todo.priority) }, todo.priority + ' priority') }));
+      meta.push(el('span', { className: 'todo-badge', textContent: tr('ui.status.' + todo.status, null, todo.status) }));
+      if (todo.dueAt) meta.push(el('span', { className: 'todo-badge ' + due, textContent: tr('ui.dueValue', { prefix: due === 'overdue' ? tr('ui.overduePrefix', null, 'Overdue · ') : (due === 'due-soon' ? tr('ui.dueSoonPrefix', null, 'Due soon · ') : ''), date: formatDate(todo.dueAt) }, (due === 'overdue' ? 'Overdue · ' : (due === 'due-soon' ? 'Due soon · ' : '')) + 'Due ' + formatDate(todo.dueAt)) }));
+      if (todo.reminderAt) meta.push(el('span', { className: 'todo-badge ' + (reminderDue ? 'reminder-due' : ''), textContent: tr(reminderDue ? 'ui.reminderDueValue' : 'ui.reminderValue', { date: formatDate(todo.reminderAt) }, (reminderDue ? 'Reminder due ' : 'Reminder ') + formatDate(todo.reminderAt)) }));
       return el('div', { className: 'todo-row-meta' }, meta);
     }
 
@@ -527,30 +532,30 @@
       if (!visible.length) {
         listEl.appendChild(el('div', {
           className: 'todo-empty',
-          textContent: todos.length ? 'No todos match the current filters.' : 'No todos yet.'
+          textContent: todos.length ? tr('ui.noMatches', null, 'No todos match the current filters.') : tr('ui.empty', null, 'No todos yet.')
         }));
         return;
       }
       visible.forEach(function (todo) {
         var actionButtons = [];
         if (scope.mode === 'global' && todo.workspaceRootPath) {
-          actionButtons.push(el('button', { className: 'todo-btn', type: 'button', 'data-todo-action': 'open-workspace', textContent: 'Open workspace', onClick: function () { openWorkspace(todo); } }));
+          actionButtons.push(el('button', { className: 'todo-btn', type: 'button', 'data-todo-action': 'open-workspace', textContent: tr('ui.openWorkspace', null, 'Open workspace'), onClick: function () { openWorkspace(todo); } }));
         }
         if (todo.status === 'open') {
-          actionButtons.push(el('button', { className: 'todo-btn', type: 'button', 'data-todo-action': 'mark-done', textContent: 'Done', onClick: function () { setTodoStatus(todo, 'done'); } }));
-          actionButtons.push(el('button', { className: 'todo-btn', type: 'button', 'data-todo-action': 'cancel', textContent: 'Cancel', onClick: function () { setTodoStatus(todo, 'cancelled'); } }));
+          actionButtons.push(el('button', { className: 'todo-btn', type: 'button', 'data-todo-action': 'mark-done', textContent: tr('ui.status.done', null, 'Done'), onClick: function () { setTodoStatus(todo, 'done'); } }));
+          actionButtons.push(el('button', { className: 'todo-btn', type: 'button', 'data-todo-action': 'cancel', textContent: tr('ui.cancel', null, 'Cancel'), onClick: function () { setTodoStatus(todo, 'cancelled'); } }));
         } else {
-          actionButtons.push(el('button', { className: 'todo-btn', type: 'button', 'data-todo-action': 'reopen', textContent: 'Reopen', onClick: function () { setTodoStatus(todo, 'open'); } }));
+          actionButtons.push(el('button', { className: 'todo-btn', type: 'button', 'data-todo-action': 'reopen', textContent: tr('ui.reopen', null, 'Reopen'), onClick: function () { setTodoStatus(todo, 'open'); } }));
         }
         if (scope.mode === 'workspace' && todo.status === 'done') {
-          actionButtons.push(el('button', { className: 'todo-btn', type: 'button', 'data-todo-action': 'create-journal-entry', textContent: 'Create Journal Entry', onClick: function () { createJournalEntry(todo); } }));
+          actionButtons.push(el('button', { className: 'todo-btn', type: 'button', 'data-todo-action': 'create-journal-entry', textContent: tr('ui.createJournal', null, 'Create Journal Entry'), onClick: function () { createJournalEntry(todo); } }));
         }
-        actionButtons.push(el('button', { className: 'todo-btn', type: 'button', 'data-todo-action': 'edit', textContent: 'Edit', onClick: function () { showTodoModal(todo); } }));
-        actionButtons.push(el('button', { className: 'todo-btn danger', type: 'button', 'data-todo-action': 'delete', textContent: 'Delete', onClick: function () { deleteTodo(todo); } }));
+        actionButtons.push(el('button', { className: 'todo-btn', type: 'button', 'data-todo-action': 'edit', textContent: tr('ui.editAction', null, 'Edit'), onClick: function () { showTodoModal(todo); } }));
+        actionButtons.push(el('button', { className: 'todo-btn danger', type: 'button', 'data-todo-action': 'delete', textContent: tr('ui.delete', null, 'Delete'), onClick: function () { deleteTodo(todo); } }));
         listEl.appendChild(el('div', { className: 'todo-row' + (todo.status === 'done' ? ' done' : ''), 'data-todo-id': todo.id }, [
           el('div', { className: 'todo-row-main' }, [
             el('div', { className: 'todo-row-head' }, [
-              el('div', { className: 'todo-row-title', textContent: todo.title || 'Untitled todo' })
+              el('div', { className: 'todo-row-title', textContent: todo.title || tr('ui.untitled', null, 'Untitled todo') })
             ]),
             todo.description ? el('div', { className: 'todo-row-description', textContent: todo.description }) : null,
             renderTodoMeta(todo)
@@ -563,8 +568,8 @@
     function render() {
       var visible = visibleTodos();
       countEl.textContent = visible.length === todos.length
-        ? todos.length + ' todo' + (todos.length === 1 ? '' : 's')
-        : visible.length + ' of ' + todos.length + ' todos';
+        ? tr('ui.count', { count: todos.length }, todos.length + ' todo' + (todos.length === 1 ? '' : 's'))
+        : tr('ui.filteredCount', { visible: visible.length, count: todos.length }, visible.length + ' of ' + todos.length + ' todos');
       statusFilterEl.value = statusFilter;
       sortEl.value = sortMode;
       searchInput.value = searchQuery;
@@ -578,6 +583,14 @@
     Promise.all([loadStored(), loadWorkspaceOptions()]).then(function () {
       render();
     });
+    if (api && api.i18n && typeof api.i18n.onDidChangeLocale === 'function') {
+      api.i18n.onDidChangeLocale(function () {
+        titleEl.textContent = scope.mode === 'global' ? tr('ui.title', null, 'Todos') : tr('ui.workspaceTitle', { workspace: scope.label }, 'Todos · ' + scope.label);
+        searchInput.setAttribute('placeholder', tr('ui.search', null, 'Search todos'));
+        addBtn.textContent = tr('ui.add', null, 'Add Todo');
+        render();
+      });
+    }
   };
 
   TodoView.unmount = function (containerEl) {

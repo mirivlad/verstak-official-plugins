@@ -5,6 +5,7 @@
   "version": "0.1.0",
   "apiVersion": "0.1.0",
   "description": "Runtime test plugin for verifying the Verstak platform: manifest loading, capability registration, contribution injection, event bus, and UI rendering.",
+  "localization": { "defaultLocale": "en", "locales": { "en": "locales/en.json", "ru": "locales/ru.json" } },
   "source": "official",
   "icon": "flask",
   "provides": [

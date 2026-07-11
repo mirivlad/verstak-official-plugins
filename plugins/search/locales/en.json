@@ -1,0 +1,16 @@
+{
+  "manifest.name": "Search",
+  "manifest.description": "Workspace-scoped vault text search provider.",
+  "contributions.workspaceItems.verstak.search.workspace.title": "Search",
+  "contributions.commands.verstak.search.searchVaultText.title": "Search Vault Text",
+  "contributions.searchProviders.verstak.search.vault-text.label": "Vault Text Search",
+  "ui.minChars": "Enter at least 2 characters.",
+  "ui.placeholder": "Search files, folders, text",
+  "ui.vault": "Vault",
+  "ui.searching": "Searching...",
+  "ui.search": "Search",
+  "ui.providersFailed": "Some plugin search providers did not respond",
+  "ui.noResults": "No results",
+  "ui.open": "Open",
+  "ui.count": "{count} result(s)"
+}

@@ -5,6 +5,7 @@
   "version": "0.1.0",
   "apiVersion": "0.1.0",
   "description": "Workspace-scoped notes manager for Markdown files in canonical Notes folders with create, rename, trash, and Workbench integration.",
+  "localization": { "defaultLocale": "en", "locales": { "en": "locales/en.json", "ru": "locales/ru.json" } },
   "source": "official",
   "icon": "edit",
   "provides": [

@@ -5,6 +5,7 @@
   "version": "0.1.0",
   "apiVersion": "0.1.0",
   "description": "Global browser capture queue with explicit workspace assignment delivered through the local receiver event protocol.",
+  "localization": { "defaultLocale": "en", "locales": { "en": "locales/en.json", "ru": "locales/ru.json" } },
   "source": "official",
   "icon": "inbox",
   "provides": [

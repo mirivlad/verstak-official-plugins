@@ -5,6 +5,13 @@
 
   let status = 'disabled'
   let interval
+  let locale = api?.i18n?.getLocale?.() || 'en'
+  let unsubscribeLocale
+
+  function tr(key, params, fallback) {
+    locale
+    return api?.i18n?.t?.(key, params, fallback) || fallback || key
+  }
 
   async function loadStatus() {
     try {
@@ -32,11 +39,11 @@
 
   function statusText() {
     const labels = {
-      connected: 'Connected',
-      disconnected: 'Disconnected',
-      disabled: 'Not configured',
-      error: 'Error',
-      revoked: 'Revoked',
+      connected: tr('ui.status.connected', null, 'Connected'),
+      disconnected: tr('ui.status.disconnected', null, 'Disconnected'),
+      disabled: tr('ui.status.disabled', null, 'Not configured'),
+      error: tr('ui.status.error', null, 'Error'),
+      revoked: tr('ui.status.revoked', null, 'Revoked'),
     }
     return labels[status] || status
   }
@@ -50,14 +57,18 @@
   onMount(() => {
     loadStatus()
     interval = setInterval(loadStatus, 15000)
+    unsubscribeLocale = api?.i18n?.onDidChangeLocale?.((nextLocale) => {
+      locale = nextLocale
+    })
   })
 
   onDestroy(() => {
     if (interval) clearInterval(interval)
+    unsubscribeLocale?.()
   })
 </script>
 
-<button class="sync-status-bar" on:click={openSettings} title="Sync: {statusText()}">
+<button class="sync-status-bar" on:click={openSettings} title="{tr('ui.title', null, 'Sync')}: {statusText()}">
   <span class="status-dot" style="background: {statusColor()}"></span>
   <span class="status-label">{statusText()}</span>
 </button>

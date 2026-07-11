@@ -1,0 +1,22 @@
+{
+  "manifest.name": "Стандартный редактор",
+  "manifest.description": "Встроенный редактор и просмотрщик текста и Markdown для Верстака.",
+  "contributions.openProviders.verstak.default-editor.text.title": "Стандартный текстовый редактор",
+  "contributions.openProviders.verstak.default-editor.markdown.title": "Стандартный редактор Markdown",
+  "contributions.openProviders.verstak.default-editor.notes-markdown.title": "Стандартный редактор Markdown-заметок",
+  "ui.notesContext": "контекст заметки",
+  "ui.edit": "Редактировать",
+  "ui.preview": "Просмотр",
+  "ui.split": "Разделить",
+  "ui.reload": "Перезагрузить",
+  "ui.save": "Сохранить",
+  "ui.notesInfo": "Активен контекст заметки. Действия, обратные ссылки и граф будут развиваться в плагине заметок.",
+  "ui.saving": "Сохранение...",
+  "ui.saveError": "Ошибка сохранения",
+  "ui.modified": "Изменён",
+  "ui.savedAt": "Сохранено {time}",
+  "ui.saved": "Сохранено",
+  "ui.discardConfirm": "Отменить несохранённые изменения и перечитать файл с диска?",
+  "ui.loading": "Загрузка...",
+  "ui.loadFailed": "Не удалось загрузить файл"
+}

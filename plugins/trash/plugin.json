@@ -5,6 +5,7 @@
   "version": "0.1.0",
   "apiVersion": "0.1.0",
   "description": "Global vault trash manager for restoring or permanently deleting deleted files and folders.",
+  "localization": { "defaultLocale": "en", "locales": { "en": "locales/en.json", "ru": "locales/ru.json" } },
   "source": "official",
   "icon": "trash",
   "provides": [

@@ -354,9 +354,14 @@
     var statusFilter = 'all';
     var workspaceFilter = '';
     var searchQuery = '';
+    function tr(key, params, fallback) {
+      if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
+      return fallback || key;
+    }
+    statusText = tr('ui.connecting', null, 'Connecting to receiver events...');
 
     var toolbar = el('div', { className: 'browser-inbox-toolbar' });
-    var titleEl = el('span', { className: 'browser-inbox-title', textContent: scope.mode === 'global' ? 'Browser Inbox' : 'Browser Inbox · ' + scope.label });
+    var titleEl = el('span', { className: 'browser-inbox-title', textContent: scope.mode === 'global' ? tr('ui.title', null, 'Browser Inbox') : tr('ui.workspaceTitle', { workspace: scope.label }, 'Browser Inbox · ' + scope.label) });
     var countEl = el('span', { className: 'browser-inbox-count' });
     var statusEl = el('span', { className: 'browser-inbox-status' });
     var filtersEl = el('div', { className: 'browser-inbox-filters' });
@@ -370,10 +375,10 @@
         render();
       }
     }, [
-      el('option', { value: 'all', textContent: 'All captures' }),
-      el('option', { value: 'unassigned', textContent: 'Unassigned' }),
-      el('option', { value: 'unprocessed', textContent: 'Unprocessed' }),
-      el('option', { value: 'processed', textContent: 'Processed' })
+      el('option', { value: 'all', textContent: tr('ui.allCaptures', null, 'All captures') }),
+      el('option', { value: 'unassigned', textContent: tr('ui.unassigned', null, 'Unassigned') }),
+      el('option', { value: 'unprocessed', textContent: tr('ui.unprocessed', null, 'Unprocessed') }),
+      el('option', { value: 'processed', textContent: tr('ui.processed', null, 'Processed') })
     ]);
     var workspaceFilterEl = el('select', {
       className: 'browser-inbox-select',
@@ -388,7 +393,7 @@
     var searchInput = el('input', {
       className: 'browser-inbox-input',
       type: 'search',
-      placeholder: 'Search captures',
+      placeholder: tr('ui.search', null, 'Search captures'),
       'data-browser-inbox-filter': 'search',
       'aria-label': 'Search captures',
       onInput: function (event) {
@@ -402,7 +407,7 @@
     var clearBtn = el('button', {
       className: 'browser-inbox-btn danger',
       'data-browser-inbox-action': 'clear',
-      textContent: 'Clear',
+      textContent: tr('ui.clear', null, 'Clear'),
       onClick: function () {
         clearScope().then(render);
       }
@@ -413,7 +418,7 @@
     if (scope.mode === 'global') {
       filtersEl.appendChild(workspaceFilterEl);
     } else {
-      filtersEl.appendChild(el('span', { className: 'browser-inbox-count', textContent: 'Assigned to this workspace' }));
+      filtersEl.appendChild(el('span', { className: 'browser-inbox-count', textContent: tr('ui.assignedHere', null, 'Assigned to this workspace') }));
     }
     filtersEl.appendChild(searchInput);
     toolbar.appendChild(filtersEl);
@@ -748,25 +753,25 @@
       detailEl.innerHTML = '';
       var capture = selectedCapture();
       if (!capture) {
-        detailEl.appendChild(el('div', { className: 'browser-inbox-detail-empty', textContent: 'Select a capture to inspect it.' }));
+        detailEl.appendChild(el('div', { className: 'browser-inbox-detail-empty', textContent: tr('ui.selectCapture', null, 'Select a capture to inspect it.') }));
         return;
       }
       selectedId = capture.captureId;
       detailEl.appendChild(el('div', { className: 'browser-inbox-detail-title', textContent: displayTitle(capture) }));
       detailEl.appendChild(el('div', { className: 'browser-inbox-meta' }, [
-        el('div', { className: 'browser-inbox-meta-label', textContent: 'Kind' }),
+        el('div', { className: 'browser-inbox-meta-label', textContent: tr('ui.kind', null, 'Kind') }),
         el('div', { className: 'browser-inbox-meta-value', textContent: capture.kind }),
         el('div', { className: 'browser-inbox-meta-label', textContent: 'URL' }),
         el('div', { className: 'browser-inbox-meta-value', textContent: capture.url || '-' }),
-        el('div', { className: 'browser-inbox-meta-label', textContent: 'Domain' }),
+        el('div', { className: 'browser-inbox-meta-label', textContent: tr('ui.domain', null, 'Domain') }),
         el('div', { className: 'browser-inbox-meta-value', textContent: capture.domain || '-' }),
-        el('div', { className: 'browser-inbox-meta-label', textContent: 'Captured' }),
+        el('div', { className: 'browser-inbox-meta-label', textContent: tr('ui.captured', null, 'Captured') }),
         el('div', { className: 'browser-inbox-meta-value', textContent: formatDate(capture.capturedAt) || '-' }),
         el('div', { className: 'browser-inbox-meta-label', textContent: 'Browser' }),
         el('div', { className: 'browser-inbox-meta-value', textContent: capture.browserName || capture.source || '-' }),
-        el('div', { className: 'browser-inbox-meta-label', textContent: 'Workspace' }),
+        el('div', { className: 'browser-inbox-meta-label', textContent: tr('ui.workspace', null, 'Workspace') }),
         el('div', { className: 'browser-inbox-meta-value', textContent: capture.workspaceRootPath || 'Unassigned' }),
-        el('div', { className: 'browser-inbox-meta-label', textContent: 'Status' }),
+        el('div', { className: 'browser-inbox-meta-label', textContent: tr('ui.status', null, 'Status') }),
         el('div', { className: 'browser-inbox-meta-value', textContent: capture.processed ? 'Processed' : 'Unprocessed' })
       ]));
       var assignmentSelect = el('select', {
@@ -819,7 +824,7 @@
         actionButtons.push(el('button', {
           className: 'browser-inbox-btn',
           'data-browser-inbox-action': 'create-note',
-          textContent: 'Create Note',
+          textContent: tr('ui.createNote', null, 'Create Note'),
           onClick: function () {
             createNoteFromCapture(capture);
           }
@@ -828,7 +833,7 @@
           actionButtons.push(el('button', {
             className: 'browser-inbox-btn',
             'data-browser-inbox-action': 'create-link',
-            textContent: 'Create Link',
+            textContent: tr('ui.createLink', null, 'Create Link'),
             onClick: function () {
               createLinkFromCapture(capture);
             }
@@ -838,7 +843,7 @@
           actionButtons.push(el('button', {
             className: 'browser-inbox-btn',
             'data-browser-inbox-action': 'create-file',
-            textContent: 'Create File',
+            textContent: tr('ui.createFile', null, 'Create File'),
             onClick: function () {
               createFileFromCapture(capture);
             }
@@ -848,7 +853,7 @@
       actionButtons.push(el('button', {
           className: 'browser-inbox-btn danger',
           'data-browser-inbox-action': 'remove',
-          textContent: 'Delete',
+          textContent: tr('ui.delete', null, 'Delete'),
           onClick: function () {
             removeCapture(capture.captureId);
           }
@@ -941,6 +946,14 @@
     }).then(function () {
       if (!disposed) render();
     });
+    if (api && api.i18n && typeof api.i18n.onDidChangeLocale === 'function') {
+      api.i18n.onDidChangeLocale(function () {
+        titleEl.textContent = scope.mode === 'global' ? tr('ui.title', null, 'Browser Inbox') : tr('ui.workspaceTitle', { workspace: scope.label }, 'Browser Inbox · ' + scope.label);
+        searchInput.setAttribute('placeholder', tr('ui.search', null, 'Search captures'));
+        clearBtn.textContent = tr('ui.clear', null, 'Clear');
+        render();
+      });
+    }
 
     containerEl.__browserInboxUnmount = function () {
       disposed = true;
@@ -967,6 +980,11 @@
       containerEl.innerHTML = '';
       containerEl.className = 'browser-inbox-settings';
 
+      function tr(key, params, fallback) {
+        if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
+        return fallback || key;
+      }
+
       var receiverURLInput = el('input', {
         className: 'browser-inbox-settings-input',
         type: 'text',
@@ -988,27 +1006,27 @@
         className: 'browser-inbox-btn',
         type: 'button',
         'data-browser-inbox-settings-action': 'copy-url',
-        textContent: 'Copy URL'
+        textContent: tr('ui.copyUrl', null, 'Copy URL')
       });
       var copyTokenButton = el('button', {
         className: 'browser-inbox-btn',
         type: 'button',
         'data-browser-inbox-settings-action': 'copy-token',
-        textContent: 'Copy Token'
+        textContent: tr('ui.copyToken', null, 'Copy Token')
       });
       var rotateTokenButton = el('button', {
         className: 'browser-inbox-btn danger',
         type: 'button',
         'data-browser-inbox-settings-action': 'rotate-token',
-        textContent: 'Rotate Token'
+        textContent: tr('ui.rotateToken', null, 'Rotate Token')
       });
 
       containerEl.appendChild(el('div', { className: 'browser-inbox-settings-field' }, [
-        el('label', { className: 'browser-inbox-settings-label', textContent: 'Receiver URL' }),
+        el('label', { className: 'browser-inbox-settings-label', textContent: tr('ui.receiverUrl', null, 'Receiver URL') }),
         receiverURLInput
       ]));
       containerEl.appendChild(el('div', { className: 'browser-inbox-settings-field' }, [
-        el('label', { className: 'browser-inbox-settings-label', textContent: 'Pairing Token' }),
+        el('label', { className: 'browser-inbox-settings-label', textContent: tr('ui.pairingToken', null, 'Pairing Token') }),
         receiverTokenInput
       ]));
       containerEl.appendChild(el('div', { className: 'browser-inbox-settings-actions' }, [
@@ -1090,6 +1108,13 @@
       });
 
       loadPairing();
+      if (api && api.i18n && typeof api.i18n.onDidChangeLocale === 'function') {
+        api.i18n.onDidChangeLocale(function () {
+          copyURLButton.textContent = tr('ui.copyUrl', null, 'Copy URL');
+          copyTokenButton.textContent = tr('ui.copyToken', null, 'Copy Token');
+          rotateTokenButton.textContent = tr('ui.rotateToken', null, 'Rotate Token');
+        });
+      }
     },
     unmount: function (containerEl) {
       if (containerEl) containerEl.innerHTML = '';

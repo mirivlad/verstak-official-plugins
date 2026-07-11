@@ -369,6 +369,11 @@
       }
       var navigatingHistory = false;
 
+      function tr(key, params, fallback) {
+        if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
+        return fallback || key;
+      }
+
       function scopedPath(local) {
         local = cleanPath(local);
         return workspaceRoot ? (local ? workspaceRoot + '/' + local : workspaceRoot) : local;
@@ -390,26 +395,26 @@
 
       var toolbar = el('div', { className: 'files-toolbar' });
       var breadcrumb = el('div', { className: 'files-breadcrumb' });
-      var backBtn = iconButton('back', 'Back', 'back', goBack);
-      var forwardBtn = iconButton('forward', 'Forward', 'forward', goForward);
-      var upBtn = iconButton('up', 'Up', 'up', goUp);
-      var refreshBtn = iconButton('refresh', 'Refresh', 'refresh', loadEntries);
-      var newFolderBtn = iconButton('new-folder', 'New folder', 'folderAdd', function () { startCreate('folder'); });
-      var newMdBtn = iconButton('new-markdown', 'New markdown file', 'markdownAdd', function () { startCreate('markdown'); });
-      var newTextBtn = iconButton('new-text', 'New text file', 'textAdd', function () { startCreate('text'); });
-      var openBtn = iconButton('open', 'Open', 'open', function () { openEntry(selectedEntry()); });
-      var renameBtn = iconButton('rename', 'Rename', 'rename', function () { beginRename(); });
-      var trashBtn = iconButton('trash', 'Move to trash', 'trash', function () { trashEntry(); });
-      var cutBtn = iconButton('cut', 'Cut', 'cut', function () { cutSelection(); });
-      var copyBtn = iconButton('copy', 'Copy', 'copy', function () { copySelection(); });
-      var pasteBtn = iconButton('paste', 'Paste', 'paste', function () { pasteEntry(); });
-      var filterInput = el('input', { className: 'files-filter', 'data-files-filter': '', placeholder: 'Filter current folder' });
+      var backBtn = iconButton('back', tr('ui.back', null, 'Back'), 'back', goBack);
+      var forwardBtn = iconButton('forward', tr('ui.forward', null, 'Forward'), 'forward', goForward);
+      var upBtn = iconButton('up', tr('ui.up', null, 'Up'), 'up', goUp);
+      var refreshBtn = iconButton('refresh', tr('ui.refresh', null, 'Refresh'), 'refresh', loadEntries);
+      var newFolderBtn = iconButton('new-folder', tr('ui.newFolder', null, 'New folder'), 'folderAdd', function () { startCreate('folder'); });
+      var newMdBtn = iconButton('new-markdown', tr('ui.newMarkdown', null, 'New markdown file'), 'markdownAdd', function () { startCreate('markdown'); });
+      var newTextBtn = iconButton('new-text', tr('ui.newText', null, 'New text file'), 'textAdd', function () { startCreate('text'); });
+      var openBtn = iconButton('open', tr('ui.open', null, 'Open'), 'open', function () { openEntry(selectedEntry()); });
+      var renameBtn = iconButton('rename', tr('ui.rename', null, 'Rename'), 'rename', function () { beginRename(); });
+      var trashBtn = iconButton('trash', tr('ui.trash', null, 'Move to trash'), 'trash', function () { trashEntry(); });
+      var cutBtn = iconButton('cut', tr('ui.cut', null, 'Cut'), 'cut', function () { cutSelection(); });
+      var copyBtn = iconButton('copy', tr('ui.copy', null, 'Copy'), 'copy', function () { copySelection(); });
+      var pasteBtn = iconButton('paste', tr('ui.paste', null, 'Paste'), 'paste', function () { pasteEntry(); });
+      var filterInput = el('input', { className: 'files-filter', 'data-files-filter': '', placeholder: tr('ui.filter', null, 'Filter current folder') });
       var sortSelect = el('select', { className: 'files-sort', 'data-files-sort': '' }, [
-        el('option', { value: 'folder-name' }, ['Folders + name']),
-        el('option', { value: 'name-asc' }, ['Name']),
-        el('option', { value: 'type' }, ['Type']),
-        el('option', { value: 'modified-desc' }, ['Modified']),
-        el('option', { value: 'size-desc' }, ['Size'])
+        el('option', { value: 'folder-name' }, [tr('ui.sort.foldersName', null, 'Folders + name')]),
+        el('option', { value: 'name-asc' }, [tr('ui.column.name', null, 'Name')]),
+        el('option', { value: 'type' }, [tr('ui.column.type', null, 'Type')]),
+        el('option', { value: 'modified-desc' }, [tr('ui.column.modified', null, 'Modified')]),
+        el('option', { value: 'size-desc' }, [tr('ui.column.size', null, 'Size')])
       ]);
       trashBtn.classList.add('danger');
       toolbar.appendChild(breadcrumb);
@@ -430,8 +435,8 @@
       var createField = el('div', { className: 'files-field-stack' });
       var createInput = el('input', { className: 'files-create-input', 'data-files-create-input': '' });
       var createError = el('div', { className: 'files-panel-error', 'data-files-create-error': '', role: 'alert' });
-      var createConfirm = el('button', { className: 'files-toolbar-btn', 'data-files-create-confirm': '' }, ['Create']);
-      var createCancel = el('button', { className: 'files-toolbar-btn' }, ['Cancel']);
+      var createConfirm = el('button', { className: 'files-toolbar-btn', 'data-files-create-confirm': '' }, [tr('ui.create', null, 'Create')]);
+      var createCancel = el('button', { className: 'files-toolbar-btn' }, [tr('ui.cancel', null, 'Cancel')]);
       createField.appendChild(createInput);
       createField.appendChild(createError);
       createPanel.appendChild(createField);
@@ -443,8 +448,8 @@
       var renameField = el('div', { className: 'files-field-stack' });
       var renameInput = el('input', { className: 'files-rename-input', 'data-files-rename-input': '' });
       var renameError = el('div', { className: 'files-panel-error', 'data-files-rename-error': '', role: 'alert' });
-      var renameConfirm = el('button', { className: 'files-toolbar-btn', 'data-files-rename-confirm': '' }, ['Rename']);
-      var renameCancel = el('button', { className: 'files-toolbar-btn' }, ['Cancel']);
+      var renameConfirm = el('button', { className: 'files-toolbar-btn', 'data-files-rename-confirm': '' }, [tr('ui.rename', null, 'Rename')]);
+      var renameCancel = el('button', { className: 'files-toolbar-btn' }, [tr('ui.cancel', null, 'Cancel')]);
       renameField.appendChild(renameInput);
       renameField.appendChild(renameError);
       renamePanel.appendChild(renameField);
@@ -598,27 +603,27 @@
 
       function renderEmptyFolderState() {
         return el('div', { className: 'files-empty' }, [
-          el('div', { className: 'files-empty-title' }, ['Empty folder']),
+          el('div', { className: 'files-empty-title' }, [tr('ui.emptyFolder', null, 'Empty folder')]),
           el('div', { className: 'files-empty-actions' }, [
-            emptyCreateAction('new-folder', 'New folder', 'folder', 'folderAdd'),
-            emptyCreateAction('new-markdown', 'New markdown file', 'markdown', 'markdownAdd'),
-            emptyCreateAction('new-text', 'New text file', 'text', 'textAdd')
+            emptyCreateAction('new-folder', tr('ui.newFolder', null, 'New folder'), 'folder', 'folderAdd'),
+            emptyCreateAction('new-markdown', tr('ui.newMarkdown', null, 'New markdown file'), 'markdown', 'markdownAdd'),
+            emptyCreateAction('new-text', tr('ui.newText', null, 'New text file'), 'text', 'textAdd')
           ])
         ]);
       }
 
       function renderNoMatchesState() {
         return el('div', { className: 'files-empty' }, [
-          el('div', { className: 'files-empty-title' }, ['No matches']),
+          el('div', { className: 'files-empty-title' }, [tr('ui.noMatches', null, 'No matches')]),
           el('div', { className: 'files-empty-actions' }, [
             el('button', {
               className: 'files-empty-btn',
               'data-files-empty-action': 'clear-filter',
               'data-files-icon': 'refresh',
               type: 'button',
-              title: 'Clear filter',
-              'aria-label': 'Clear filter',
-              innerHTML: svgIcon(ACTION_ICONS.refresh) + '<span>Clear filter</span>',
+              title: tr('ui.clearFilter', null, 'Clear filter'),
+              'aria-label': tr('ui.clearFilter', null, 'Clear filter'),
+              innerHTML: svgIcon(ACTION_ICONS.refresh) + '<span>' + tr('ui.clearFilter', null, 'Clear filter') + '</span>',
               onClick: function () {
                 filterText = '';
                 filterInput.value = '';
@@ -633,11 +638,11 @@
       function renderList() {
         listContainer.innerHTML = '';
         var header = el('div', { className: 'files-header' }, [
-          el('span', {}, ['Name']),
-          el('span', {}, ['Type']),
-          el('span', {}, ['Size']),
-          el('span', {}, ['Modified']),
-          el('span', {}, ['Actions'])
+          el('span', {}, [tr('ui.column.name', null, 'Name')]),
+          el('span', {}, [tr('ui.column.type', null, 'Type')]),
+          el('span', {}, [tr('ui.column.size', null, 'Size')]),
+          el('span', {}, [tr('ui.column.modified', null, 'Modified')]),
+          el('span', {}, [tr('ui.column.actions', null, 'Actions')])
         ]);
         listContainer.appendChild(header);
 
@@ -687,9 +692,9 @@
             el('span', { className: 'files-item-meta hide-narrow' }, [entry.type === 'folder' ? '' : formatSize(entry.size)]),
             el('span', { className: 'files-item-meta hide-narrow' }, [formatDate(entry.modifiedAt)]),
             el('div', { className: 'files-row-actions' }, [
-              iconButton('row-open', 'Open', 'open', function (event) { event.stopPropagation(); openEntry(entry); }, 'files-row-btn'),
-              iconButton('row-rename', 'Rename', 'rename', function (event) { event.stopPropagation(); beginRename(entry); }, 'files-row-btn'),
-              iconButton('row-trash', 'Move to trash', 'trash', function (event) { event.stopPropagation(); trashEntry(entry); }, 'files-row-btn danger')
+              iconButton('row-open', tr('ui.open', null, 'Open'), 'open', function (event) { event.stopPropagation(); openEntry(entry); }, 'files-row-btn'),
+              iconButton('row-rename', tr('ui.rename', null, 'Rename'), 'rename', function (event) { event.stopPropagation(); beginRename(entry); }, 'files-row-btn'),
+              iconButton('row-trash', tr('ui.trash', null, 'Move to trash'), 'trash', function (event) { event.stopPropagation(); trashEntry(entry); }, 'files-row-btn danger')
             ])
           ]);
           listContainer.appendChild(row);
@@ -701,7 +706,7 @@
         selectedPaths = {};
         lastClickedPath = '';
         listContainer.innerHTML = '';
-        listContainer.appendChild(el('div', { className: 'files-loading' }, ['Loading...']));
+        listContainer.appendChild(el('div', { className: 'files-loading' }, [tr('ui.loading', null, 'Loading...')]));
         updateBreadcrumb();
         api.files.list(scopedPath(currentPath)).then(function (result) {
           if (disposed) return;
@@ -711,7 +716,7 @@
           if (disposed) return;
           listContainer.innerHTML = '';
           listContainer.appendChild(el('div', { className: 'files-error' }, [
-            el('div', {}, ['Failed to load files']),
+            el('div', {}, [tr('ui.loadFailed', null, 'Failed to load files')]),
             el('div', { className: 'files-error-msg' }, [(err && err.message) ? err.message : String(err)])
           ]));
         });
@@ -1478,6 +1483,29 @@
       loadContributionActions();
       loadEntries();
 
+      var localeUnsubscribe = null;
+      if (api.i18n && typeof api.i18n.onDidChangeLocale === 'function') {
+        localeUnsubscribe = api.i18n.onDidChangeLocale(function () {
+          [
+            [backBtn, 'ui.back', 'Back'], [forwardBtn, 'ui.forward', 'Forward'], [upBtn, 'ui.up', 'Up'],
+            [refreshBtn, 'ui.refresh', 'Refresh'], [newFolderBtn, 'ui.newFolder', 'New folder'],
+            [newMdBtn, 'ui.newMarkdown', 'New markdown file'], [newTextBtn, 'ui.newText', 'New text file'],
+            [openBtn, 'ui.open', 'Open'], [renameBtn, 'ui.rename', 'Rename'], [trashBtn, 'ui.trash', 'Move to trash'],
+            [cutBtn, 'ui.cut', 'Cut'], [copyBtn, 'ui.copy', 'Copy'], [pasteBtn, 'ui.paste', 'Paste']
+          ].forEach(function (item) {
+            var label = tr(item[1], null, item[2]);
+            item[0].setAttribute('title', label);
+            item[0].setAttribute('aria-label', label);
+          });
+          filterInput.setAttribute('placeholder', tr('ui.filter', null, 'Filter current folder'));
+          createConfirm.textContent = tr('ui.create', null, 'Create');
+          createCancel.textContent = tr('ui.cancel', null, 'Cancel');
+          renameConfirm.textContent = tr('ui.rename', null, 'Rename');
+          renameCancel.textContent = tr('ui.cancel', null, 'Cancel');
+          renderList();
+        });
+      }
+
       var fileChangedUnsubscribe = null;
       if (api.events && typeof api.events.subscribe === 'function') {
         api.events.subscribe('file.changed', function (event) {
@@ -1492,6 +1520,7 @@
 
       containerEl.__filesCleanup = function () {
         disposed = true;
+        if (typeof localeUnsubscribe === 'function') localeUnsubscribe();
         if (typeof fileChangedUnsubscribe === 'function') fileChangedUnsubscribe();
         document.removeEventListener('click', onDocClick);
         document.removeEventListener('keydown', onDocKeydown);

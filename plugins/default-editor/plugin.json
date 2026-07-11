@@ -5,6 +5,7 @@
   "version": "0.1.0",
   "apiVersion": "0.1.0",
   "description": "Built-in text and markdown editor/viewer for Verstak. Provides openProviders for generic text, generic markdown, and notes-context markdown files.",
+  "localization": { "defaultLocale": "en", "locales": { "en": "locales/en.json", "ru": "locales/ru.json" } },
   "source": "official",
   "icon": "edit",
   "provides": [

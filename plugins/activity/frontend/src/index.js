@@ -409,19 +409,23 @@
     var candidateSourceEvents = [];
     var candidates = [];
     var dismissedByWorkspace = {};
-    var statusText = 'Loading activity...';
+    function tr(key, params, fallback) {
+      if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
+      return fallback || key;
+    }
+    var statusText = tr('ui.loading', null, 'Loading activity...');
     var statusClass = '';
     var disposed = false;
     var unsubscribers = [];
 
     var toolbar = el('div', { className: 'activity-toolbar' });
-    var titleEl = el('span', { className: 'activity-title', textContent: scope.mode === 'global' ? 'Activity' : 'Activity · ' + scope.label });
+    var titleEl = el('span', { className: 'activity-title', textContent: scope.mode === 'global' ? tr('ui.title', null, 'Activity') : tr('ui.workspaceTitle', { workspace: scope.label }, 'Activity · ' + scope.label) });
     var countEl = el('span', { className: 'activity-count' });
     var statusEl = el('span', { className: 'activity-status' });
     var clearBtn = el('button', {
       className: 'activity-btn danger',
       'data-activity-action': 'clear',
-      textContent: 'Clear',
+      textContent: tr('ui.clear', null, 'Clear'),
       onClick: function () {
         if (scope.mode === 'global') {
           clearGlobal().then(render);
@@ -489,7 +493,7 @@
         ? events.filter(function (item) { return !item._storageKey || item._storageKey === GLOBAL_KEY; })
         : events;
       return api.settings.write(scope.key, storageEvents(toStore)).then(persistCandidateCaches).catch(function (err) {
-        statusText = 'Could not save activity: ' + (err && err.message ? err.message : String(err));
+        statusText = tr('ui.saveError', { error: err && err.message ? err.message : String(err) }, 'Could not save activity: ' + (err && err.message ? err.message : String(err)));
         statusClass = 'error';
       });
     }
@@ -513,10 +517,10 @@
           return api.settings.write(key, []);
         }));
       }).then(function () {
-        statusText = 'Activity cleared';
+        statusText = tr('ui.cleared', null, 'Activity cleared');
         statusClass = '';
       }).catch(function (err) {
-        statusText = 'Could not clear activity: ' + (err && err.message ? err.message : String(err));
+        statusText = tr('ui.clearError', { error: err && err.message ? err.message : String(err) }, 'Could not clear activity: ' + (err && err.message ? err.message : String(err)));
         statusClass = 'error';
       });
     }
@@ -525,8 +529,8 @@
       listEl.innerHTML = '';
       if (events.length === 0) {
         listEl.appendChild(el('div', { className: 'activity-empty' }, [
-          el('div', { className: 'activity-empty-title', textContent: 'No activity events yet' }),
-          el('div', { textContent: 'File changes, browser captures, and conversions will appear here.' })
+          el('div', { className: 'activity-empty-title', textContent: tr('ui.empty', null, 'No activity events yet') }),
+          el('div', { textContent: tr('ui.emptyHint', null, 'File changes, browser captures, and conversions will appear here.') })
         ]));
         return;
       }
@@ -543,8 +547,8 @@
             ]),
             activity.summary ? el('div', { className: 'activity-summary', textContent: activity.summary }) : null,
             el('details', { className: 'activity-details' }, [
-              el('summary', {}, ['Details']),
-              el('div', { className: 'activity-source', textContent: 'Event: ' + activity.type + (activity.sourcePluginId ? ' · Source: ' + activity.sourcePluginId : '') })
+              el('summary', {}, [tr('ui.details', null, 'Details')]),
+              el('div', { className: 'activity-source', textContent: tr('ui.eventSource', { event: activity.type, source: activity.sourcePluginId ? ' · ' + activity.sourcePluginId : '' }, 'Event: ' + activity.type + (activity.sourcePluginId ? ' · Source: ' + activity.sourcePluginId : '')) })
             ])
           ])
         ]));
@@ -574,7 +578,7 @@
         persistDismissals(candidate.workspaceRootPath),
         persistCandidateCache(candidate.workspaceRootPath)
       ]).then(function () {
-        statusText = 'Candidate dismissed';
+        statusText = tr('ui.dismissed', null, 'Candidate dismissed');
         statusClass = '';
       }).catch(function (err) {
         statusText = 'Could not dismiss candidate: ' + (err && err.message ? err.message : String(err));
@@ -590,14 +594,14 @@
       }
       if (typeof candidatesEl.removeAttribute === 'function') candidatesEl.removeAttribute('hidden');
       else delete candidatesEl.attributes.hidden;
-      candidatesEl.appendChild(el('div', { className: 'activity-candidates-title', textContent: 'Possible journal entries' }));
+      candidatesEl.appendChild(el('div', { className: 'activity-candidates-title', textContent: tr('ui.candidates', null, 'Possible journal entries') }));
       candidates.forEach(function (candidate) {
         candidatesEl.appendChild(el('div', {
           className: 'activity-candidate',
           'data-work-session-candidate': candidate.candidateId
         }, [
           el('div', {}, [
-            el('div', { className: 'activity-candidate-title', textContent: 'Possible journal entry' }),
+            el('div', { className: 'activity-candidate-title', textContent: tr('ui.candidate', null, 'Possible journal entry') }),
             el('div', { className: 'activity-candidate-facts' }, [
               el('div', { textContent: 'Workspace: ' + candidate.workspaceRootPath }),
               el('div', { textContent: 'Time: ' + candidateTimeRange(candidate) }),
@@ -612,8 +616,8 @@
           ]),
           el('div', { className: 'activity-candidate-actions' }, [
             el('div', { className: 'activity-candidate-duration', textContent: candidate.estimatedMinutes + ' min' }),
-            el('button', { className: 'activity-btn', type: 'button', 'data-work-session-action': 'review', textContent: 'Review', onClick: function () { reviewCandidate(candidate); } }),
-            el('button', { className: 'activity-btn', type: 'button', 'data-work-session-action': 'dismiss', textContent: 'Dismiss', onClick: function () { dismissCandidate(candidate); } })
+            el('button', { className: 'activity-btn', type: 'button', 'data-work-session-action': 'review', textContent: tr('ui.review', null, 'Review'), onClick: function () { reviewCandidate(candidate); } }),
+            el('button', { className: 'activity-btn', type: 'button', 'data-work-session-action': 'dismiss', textContent: tr('ui.dismiss', null, 'Dismiss'), onClick: function () { dismissCandidate(candidate); } })
           ])
         ]));
       });
@@ -696,6 +700,13 @@
     }).then(function () {
       if (!disposed) render();
     });
+    if (api && api.i18n && typeof api.i18n.onDidChangeLocale === 'function') {
+      api.i18n.onDidChangeLocale(function () {
+        titleEl.textContent = scope.mode === 'global' ? tr('ui.title', null, 'Activity') : tr('ui.workspaceTitle', { workspace: scope.label }, 'Activity · ' + scope.label);
+        clearBtn.textContent = tr('ui.clear', null, 'Clear');
+        render();
+      });
+    }
 
     containerEl.__activityUnmount = function () {
       disposed = true;

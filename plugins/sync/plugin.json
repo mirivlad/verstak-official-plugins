@@ -4,6 +4,7 @@
   "name": "Sync",
   "version": "0.1.0",
   "apiVersion": "0.1.0",
+  "localization": { "defaultLocale": "en", "locales": { "en": "locales/en.json", "ru": "locales/ru.json" } },
   "source": "official",
   "provides": ["verstak/sync/v1", "verstak/sync.status/v1"],
   "requires": ["verstak/core/files/v1"],

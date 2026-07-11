@@ -108,6 +108,10 @@
       var request = props && props.request || {};
       var path = request.path || '';
       var ext = extension(path, request.extension);
+      function tr(key, params, fallback) {
+        if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
+        return fallback || key;
+      }
       containerEl.innerHTML = '';
       containerEl.className = 'fp-root';
       containerEl.setAttribute('data-plugin-id', 'verstak.file-preview');
@@ -116,19 +120,19 @@
       var openButton = el('button', {
         className: 'fp-btn',
         'data-action': 'open-external',
-        textContent: 'Open External',
+        textContent: tr('ui.openExternal', null, 'Open External'),
         onClick: function () {
           if (api.files.openExternal) api.files.openExternal(path).catch(function (err) { console.error('[file-preview] openExternal:', err); });
         }
       });
       containerEl.appendChild(el('div', { className: 'fp-toolbar' }, [
-        el('span', { className: 'fp-mode' }, ['Preview']),
+        el('span', { className: 'fp-mode' }, [tr('ui.preview', null, 'Preview')]),
         el('span', { className: 'fp-path' }, [path]),
         el('span', { className: 'fp-spacer' }),
         openButton
       ]));
 
-      var body = el('div', { className: 'fp-loading' }, ['Loading...']);
+      var body = el('div', { className: 'fp-loading' }, [tr('ui.loading', null, 'Loading...')]);
       containerEl.appendChild(body);
 
       api.files.metadata(path).then(function (meta) {
@@ -140,8 +144,13 @@
         });
       }).catch(function (err) {
         body.className = 'fp-error';
-        body.textContent = 'Preview error: ' + (err && err.message ? err.message : String(err));
+        body.textContent = tr('ui.error', { error: err && err.message ? err.message : String(err) }, 'Preview error: ' + (err && err.message ? err.message : String(err)));
       });
+      if (api.i18n && typeof api.i18n.onDidChangeLocale === 'function') {
+        api.i18n.onDidChangeLocale(function () {
+          openButton.textContent = tr('ui.openExternal', null, 'Open External');
+        });
+      }
     },
     unmount: function (containerEl) {
       containerEl.innerHTML = '';

@@ -77,6 +77,19 @@ else
 fi
 
 echo ""
+# Verify plugin-owned English and Russian catalogs.
+echo "[localization catalogs]"
+if command -v node &>/dev/null; then
+  set +e
+  node "$ROOT/scripts/check-locales.mjs"
+  STATUS=$?
+  set -e
+  report "localization catalogs" "$STATUS"
+else
+  echo "  ⚠️  node not available — skipping localization catalog validation"
+fi
+
+echo ""
 # Guard official plugins against bypassing the v2 plugin API for note features.
 echo "[frontend API boundary]"
 if [ "$HAS_PYTHON" -eq 1 ]; then

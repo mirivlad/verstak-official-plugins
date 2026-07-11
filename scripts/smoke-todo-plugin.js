@@ -8,6 +8,10 @@ const sourcePath = path.join(root, 'plugins', 'todo', 'frontend', 'src', 'index.
 const manifestPath = path.join(root, 'plugins', 'todo', 'plugin.json');
 const source = fs.readFileSync(sourcePath, 'utf8');
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+const localeCatalogs = {
+  en: JSON.parse(fs.readFileSync(path.join(root, 'plugins', 'todo', 'locales', 'en.json'), 'utf8')),
+  ru: JSON.parse(fs.readFileSync(path.join(root, 'plugins', 'todo', 'locales', 'ru.json'), 'utf8')),
+};
 
 class FakeNode {
   constructor(tagName) {
@@ -140,8 +144,10 @@ function loadComponent(document, emittedEvents) {
   return component;
 }
 
-function makeApi(initialSettings = {}) {
+function makeApi(initialSettings = {}, initialLocale = 'en') {
   const settings = { ...initialSettings };
+  let locale = initialLocale;
+  const localeListeners = [];
   return {
     settings,
     settingsApi: {
@@ -157,8 +163,31 @@ function makeApi(initialSettings = {}) {
         { name: 'Project', relativePath: 'Project', type: 'folder' },
       ],
     },
+    setLocale(nextLocale) {
+      locale = nextLocale;
+      localeListeners.slice().forEach((listener) => listener(locale));
+    },
     get api() {
-      return { settings: this.settingsApi, files: this.files };
+      return {
+        settings: this.settingsApi,
+        files: this.files,
+        i18n: {
+          getLocale: () => locale,
+          t: (key, params, fallback) => {
+            const message = localeCatalogs[locale]?.[key] || localeCatalogs.en[key] || fallback || key;
+            return message.replace(/\{([^}]+)\}/g, (placeholder, name) => (
+              Object.prototype.hasOwnProperty.call(params || {}, name) ? String(params[name]) : placeholder
+            ));
+          },
+          onDidChangeLocale: (listener) => {
+            localeListeners.push(listener);
+            return () => {
+              const index = localeListeners.indexOf(listener);
+              if (index !== -1) localeListeners.splice(index, 1);
+            };
+          },
+        },
+      };
     },
   };
 }
@@ -204,6 +233,13 @@ async function mountWithApi(apiState, props, emittedEvents = [], document = make
   if (createdTodo.status !== 'open' || createdTodo.priority !== 'high') throw new Error('Todo status or priority was not stored');
   if (createdTodo.dueAt !== '2000-01-01' || createdTodo.reminderAt !== '2000-01-01T09:00') throw new Error('Todo due/reminder metadata was not stored');
   if (!container.textContent.includes('Overdue') || !container.textContent.includes('Reminder due')) throw new Error('due/reminder indicators were not rendered');
+
+  apiState.setLocale('ru');
+  if (!container.textContent.includes('Задачи · Project') || !container.textContent.includes('Просрочено')) {
+    throw new Error('Todo view did not update to Russian without remounting');
+  }
+  if ((apiState.settings['todos:global'] || []).length !== 1) throw new Error('locale change lost Todo state');
+  apiState.setLocale('en');
 
   byData(container, 'data-todo-action', 'edit').click();
   byData(container, 'data-todo-input', 'title').value = 'Prepare project review updated';

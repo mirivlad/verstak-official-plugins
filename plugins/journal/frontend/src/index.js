@@ -273,18 +273,22 @@
 
     var scope = scopeFromProps(props || {});
     var entries = [];
-    var statusText = 'Loading journal...';
+    function tr(key, params, fallback) {
+      if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
+      return fallback || key;
+    }
+    var statusText = tr('ui.loading', null, 'Loading journal...');
     var statusClass = '';
     var modalHost = el('div', { className: 'journal-modal-host', hidden: 'hidden' });
 
     var toolbar = el('div', { className: 'journal-toolbar' });
-    var titleEl = el('span', { className: 'journal-title', textContent: scope.mode === 'global' ? 'Journal' : 'Journal · ' + scope.label });
+    var titleEl = el('span', { className: 'journal-title', textContent: scope.mode === 'global' ? tr('ui.title', null, 'Journal') : tr('ui.workspaceTitle', { workspace: scope.label }, 'Journal · ' + scope.label) });
     var countEl = el('span', { className: 'journal-count' });
     var statusEl = el('span', { className: 'journal-status' });
     var addBtn = el('button', {
       className: 'journal-btn primary',
       'data-journal-action': 'add',
-      innerHTML: iconSvg('add') + '<span>Add</span>',
+      innerHTML: iconSvg('add') + '<span>' + tr('ui.add', null, 'Add') + '</span>',
       onClick: function () { showEntryModal(); }
     });
     toolbar.appendChild(titleEl);
@@ -302,7 +306,7 @@
       if (scope.mode !== 'workspace') return Promise.resolve();
       if (!api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve();
       return api.settings.write(scope.key, storageEntries(entries)).catch(function (err) {
-        statusText = 'Could not save journal: ' + (err && err.message ? err.message : String(err));
+        statusText = tr('ui.saveError', { error: err && err.message ? err.message : String(err) }, 'Could not save journal: ' + (err && err.message ? err.message : String(err)));
         statusClass = 'error';
       });
     }
@@ -316,19 +320,19 @@
             all = all.concat(normalizeEntries((settings || {})[key], key));
           });
           entries = sortEntries(all);
-          statusText = 'Aggregating worklogs';
+          statusText = tr('ui.aggregating', null, 'Aggregating worklogs');
           statusClass = '';
         }).catch(function (err) {
-          statusText = 'Could not load journal: ' + (err && err.message ? err.message : String(err));
+          statusText = tr('ui.loadError', { error: err && err.message ? err.message : String(err) }, 'Could not load journal: ' + (err && err.message ? err.message : String(err)));
           statusClass = 'error';
         });
       }
       return api.settings.read(scope.key).then(function (stored) {
         entries = sortEntries(normalizeEntries(stored, scope.key));
-        statusText = 'Ready';
+        statusText = tr('ui.ready', null, 'Ready');
         statusClass = '';
       }).catch(function (err) {
-        statusText = 'Could not load journal: ' + (err && err.message ? err.message : String(err));
+        statusText = tr('ui.loadError', { error: err && err.message ? err.message : String(err) }, 'Could not load journal: ' + (err && err.message ? err.message : String(err)));
         statusClass = 'error';
       });
     }
@@ -344,8 +348,8 @@
       var reviewingCandidate = !editing && !!candidate;
       var reviewingTodo = !editing && !!completedTodo;
       var dateInput = el('input', { className: 'journal-input', type: 'date', value: editing ? existingEntry.date : (reviewingCandidate ? candidateDate(candidate.startedAt) : (reviewingTodo ? candidateDate(completedTodo.completedAt) : today())), 'data-journal-input': 'date' });
-      var titleInput = el('input', { className: 'journal-input', type: 'text', placeholder: 'Work item', value: editing ? existingEntry.title : (reviewingTodo ? completedTodo.title : ''), 'data-journal-input': 'title' });
-      var summaryInput = el('textarea', { className: 'journal-input textarea', placeholder: 'Body', 'data-journal-input': 'summary' });
+      var titleInput = el('input', { className: 'journal-input', type: 'text', placeholder: tr('ui.workItem', null, 'Work item'), value: editing ? existingEntry.title : (reviewingTodo ? completedTodo.title : ''), 'data-journal-input': 'title' });
+      var summaryInput = el('textarea', { className: 'journal-input textarea', placeholder: tr('ui.body', null, 'Body'), 'data-journal-input': 'summary' });
       summaryInput.value = editing ? existingEntry.summary : (reviewingTodo ? completedTodo.description : '');
       var minutesInput = el('input', { className: 'journal-input', type: 'number', min: '0', step: '1', value: editing ? existingEntry.minutes : (reviewingCandidate ? candidate.estimatedMinutes : (reviewingTodo ? '0' : '30')), 'data-journal-input': 'minutes' });
       var billableInput = el('input', { type: 'checkbox', 'data-journal-input': 'billable' });
@@ -397,20 +401,20 @@
         if (event.target === event.currentTarget) closeEntryModal();
       } }, [
         el('div', { className: 'journal-modal' }, [
-          el('div', { className: 'journal-modal-title', textContent: editing ? 'Edit journal entry' : (reviewingCandidate ? 'Review possible journal entry' : (reviewingTodo ? 'Create journal entry from completed todo' : 'Add journal entry')) }),
+          el('div', { className: 'journal-modal-title', textContent: editing ? tr('ui.editEntry', null, 'Edit journal entry') : (reviewingCandidate ? tr('ui.reviewCandidate', null, 'Review possible journal entry') : (reviewingTodo ? tr('ui.fromTodo', null, 'Create journal entry from completed todo') : tr('ui.addEntry', null, 'Add journal entry'))) }),
           candidateContext,
           todoContext,
           el('div', { className: 'journal-modal-grid' }, [
-            el('label', { className: 'journal-field' }, ['Date', dateInput]),
-            el('label', { className: 'journal-field' }, ['Minutes', minutesInput]),
-            el('label', { className: 'journal-field wide' }, ['Title', titleInput]),
-            el('label', { className: 'journal-field wide' }, ['Body', summaryInput]),
-            el('label', { className: 'journal-billable' }, [billableInput, 'Billable'])
+            el('label', { className: 'journal-field' }, [tr('ui.date', null, 'Date'), dateInput]),
+            el('label', { className: 'journal-field' }, [tr('ui.minutes', null, 'Minutes'), minutesInput]),
+            el('label', { className: 'journal-field wide' }, [tr('ui.fieldTitle', null, 'Title'), titleInput]),
+            el('label', { className: 'journal-field wide' }, [tr('ui.body', null, 'Body'), summaryInput]),
+            el('label', { className: 'journal-billable' }, [billableInput, tr('ui.billable', null, 'Billable')])
           ]),
           candidateActivities,
           el('div', { className: 'journal-modal-actions' }, [
-            el('button', { className: 'journal-btn ghost', type: 'button', textContent: 'Cancel', onClick: closeEntryModal }),
-            el('button', { className: 'journal-btn primary', type: 'button', 'data-journal-action': 'save-entry', textContent: editing ? 'Save changes' : 'Add entry', onClick: saveEntry })
+            el('button', { className: 'journal-btn ghost', type: 'button', textContent: tr('ui.cancel', null, 'Cancel'), onClick: closeEntryModal }),
+            el('button', { className: 'journal-btn primary', type: 'button', 'data-journal-action': 'save-entry', textContent: editing ? tr('ui.saveChanges', null, 'Save changes') : tr('ui.addEntryShort', null, 'Add entry'), onClick: saveEntry })
           ])
         ])
       ]));
@@ -421,7 +425,7 @@
       if (scope.mode !== 'workspace') return;
       var title = text(formValue && formValue.title).trim();
       if (!title) {
-        statusText = 'Title is required';
+        statusText = tr('ui.titleRequired', null, 'Title is required');
         statusClass = 'error';
         render();
         return;
@@ -469,7 +473,7 @@
     function deleteEntry(entry) {
       if (scope.mode !== 'workspace' || !entry) return;
       entries = entries.filter(function (item) { return item.entryId !== entry.entryId; });
-      statusText = 'Entry deleted';
+      statusText = tr('ui.deleted', null, 'Entry deleted');
       statusClass = '';
       persist().then(render);
     }
@@ -477,7 +481,7 @@
     function renderList() {
       listEl.innerHTML = '';
       if (!entries.length) {
-        listEl.appendChild(el('div', { className: 'journal-empty', textContent: scope.mode === 'global' ? 'No worklog entries yet.' : 'No worklog entries yet.' }));
+        listEl.appendChild(el('div', { className: 'journal-empty', textContent: tr('ui.empty', null, 'No worklog entries yet.') }));
         return;
       }
       entries.forEach(function (entry) {
@@ -493,8 +497,8 @@
           ]),
           el('div', { className: 'journal-minutes', textContent: entry.minutes + ' min' }),
           scope.mode === 'workspace' ? el('div', { className: 'journal-row-actions' }, [
-            el('button', { className: 'journal-icon-btn', type: 'button', title: 'Edit', 'aria-label': 'Edit', 'data-journal-action': 'edit', innerHTML: iconSvg('edit'), onClick: function () { showEntryModal(entry); } }),
-            el('button', { className: 'journal-icon-btn danger', type: 'button', title: 'Delete', 'aria-label': 'Delete', 'data-journal-action': 'delete', innerHTML: iconSvg('trash'), onClick: function () { deleteEntry(entry); } })
+            el('button', { className: 'journal-icon-btn', type: 'button', title: tr('ui.edit', null, 'Edit'), 'aria-label': tr('ui.edit', null, 'Edit'), 'data-journal-action': 'edit', innerHTML: iconSvg('edit'), onClick: function () { showEntryModal(entry); } }),
+            el('button', { className: 'journal-icon-btn danger', type: 'button', title: tr('ui.delete', null, 'Delete'), 'aria-label': tr('ui.delete', null, 'Delete'), 'data-journal-action': 'delete', innerHTML: iconSvg('trash'), onClick: function () { deleteEntry(entry); } })
           ]) : null
         ]));
       });
@@ -516,6 +520,13 @@
       if (candidate) showEntryModal(null, candidate);
       else if (completedTodo) showEntryModal(null, null, completedTodo);
     });
+    if (api && api.i18n && typeof api.i18n.onDidChangeLocale === 'function') {
+      api.i18n.onDidChangeLocale(function () {
+        titleEl.textContent = scope.mode === 'global' ? tr('ui.title', null, 'Journal') : tr('ui.workspaceTitle', { workspace: scope.label }, 'Journal · ' + scope.label);
+        addBtn.innerHTML = iconSvg('add') + '<span>' + tr('ui.add', null, 'Add') + '</span>';
+        render();
+      });
+    }
   };
 
   JournalView.unmount = function (containerEl) {

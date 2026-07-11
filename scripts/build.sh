@@ -79,7 +79,14 @@ with open(path, 'w', encoding='utf-8') as f:
     fi
   fi
 
-  # 3. backend binary
+  # 3. locale catalogs declared by plugin.json
+  if [ -d "$plugin_dir/locales" ]; then
+    mkdir -p "$dist_dir/locales"
+    cp -r "$plugin_dir/locales/." "$dist_dir/locales/"
+    echo "    └─ locales ($(find "$dist_dir/locales" -type f | wc -l) file(s))"
+  fi
+
+  # 4. backend binary
   if [ -d "$plugin_dir/backend" ]; then
     # Find the compiled binary (same name as plugin directory)
     local bin_name="$plugin_name"
@@ -91,7 +98,7 @@ with open(path, 'w', encoding='utf-8') as f:
     fi
   fi
 
-  # 4. Verify dist package has at least plugin.json
+  # 5. Verify dist package has at least plugin.json
   if [ ! -f "$dist_dir/plugin.json" ]; then
     echo "    ❌ dist package missing plugin.json"
     return 1

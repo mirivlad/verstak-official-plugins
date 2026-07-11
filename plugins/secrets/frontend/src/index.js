@@ -150,6 +150,10 @@
       var unlocked = false;
       var statusText = '';
       var statusError = false;
+      function tr(key, params, fallback) {
+        if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
+        return fallback || key;
+      }
 
       function setStatus(message, isError) {
         statusText = message || '';
@@ -162,13 +166,13 @@
           className: 'secrets-input',
           type: 'password',
           'data-secret-master-password': '',
-          placeholder: 'Master password'
+          placeholder: tr('ui.masterPassword', null, 'Master password')
         });
         var confirmInput = initialized ? null : el('input', {
           className: 'secrets-input',
           type: 'password',
           'data-secret-master-password-confirm': '',
-          placeholder: 'Repeat master password'
+          placeholder: tr('ui.repeatPassword', null, 'Repeat master password')
         });
         var unlockBtn = el('button', {
           className: 'secrets-btn primary',
@@ -176,7 +180,7 @@
           'data-secret-unlock': '',
           onClick: function () {
             if (!initialized && passwordInput.value !== confirmInput.value) {
-              setStatus('Master passwords do not match', true);
+              setStatus(tr('ui.passwordMismatch', null, 'Master passwords do not match'), true);
               return;
             }
             unlockBtn.disabled = true;
@@ -189,17 +193,17 @@
               setStatus((err && err.message) ? err.message : String(err), true);
             });
           }
-        }, ['Unlock']);
-        if (!initialized) unlockBtn.textContent = 'Create master password';
+        }, [tr('ui.unlock', null, 'Unlock')]);
+        if (!initialized) unlockBtn.textContent = tr('ui.createMaster', null, 'Create master password');
         var rows = [
           el('div', { className: 'secrets-row' }, [
-            el('label', { className: 'secrets-label' }, ['Password']),
+            el('label', { className: 'secrets-label' }, [tr('ui.password', null, 'Password')]),
             passwordInput
           ])
         ];
         if (confirmInput) {
           rows.push(el('div', { className: 'secrets-row' }, [
-            el('label', { className: 'secrets-label' }, ['Repeat']),
+            el('label', { className: 'secrets-label' }, [tr('ui.repeat', null, 'Repeat')]),
             confirmInput
           ]));
         }
@@ -209,12 +213,12 @@
         containerEl.appendChild(el('div', { className: 'secrets-root' }, [
           el('div', { className: 'secrets-panel' }, [
             el('div', { className: 'secrets-toolbar' }, [
-              el('span', { className: 'secrets-title' }, ['Secrets'])
+              el('span', { className: 'secrets-title' }, [tr('ui.title', null, 'Secrets')])
             ])
           ]),
           el('div', { className: 'secrets-main' }, [
             el('div', { className: 'secrets-card' }, [
-              el('h2', {}, [initialized ? 'Unlock secrets' : 'Create master password']),
+              el('h2', {}, [initialized ? tr('ui.unlockSecrets', null, 'Unlock secrets') : tr('ui.createMaster', null, 'Create master password')]),
               el('div', { className: 'secrets-form' }, rows)
             ])
           ])
@@ -224,14 +228,14 @@
       function renderList() {
         var children = [
           el('div', { className: 'secrets-toolbar' }, [
-            el('span', { className: 'secrets-title' }, ['Secrets']),
+            el('span', { className: 'secrets-title' }, [tr('ui.title', null, 'Secrets')]),
             el('span', { className: 'secrets-count' }, [String(records.length)]),
             el('span', { className: 'secrets-spacer' }),
-            el('button', { className: 'secrets-btn', type: 'button', onClick: showNewSecret }, ['New'])
+            el('button', { className: 'secrets-btn', type: 'button', onClick: showNewSecret }, [tr('ui.new', null, 'New')])
           ])
         ];
         if (!records.length) {
-          children.push(el('div', { className: 'secrets-empty' }, ['No secrets']));
+          children.push(el('div', { className: 'secrets-empty' }, [tr('ui.empty', null, 'No secrets')]));
           return children;
         }
         groupRecords(records).forEach(function (group) {
@@ -255,17 +259,17 @@
 
       function renderSelected() {
         if (!selectedRecord) return el('div', { className: 'secrets-card' }, [
-          el('h2', {}, ['Select a secret'])
+          el('h2', {}, [tr('ui.select', null, 'Select a secret')])
         ]);
         return el('div', { className: 'secrets-card' }, [
           el('h2', {}, [selectedRecord.title || selectedRecord.id]),
           el('table', { className: 'secrets-table' }, [
             el('tbody', {}, [
-              fieldRow('Group', scopeLabel(selectedRecord)),
+              fieldRow(tr('ui.group', null, 'Group'), scopeLabel(selectedRecord)),
               fieldRow('ID', selectedRecord.id),
-              fieldRow('Username', selectedRecord.username || ''),
-              fieldRow('Password', selectedValue ? selectedValue : '••••••••••••', selectedValue ? '' : 'secrets-hidden-value'),
-              fieldRow('Updated', selectedRecord.updatedAt || '')
+              fieldRow(tr('ui.username', null, 'Username'), selectedRecord.username || ''),
+              fieldRow(tr('ui.password', null, 'Password'), selectedValue ? selectedValue : '••••••••••••', selectedValue ? '' : 'secrets-hidden-value'),
+              fieldRow(tr('ui.updated', null, 'Updated'), selectedRecord.updatedAt || '')
             ])
           ]),
           el('div', { className: 'secrets-actions' }, [
@@ -274,19 +278,19 @@
               type: 'button',
               'data-secret-copy-link': selectedRecord.id,
               onClick: function () { copySecretLink(selectedRecord.id); }
-            }, ['Copy secret link']),
+            }, [tr('ui.copyLink', null, 'Copy secret link')]),
             el('button', {
               className: 'secrets-btn',
               type: 'button',
               'data-secret-edit': selectedRecord.id,
               onClick: function () { showEditSecret(); }
-            }, ['Edit']),
+            }, [tr('ui.edit', null, 'Edit')]),
             el('button', {
               className: 'secrets-btn danger',
               type: 'button',
               'data-secret-delete': selectedRecord.id,
               onClick: function () { deleteSecret(selectedRecord.id); }
-            }, ['Delete'])
+            }, [tr('ui.delete', null, 'Delete')])
           ]),
           el('div', { className: statusError ? 'secrets-status error' : 'secrets-status' }, [statusText])
         ]);
@@ -301,28 +305,28 @@
 
       function renderSecretForm(existing) {
         var isEdit = !!existing;
-        var title = el('input', { className: 'secrets-input', type: 'text', 'data-secret-title': '', placeholder: 'Title' });
+        var title = el('input', { className: 'secrets-input', type: 'text', 'data-secret-title': '', placeholder: tr('ui.fieldTitle', null, 'Title') });
         title.value = existing ? text(existing.title) : '';
         var id = el('input', { className: 'secrets-input', type: 'text', placeholder: 'stable.id' });
         id.value = existing ? text(existing.id) : '';
         id.disabled = isEdit;
-        var username = el('input', { className: 'secrets-input', type: 'text', placeholder: 'optional username' });
+        var username = el('input', { className: 'secrets-input', type: 'text', placeholder: tr('ui.optionalUsername', null, 'optional username') });
         username.value = existing ? text(existing.username) : '';
-        var value = el('textarea', { className: 'secrets-textarea', 'data-secret-value': '', placeholder: 'Secret value' });
+        var value = el('textarea', { className: 'secrets-textarea', 'data-secret-value': '', placeholder: tr('ui.secretValue', null, 'Secret value') });
         value.value = isEdit ? selectedValue : '';
         var scope = el('select', { className: 'secrets-select' }, [
-          el('option', { value: ScopeGlobal }, ['Global']),
-          el('option', { value: ScopeWorkspace }, [workspaceRoot || 'Workspace'])
+          el('option', { value: ScopeGlobal }, [tr('ui.global', null, 'Global')]),
+          el('option', { value: ScopeWorkspace }, [workspaceRoot || tr('ui.workspace', null, 'Workspace')])
         ]);
         scope.value = existing && existing.scope && existing.scope.kind ? existing.scope.kind : (workspaceRoot ? ScopeWorkspace : ScopeGlobal);
         return el('div', { className: 'secrets-card' }, [
-          el('h2', {}, [isEdit ? 'Edit secret' : 'New secret']),
+          el('h2', {}, [isEdit ? tr('ui.editSecret', null, 'Edit secret') : tr('ui.newSecret', null, 'New secret')]),
           el('div', { className: 'secrets-form' }, [
-            el('div', { className: 'secrets-row' }, [el('label', { className: 'secrets-label' }, ['Title']), title]),
+            el('div', { className: 'secrets-row' }, [el('label', { className: 'secrets-label' }, [tr('ui.fieldTitle', null, 'Title')]), title]),
             el('div', { className: 'secrets-row' }, [el('label', { className: 'secrets-label' }, ['ID']), id]),
-            el('div', { className: 'secrets-row' }, [el('label', { className: 'secrets-label' }, ['Username']), username]),
-            el('div', { className: 'secrets-row' }, [el('label', { className: 'secrets-label' }, ['Scope']), scope]),
-            el('div', { className: 'secrets-row' }, [el('label', { className: 'secrets-label' }, ['Value']), value]),
+            el('div', { className: 'secrets-row' }, [el('label', { className: 'secrets-label' }, [tr('ui.username', null, 'Username')]), username]),
+            el('div', { className: 'secrets-row' }, [el('label', { className: 'secrets-label' }, [tr('ui.scope', null, 'Scope')]), scope]),
+            el('div', { className: 'secrets-row' }, [el('label', { className: 'secrets-label' }, [tr('ui.value', null, 'Value')]), value]),
             el('div', { className: 'secrets-actions' }, [
               el('button', {
                 className: 'secrets-btn primary',
@@ -345,8 +349,8 @@
                     setStatus((err && err.message) ? err.message : String(err), true);
                   });
                 }
-              }, ['Save']),
-              el('button', { className: 'secrets-btn', type: 'button', onClick: function () { mode = 'selected'; render(); } }, ['Cancel'])
+              }, [tr('ui.save', null, 'Save')]),
+              el('button', { className: 'secrets-btn', type: 'button', onClick: function () { mode = 'selected'; render(); } }, [tr('ui.cancel', null, 'Cancel')])
             ]),
             el('div', { className: statusError ? 'secrets-status error' : 'secrets-status' }, [statusText])
           ])
@@ -451,8 +455,13 @@
         renderLocked();
       });
 
+      var localeUnsubscribe = api.i18n && typeof api.i18n.onDidChangeLocale === 'function'
+        ? api.i18n.onDidChangeLocale(render)
+        : null;
+
       containerEl.__secretsCleanup = function () {
         disposed = true;
+        if (typeof localeUnsubscribe === 'function') localeUnsubscribe();
       };
     },
 

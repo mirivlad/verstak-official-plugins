@@ -63,6 +63,11 @@
 
       containerEl.innerHTML = '';
       containerEl.className = 'pt-root';
+
+      function tr(key, params, fallback) {
+        if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
+        return fallback || key;
+      }
       containerEl.__ptCleanup = [];
 
       function trackCleanup(fn) {
@@ -79,7 +84,7 @@
       var header = div('pt-header', [
         span('pt-icon', '◉'),
         div('pt-title-group', [
-          el('h2', { className: 'pt-plugin-name' }, ['Platform Diagnostics']),
+          el('h2', { className: 'pt-plugin-name' }, [tr('ui.diagnostics', null, 'Platform Diagnostics')]),
           el('p', { className: 'pt-plugin-id' }, [api.pluginId]),
         ]),
         span('pt-version', 'v' + (props && props.version ? props.version : '0.1.0')),
@@ -88,7 +93,7 @@
       /* ── Status badge ──────────────────────────────────────────── */
       var badge = div('pt-badge pt-badge-success', [
         el('span', {}, ['✅']),
-        el('span', {}, ['Frontend Bundle Loaded']),
+        el('span', {}, [tr('ui.bundleLoaded', null, 'Frontend Bundle Loaded')]),
       ]);
       var badgeRow = div('', [badge]);
 
@@ -274,7 +279,7 @@
         });
 
       var bridgeCard = div('pt-card', [
-        el('h3', { className: 'pt-card-title' }, ['Real Plugin API Bridge']),
+        el('h3', { className: 'pt-card-title' }, [tr('ui.apiBridge', null, 'Real Plugin API Bridge')]),
         el('ul', { className: 'pt-list' }, [
           el('li', { className: 'pt-list-item' }, [
             span('pt-list-label', 'Persisted setting'),
@@ -361,7 +366,7 @@
       });
 
       var testsCard = div('pt-card', [
-        el('h3', { className: 'pt-card-title' }, ['Test Results']),
+        el('h3', { className: 'pt-card-title' }, [tr('ui.testResults', null, 'Test Results')]),
         summaryRow,
         testsList,
       ]);
@@ -398,7 +403,7 @@
       });
 
       var capsCard = div('pt-card', [
-        el('h3', { className: 'pt-card-title' }, ['Registered Capabilities']),
+        el('h3', { className: 'pt-card-title' }, [tr('ui.capabilities', null, 'Registered Capabilities')]),
         capList,
       ]);
 
@@ -421,7 +426,7 @@
       });
 
       var infoCard = div('pt-card', [
-        el('h3', { className: 'pt-card-title' }, ['Plugin Info']),
+        el('h3', { className: 'pt-card-title' }, [tr('ui.pluginInfo', null, 'Plugin Info')]),
         infoList,
       ]);
 
@@ -456,7 +461,7 @@
       });
 
       var apiCard = div('pt-card', [
-        el('h3', { className: 'pt-card-title' }, ['Host API Methods']),
+        el('h3', { className: 'pt-card-title' }, [tr('ui.hostMethods', null, 'Host API Methods')]),
         apiStatusList,
       ]);
 
@@ -584,7 +589,7 @@
       trackCleanup(function () { stopMouseCapture(); });
 
       var mouseCard = div('pt-card', [
-        el('h3', { className: 'pt-card-title' }, ['Mouse Event Inspector']),
+        el('h3', { className: 'pt-card-title' }, [tr('ui.mouseInspector', null, 'Mouse Event Inspector')]),
         el('p', { style: { margin: '0 0 0.5rem', color: '#a0a0b8', fontSize: '0.8rem' } }, [
           'Captures ALL mouse/pointer events on window. Press back/forward buttons to see what WebKitGTK reports.',
         ]),
@@ -667,6 +672,11 @@
       containerEl.innerHTML = '';
       containerEl.className = 'pt-root';
 
+      function tr(key, params, fallback) {
+        if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
+        return fallback || key;
+      }
+
       /* ── Counter state (local, not persisted) ──────────────────── */
       var counterState = { value: 0 };
 
@@ -674,7 +684,7 @@
       var header = div('pt-header', [
         span('pt-icon', '⚙️'),
         div('pt-title-group', [
-          el('h2', { className: 'pt-plugin-name' }, ['Platform Test Settings']),
+          el('h2', { className: 'pt-plugin-name' }, [tr('ui.settings', null, 'Platform Test Settings')]),
           el('p', { className: 'pt-plugin-id' }, [api.pluginId]),
         ]),
       ]);
@@ -697,24 +707,24 @@
       var incrementBtn = el('button', { className: 'btn btn-primary', onClick: function () {
         counterState.value += 1;
         counterDisplay.firstChild.textContent = String(counterState.value);
-      }}, ['+ Increment']);
+      }}, [tr('ui.increment', null, '+ Increment')]);
 
       var decrementBtn = el('button', { className: 'btn btn-secondary', onClick: function () {
         counterState.value = Math.max(0, counterState.value - 1);
         counterDisplay.firstChild.textContent = String(counterState.value);
-      }}, ['− Decrement']);
+      }}, [tr('ui.decrement', null, '− Decrement')]);
 
       var resetBtn = el('button', { className: 'btn btn-secondary', onClick: function () {
         counterState.value = 0;
         counterDisplay.firstChild.textContent = '0';
-      }}, ['↺ Reset']);
+      }}, [tr('ui.reset', null, '↺ Reset')]);
 
       var btnGroup = el('div', { style: { display: 'flex', gap: '0.5rem' } }, [
         incrementBtn, decrementBtn, resetBtn,
       ]);
 
       var counterCard = div('pt-card', [
-        el('h3', { className: 'pt-card-title' }, ['Interactive Counter (Local State)']),
+        el('h3', { className: 'pt-card-title' }, [tr('ui.counter', null, 'Interactive Counter (Local State)')]),
         counterDisplay,
         btnGroup,
         el('p', { style: { marginTop: '0.75rem', color: '#6c6c8a', fontSize: '0.7rem' } }, [
@@ -740,7 +750,7 @@
       });
 
       var settingsCard = div('pt-card', [
-        el('h3', { className: 'pt-card-title' }, ['Plugin Settings (Demo)']),
+        el('h3', { className: 'pt-card-title' }, [tr('ui.demoSettings', null, 'Plugin Settings (Demo)')]),
         settingsDemoList,
         el('p', { style: { marginTop: '0.5rem', color: '#6c6c8a', fontSize: '0.7rem' } }, [
           'Use api.settings.read() / api.settings.write() for persisted settings.',

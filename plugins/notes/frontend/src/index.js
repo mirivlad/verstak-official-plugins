@@ -183,6 +183,11 @@
       var sortMode = 'title-asc';
       var renameTarget = null;
 
+      function tr(key, params, fallback) {
+        if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
+        return fallback || key;
+      }
+
       function notesParent() {
         return workspaceRoot || '';
       }
@@ -262,8 +267,8 @@
       // ─── UI Elements ────────────────────────────────────────
 
       var toolbar = el('div', { className: 'notes-toolbar' });
-      var createBtn = el('button', { className: 'notes-btn primary', 'data-action': 'create', innerHTML: iconSvg('add') + ' New Note' });
-      var filterInput = el('input', { className: 'notes-filter', 'data-notes-filter': '', placeholder: 'Filter notes' });
+      var createBtn = el('button', { className: 'notes-btn primary', 'data-action': 'create', innerHTML: iconSvg('add') + ' ' + tr('ui.newNote', null, 'New Note') });
+      var filterInput = el('input', { className: 'notes-filter', 'data-notes-filter': '', placeholder: tr('ui.filter', null, 'Filter notes') });
       var sortSelect = el('select', { className: 'notes-sort', 'data-notes-sort': '' }, [
         el('option', { value: 'title-asc' }, ['A-Z']),
         el('option', { value: 'title-desc' }, ['Z-A'])
@@ -276,25 +281,25 @@
       toolbar.appendChild(statusEl);
       containerEl.appendChild(toolbar);
 
-      var titleBar = el('div', { className: 'notes-title-bar' }, ['Notes in ' + workspaceName]);
+      var titleBar = el('div', { className: 'notes-title-bar' }, [tr('ui.title', { workspace: workspaceName }, 'Notes in ' + workspaceName)]);
       containerEl.appendChild(titleBar);
 
       var listContainer = el('div', { className: 'notes-list', 'data-notes-list': '' });
       containerEl.appendChild(listContainer);
 
       var createPanel = el('div', { className: 'notes-panel', style: { display: 'none' } });
-      var createInput = el('input', { className: 'notes-input', 'data-notes-create-input': '', placeholder: 'Note title' });
-      var createConfirm = el('button', { className: 'notes-btn', textContent: 'Create' });
-      var createCancel = el('button', { className: 'notes-btn', textContent: 'Cancel' });
+      var createInput = el('input', { className: 'notes-input', 'data-notes-create-input': '', placeholder: tr('ui.noteTitle', null, 'Note title') });
+      var createConfirm = el('button', { className: 'notes-btn', textContent: tr('ui.create', null, 'Create') });
+      var createCancel = el('button', { className: 'notes-btn', textContent: tr('ui.cancel', null, 'Cancel') });
       createPanel.appendChild(createInput);
       createPanel.appendChild(createConfirm);
       createPanel.appendChild(createCancel);
       containerEl.appendChild(createPanel);
 
       var renamePanel = el('div', { className: 'notes-panel', style: { display: 'none' } });
-      var renameInput = el('input', { className: 'notes-input', 'data-notes-rename-input': '', placeholder: 'New title' });
-      var renameConfirm = el('button', { className: 'notes-btn', textContent: 'Rename' });
-      var renameCancel = el('button', { className: 'notes-btn', textContent: 'Cancel' });
+      var renameInput = el('input', { className: 'notes-input', 'data-notes-rename-input': '', placeholder: tr('ui.newTitle', null, 'New title') });
+      var renameConfirm = el('button', { className: 'notes-btn', textContent: tr('ui.rename', null, 'Rename') });
+      var renameCancel = el('button', { className: 'notes-btn', textContent: tr('ui.cancel', null, 'Cancel') });
       renamePanel.appendChild(renameInput);
       renamePanel.appendChild(renameConfirm);
       renamePanel.appendChild(renameCancel);
@@ -321,7 +326,7 @@
 
       function loadNotes() {
         listContainer.innerHTML = '';
-        listContainer.appendChild(el('div', { className: 'notes-empty' }, ['Loading...']));
+        listContainer.appendChild(el('div', { className: 'notes-empty' }, [tr('ui.loading', null, 'Loading...')]));
 
         var parent = notesParent();
         listNotes(parent).then(function (result) {
@@ -392,36 +397,36 @@
       function renderList() {
         listContainer.innerHTML = '';
         if (!notes || notes.length === 0) {
-          renderEmpty('No notes yet');
+          renderEmpty(tr('ui.empty', null, 'No notes yet'));
           return;
         }
         var shown = visibleNotes();
         if (shown.length === 0) {
-          renderEmpty('No matching notes', 'Clear the filter to show all notes');
+          renderEmpty(tr('ui.noMatches', null, 'No matching notes'), tr('ui.clearFilterHint', null, 'Clear the filter to show all notes'));
           return;
         }
         shown.forEach(function (note) {
           var actionButtons = [
             el('button', {
               className: 'notes-item-btn',
-              title: 'Open',
-              'aria-label': 'Open',
+              title: tr('ui.open', null, 'Open'),
+              'aria-label': tr('ui.open', null, 'Open'),
               'data-note-action': 'open',
               innerHTML: iconSvg('open'),
               onClick: function (e) { e.stopPropagation(); openNote(note); }
             }),
             el('button', {
               className: 'notes-item-btn',
-              title: 'Rename',
-              'aria-label': 'Rename',
+              title: tr('ui.rename', null, 'Rename'),
+              'aria-label': tr('ui.rename', null, 'Rename'),
               'data-note-action': 'rename',
               innerHTML: iconSvg('rename'),
               onClick: function (e) { e.stopPropagation(); beginRename(note); }
             }),
             el('button', {
               className: 'notes-item-btn',
-              title: 'Move to Trash',
-              'aria-label': 'Move to Trash',
+              title: tr('ui.trash', null, 'Move to Trash'),
+              'aria-label': tr('ui.trash', null, 'Move to Trash'),
               'data-note-action': 'trash',
               innerHTML: iconSvg('trash'),
               onClick: function (e) { e.stopPropagation(); confirmTrashNote(note); }
@@ -457,7 +462,7 @@
         listContainer.appendChild(el('div', { className: 'notes-empty' }, [
           el('div', { innerHTML: iconSvg('note') }),
           el('div', {}, [msg]),
-          el('div', { className: 'notes-empty-hint' }, [hint || 'Click "New Note" to create one'])
+          el('div', { className: 'notes-empty-hint' }, [hint || tr('ui.emptyHint', null, 'Click "New Note" to create one')])
         ]));
       }
 
@@ -499,7 +504,7 @@
       function confirmCreate() {
         var title = createInput.value.trim();
         if (!title) return;
-        setStatus('Creating note...', 'loading');
+        setStatus(tr('ui.creating', null, 'Creating note...'), 'loading');
         var parent = notesParent();
         createNote(parent, title).then(function (data) {
           if (disposed) return;
@@ -509,7 +514,7 @@
             return;
           }
           hideCreate();
-          setStatus('Note created', 'success');
+          setStatus(tr('ui.created', null, 'Note created'), 'success');
           loadNotes();
           // Open the newly created note
           if (data.path) {
@@ -551,7 +556,7 @@
         if (!renameTarget) return;
         var newTitle = renameInput.value.trim();
         if (!newTitle) return;
-        setStatus('Renaming...', 'loading');
+        setStatus(tr('ui.renaming', null, 'Renaming...'), 'loading');
         renameNote(renameTarget.path, newTitle).then(function (data) {
           if (disposed) return;
           data = data || {};
@@ -560,7 +565,7 @@
             return;
           }
           hideRename();
-          setStatus('Note renamed', 'success');
+          setStatus(tr('ui.renamed', null, 'Note renamed'), 'success');
           loadNotes();
         }).catch(function (err) {
           setStatus('Error: ' + (err.message || err), 'error');
@@ -573,11 +578,11 @@
         if (!note) return;
         showTrashModal(note).then(function (confirmed) {
           if (!confirmed || disposed) return;
-          setStatus('Moving note to trash...', 'loading');
+          setStatus(tr('ui.trashing', null, 'Moving note to trash...'), 'loading');
           api.files.trash(note.path).then(function () {
             if (disposed) return;
             if (selectedPath === note.path) selectedPath = '';
-            setStatus('Note moved to trash', 'success');
+            setStatus(tr('ui.trashed', null, 'Note moved to trash'), 'success');
             loadNotes();
           }).catch(function (err) {
             setStatus('Error: ' + (err.message || err), 'error');
@@ -590,11 +595,11 @@
       function showConflictModal(title, existingPath, focusTarget) {
         var overlay = el('div', { className: 'notes-modal-overlay' });
         var modal = el('div', { className: 'notes-modal' }, [
-          el('div', { className: 'notes-modal-title' }, ['Name Conflict']),
+          el('div', { className: 'notes-modal-title' }, [tr('ui.conflictTitle', null, 'Name Conflict')]),
           el('div', { className: 'notes-modal-msg' }, [
-            'A note with the title "' + title + '" already exists.',
-            existingPath ? ' Existing file: ' + existingPath + '.' : '',
-            ' Please choose a different title.'
+            tr('ui.conflictMessage', { title: title }, 'A note with the title "' + title + '" already exists.'),
+            existingPath ? tr('ui.existingFile', { path: existingPath }, ' Existing file: ' + existingPath + '.') : '',
+            tr('ui.chooseDifferent', null, ' Please choose a different title.')
           ].join('')),
           el('div', { className: 'notes-modal-actions' }, [
             el('button', { className: 'notes-modal-btn confirm', textContent: 'OK', onClick: function () { overlay.remove(); (focusTarget || createInput).focus(); } })
@@ -612,13 +617,13 @@
             resolve(value);
           }
           var modal = el('div', { className: 'notes-modal' }, [
-            el('div', { className: 'notes-modal-title' }, ['Move Note to Trash']),
+            el('div', { className: 'notes-modal-title' }, [tr('ui.trashTitle', null, 'Move Note to Trash')]),
             el('div', { className: 'notes-modal-msg' }, [
-              'Move "' + (note.title || fileName(note.path)) + '" to trash?'
+              tr('ui.trashConfirm', { title: note.title || fileName(note.path) }, 'Move "' + (note.title || fileName(note.path)) + '" to trash?')
             ]),
             el('div', { className: 'notes-modal-actions' }, [
-              el('button', { className: 'notes-modal-btn cancel', textContent: 'Cancel', onClick: function () { close(false); } }),
-              el('button', { className: 'notes-modal-btn danger', 'data-notes-confirm-trash': '', textContent: 'Move to Trash', onClick: function () { close(true); } })
+              el('button', { className: 'notes-modal-btn cancel', textContent: tr('ui.cancel', null, 'Cancel'), onClick: function () { close(false); } }),
+              el('button', { className: 'notes-modal-btn danger', 'data-notes-confirm-trash': '', textContent: tr('ui.trash', null, 'Move to Trash'), onClick: function () { close(true); } })
             ])
           ]);
           overlay.appendChild(modal);
@@ -655,6 +660,22 @@
       loadContributionActions();
       loadNotes();
 
+      var localeUnsubscribe = null;
+      if (api.i18n && typeof api.i18n.onDidChangeLocale === 'function') {
+        localeUnsubscribe = api.i18n.onDidChangeLocale(function () {
+          createBtn.innerHTML = iconSvg('add') + ' ' + tr('ui.newNote', null, 'New Note');
+          filterInput.setAttribute('placeholder', tr('ui.filter', null, 'Filter notes'));
+          titleBar.textContent = tr('ui.title', { workspace: workspaceName }, 'Notes in ' + workspaceName);
+          createInput.setAttribute('placeholder', tr('ui.noteTitle', null, 'Note title'));
+          renameInput.setAttribute('placeholder', tr('ui.newTitle', null, 'New title'));
+          createConfirm.textContent = tr('ui.create', null, 'Create');
+          createCancel.textContent = tr('ui.cancel', null, 'Cancel');
+          renameConfirm.textContent = tr('ui.rename', null, 'Rename');
+          renameCancel.textContent = tr('ui.cancel', null, 'Cancel');
+          renderList();
+        });
+      }
+
       var fileChangedUnsubscribe = null;
       if (api.events && typeof api.events.subscribe === 'function') {
         api.events.subscribe('file.changed', function (event) {
@@ -669,6 +690,7 @@
 
       containerEl.__notesCleanup = function () {
         disposed = true;
+        if (typeof localeUnsubscribe === 'function') localeUnsubscribe();
         if (typeof fileChangedUnsubscribe === 'function') fileChangedUnsubscribe();
       };
     },

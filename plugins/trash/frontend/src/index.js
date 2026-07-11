@@ -152,6 +152,10 @@
         statusError: false,
         disposed: false
       };
+      function tr(key, params, fallback) {
+        if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
+        return fallback || key;
+      }
 
       function workspaceOptions() {
         var values = {};
@@ -170,18 +174,18 @@
       }
 
       function statusText(entries) {
-        if (state.loading) return 'Loading deleted items...';
+        if (state.loading) return tr('ui.loading', null, 'Loading deleted items...');
         if (state.status) return state.status;
-        return entries.length === 1 ? '1 deleted item' : entries.length + ' deleted items';
+        return tr('ui.count', { count: entries.length }, entries.length === 1 ? '1 deleted item' : entries.length + ' deleted items');
       }
 
       function renderConfirmation() {
         var entry = state.entries.find(function (item) { return item.trashId === state.confirmingId; });
         if (!entry) return null;
         return el('div', { className: 'trash-confirm-backdrop', 'data-trash-confirm': entry.trashId }, [
-          el('section', { className: 'trash-confirm', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Delete permanently' }, [
-            el('h3', {}, ['Delete permanently?']),
-            el('p', {}, ['This cannot be undone.']),
+          el('section', { className: 'trash-confirm', role: 'dialog', 'aria-modal': 'true', 'aria-label': tr('ui.deletePermanently', null, 'Delete permanently') }, [
+            el('h3', {}, [tr('ui.deleteQuestion', null, 'Delete permanently?')]),
+            el('p', {}, [tr('ui.cannotUndo', null, 'This cannot be undone.')]),
             el('p', { className: 'trash-confirm-path' }, [entry.originalPath || nameFor(entry)]),
             el('div', { className: 'trash-confirm-actions' }, [
               el('button', {
@@ -189,14 +193,14 @@
                 type: 'button',
                 'data-trash-confirm-cancel': entry.trashId,
                 onClick: function () { state.confirmingId = ''; render(); }
-              }, ['Cancel']),
+              }, [tr('ui.cancel', null, 'Cancel')]),
               el('button', {
                 className: 'trash-btn trash-btn-danger',
                 type: 'button',
                 disabled: state.busyId === entry.trashId,
                 'data-trash-confirm-delete': entry.trashId,
                 onClick: function () { deletePermanently(entry); }
-              }, [state.busyId === entry.trashId ? 'Deleting...' : 'Delete permanently'])
+              }, [state.busyId === entry.trashId ? tr('ui.deleting', null, 'Deleting...') : tr('ui.deletePermanently', null, 'Delete permanently')])
             ])
           ])
         ]);
@@ -213,7 +217,7 @@
           value: state.workspace,
           'data-trash-filter-workspace': '',
           onChange: function (event) { state.workspace = event.target.value; render(); }
-        }, [el('option', { value: '' }, ['All workspaces'])]);
+        }, [el('option', { value: '' }, [tr('ui.allWorkspaces', null, 'All workspaces')])]);
         workspaceOptions().forEach(function (workspace) {
           workspaceSelect.appendChild(el('option', { value: workspace }, [workspace]));
         });
@@ -224,9 +228,9 @@
           'data-trash-filter-type': '',
           onChange: function (event) { state.type = event.target.value; render(); }
         }, [
-          el('option', { value: '' }, ['All types']),
-          el('option', { value: 'file' }, ['Files']),
-          el('option', { value: 'folder' }, ['Folders'])
+          el('option', { value: '' }, [tr('ui.allTypes', null, 'All types')]),
+          el('option', { value: 'file' }, [tr('ui.files', null, 'Files')]),
+          el('option', { value: 'folder' }, [tr('ui.folders', null, 'Folders')])
         ]);
 
         var sortSelect = el('select', {
@@ -235,28 +239,28 @@
           'data-trash-sort': '',
           onChange: function (event) { state.sort = event.target.value; render(); }
         }, [
-          el('option', { value: 'date-desc' }, ['Deleted: newest']),
-          el('option', { value: 'date-asc' }, ['Deleted: oldest']),
-          el('option', { value: 'name-asc' }, ['Name']),
-          el('option', { value: 'type-asc' }, ['Type'])
+          el('option', { value: 'date-desc' }, [tr('ui.newest', null, 'Deleted: newest')]),
+          el('option', { value: 'date-asc' }, [tr('ui.oldest', null, 'Deleted: oldest')]),
+          el('option', { value: 'name-asc' }, [tr('ui.name', null, 'Name')]),
+          el('option', { value: 'type-asc' }, [tr('ui.type', null, 'Type')])
         ]);
 
         containerEl.appendChild(el('div', { className: 'trash-toolbar' }, [
-          el('span', { className: 'trash-title' }, ['Trash']),
-          el('span', { className: 'trash-count' }, [state.entries.length + ' total']),
+          el('span', { className: 'trash-title' }, [tr('ui.title', null, 'Trash')]),
+          el('span', { className: 'trash-count' }, [tr('ui.total', { count: state.entries.length }, state.entries.length + ' total')]),
           el('span', { className: 'trash-spacer' }),
           el('input', {
             className: 'trash-control trash-search',
             type: 'search',
             value: state.query,
-            placeholder: 'Filter name or path',
+            placeholder: tr('ui.filter', null, 'Filter name or path'),
             'data-trash-filter-search': '',
             onInput: function (event) { state.query = event.target.value; render(); }
           }),
           workspaceSelect,
           typeSelect,
           sortSelect,
-          el('button', { className: 'trash-btn', type: 'button', onClick: loadEntries }, ['Refresh'])
+          el('button', { className: 'trash-btn', type: 'button', onClick: loadEntries }, [tr('ui.refresh', null, 'Refresh')])
         ]));
         containerEl.appendChild(el('div', {
           className: 'trash-status' + (state.statusError ? ' error' : ''),
@@ -265,17 +269,17 @@
 
         var list = el('div', { className: 'trash-list', 'data-trash-list': '' });
         list.appendChild(el('div', { className: 'trash-header' }, [
-          el('span', {}, ['Name']),
-          el('span', {}, ['Workspace']),
-          el('span', {}, ['Original path']),
-          el('span', {}, ['Deleted']),
-          el('span', {}, ['Type / size']),
-          el('span', {}, ['Actions'])
+          el('span', {}, [tr('ui.name', null, 'Name')]),
+          el('span', {}, [tr('ui.workspace', null, 'Workspace')]),
+          el('span', {}, [tr('ui.originalPath', null, 'Original path')]),
+          el('span', {}, [tr('ui.deleted', null, 'Deleted')]),
+          el('span', {}, [tr('ui.typeSize', null, 'Type / size')]),
+          el('span', {}, [tr('ui.actions', null, 'Actions')])
         ]));
         if (state.loading) {
-          list.appendChild(el('div', { className: 'trash-empty' }, ['Loading deleted items...']));
+          list.appendChild(el('div', { className: 'trash-empty' }, [tr('ui.loading', null, 'Loading deleted items...')]));
         } else if (!rows.length) {
-          list.appendChild(el('div', { className: 'trash-empty' }, [state.entries.length ? 'No deleted items match the current filters.' : 'Trash is empty.']));
+          list.appendChild(el('div', { className: 'trash-empty' }, [state.entries.length ? tr('ui.noMatches', null, 'No deleted items match the current filters.') : tr('ui.empty', null, 'Trash is empty.')]));
         } else {
           rows.forEach(function (entry) {
             var size = formatSize(entry.size);
@@ -296,14 +300,14 @@
                   disabled: state.busyId === entry.trashId,
                   'data-trash-restore': entry.trashId,
                   onClick: function () { restoreEntry(entry); }
-                }, [state.busyId === entry.trashId ? 'Restoring...' : 'Restore']),
+                }, [state.busyId === entry.trashId ? tr('ui.restoring', null, 'Restoring...') : tr('ui.restore', null, 'Restore')]),
                 el('button', {
                   className: 'trash-btn trash-btn-danger',
                   type: 'button',
                   disabled: state.busyId === entry.trashId,
                   'data-trash-delete': entry.trashId,
                   onClick: function () { state.confirmingId = entry.trashId; render(); }
-                }, ['Delete permanently'])
+                }, [tr('ui.deletePermanently', null, 'Delete permanently')])
               ])
             ]));
           });
@@ -386,8 +390,12 @@
       }
 
       loadEntries();
+      var localeUnsubscribe = api.i18n && typeof api.i18n.onDidChangeLocale === 'function'
+        ? api.i18n.onDidChangeLocale(render)
+        : null;
       containerEl.__trashCleanup = function () {
         state.disposed = true;
+        if (typeof localeUnsubscribe === 'function') localeUnsubscribe();
         containerEl.innerHTML = '';
       };
     },

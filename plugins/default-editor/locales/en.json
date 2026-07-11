@@ -1,0 +1,22 @@
+{
+  "manifest.name": "Default Editor",
+  "manifest.description": "Built-in text and markdown editor/viewer for Verstak. Provides openProviders for generic text, generic markdown, and notes-context markdown files.",
+  "contributions.openProviders.verstak.default-editor.text.title": "Default Text Editor",
+  "contributions.openProviders.verstak.default-editor.markdown.title": "Default Markdown Editor",
+  "contributions.openProviders.verstak.default-editor.notes-markdown.title": "Default Notes Markdown Editor",
+  "ui.notesContext": "notes context",
+  "ui.edit": "Edit",
+  "ui.preview": "Preview",
+  "ui.split": "Split",
+  "ui.reload": "Reload",
+  "ui.save": "Save",
+  "ui.notesInfo": "Notes context active. Note actions, backlinks, and graph tools are reserved for the future Notes plugin.",
+  "ui.saving": "Saving...",
+  "ui.saveError": "Error saving",
+  "ui.modified": "Modified",
+  "ui.savedAt": "Saved {time}",
+  "ui.saved": "Saved",
+  "ui.discardConfirm": "Discard unsaved changes and reload from disk?",
+  "ui.loading": "Loading...",
+  "ui.loadFailed": "Failed to load file"
+}
