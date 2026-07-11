@@ -29,5 +29,7 @@
   "ui.deleted": "Запись удалена",
   "ui.empty": "Записей о работе пока нет.",
   "ui.edit": "Изменить",
-  "ui.delete": "Удалить"
+  "ui.delete": "Удалить",
+  "ui.entryCount.one": "{count} запись",
+  "ui.entryCount.many": "Записей: {count}"
 }

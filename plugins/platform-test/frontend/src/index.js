@@ -69,6 +69,13 @@
         return fallback || key;
       }
       containerEl.__ptCleanup = [];
+      var localizedNodes = [];
+
+      function localized(tag, attrs, key, fallback) {
+        var node = el(tag, attrs, [tr(key, null, fallback)]);
+        localizedNodes.push({ node: node, key: key, fallback: fallback });
+        return node;
+      }
 
       function trackCleanup(fn) {
         if (typeof fn === 'function') {
@@ -79,12 +86,19 @@
           containerEl.__ptCleanup.push(fn);
         }
       }
+      if (api.i18n && typeof api.i18n.onDidChangeLocale === 'function') {
+        trackCleanup(api.i18n.onDidChangeLocale(function () {
+          localizedNodes.forEach(function (item) {
+            item.node.textContent = tr(item.key, null, item.fallback);
+          });
+        }));
+      }
 
       /* ── Header ─────────────────────────────────────────────────── */
       var header = div('pt-header', [
         span('pt-icon', '◉'),
         div('pt-title-group', [
-          el('h2', { className: 'pt-plugin-name' }, [tr('ui.diagnostics', null, 'Platform Diagnostics')]),
+          localized('h2', { className: 'pt-plugin-name' }, 'ui.diagnostics', 'Platform Diagnostics'),
           el('p', { className: 'pt-plugin-id' }, [api.pluginId]),
         ]),
         span('pt-version', 'v' + (props && props.version ? props.version : '0.1.0')),
@@ -93,7 +107,7 @@
       /* ── Status badge ──────────────────────────────────────────── */
       var badge = div('pt-badge pt-badge-success', [
         el('span', {}, ['✅']),
-        el('span', {}, [tr('ui.bundleLoaded', null, 'Frontend Bundle Loaded')]),
+        localized('span', {}, 'ui.bundleLoaded', 'Frontend Bundle Loaded'),
       ]);
       var badgeRow = div('', [badge]);
 
@@ -279,7 +293,7 @@
         });
 
       var bridgeCard = div('pt-card', [
-        el('h3', { className: 'pt-card-title' }, [tr('ui.apiBridge', null, 'Real Plugin API Bridge')]),
+        localized('h3', { className: 'pt-card-title' }, 'ui.apiBridge', 'Real Plugin API Bridge'),
         el('ul', { className: 'pt-list' }, [
           el('li', { className: 'pt-list-item' }, [
             span('pt-list-label', 'Persisted setting'),
@@ -366,7 +380,7 @@
       });
 
       var testsCard = div('pt-card', [
-        el('h3', { className: 'pt-card-title' }, [tr('ui.testResults', null, 'Test Results')]),
+        localized('h3', { className: 'pt-card-title' }, 'ui.testResults', 'Test Results'),
         summaryRow,
         testsList,
       ]);
@@ -403,7 +417,7 @@
       });
 
       var capsCard = div('pt-card', [
-        el('h3', { className: 'pt-card-title' }, [tr('ui.capabilities', null, 'Registered Capabilities')]),
+        localized('h3', { className: 'pt-card-title' }, 'ui.capabilities', 'Registered Capabilities'),
         capList,
       ]);
 
@@ -426,7 +440,7 @@
       });
 
       var infoCard = div('pt-card', [
-        el('h3', { className: 'pt-card-title' }, [tr('ui.pluginInfo', null, 'Plugin Info')]),
+        localized('h3', { className: 'pt-card-title' }, 'ui.pluginInfo', 'Plugin Info'),
         infoList,
       ]);
 
@@ -461,7 +475,7 @@
       });
 
       var apiCard = div('pt-card', [
-        el('h3', { className: 'pt-card-title' }, [tr('ui.hostMethods', null, 'Host API Methods')]),
+        localized('h3', { className: 'pt-card-title' }, 'ui.hostMethods', 'Host API Methods'),
         apiStatusList,
       ]);
 
@@ -589,7 +603,7 @@
       trackCleanup(function () { stopMouseCapture(); });
 
       var mouseCard = div('pt-card', [
-        el('h3', { className: 'pt-card-title' }, [tr('ui.mouseInspector', null, 'Mouse Event Inspector')]),
+        localized('h3', { className: 'pt-card-title' }, 'ui.mouseInspector', 'Mouse Event Inspector'),
         el('p', { style: { margin: '0 0 0.5rem', color: '#a0a0b8', fontSize: '0.8rem' } }, [
           'Captures ALL mouse/pointer events on window. Press back/forward buttons to see what WebKitGTK reports.',
         ]),
@@ -676,6 +690,23 @@
         if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
         return fallback || key;
       }
+      var localizedNodes = [];
+      var unsubscribeLocale = null;
+
+      function localized(tag, attrs, key, fallback) {
+        var node = el(tag, attrs, [tr(key, null, fallback)]);
+        localizedNodes.push({ node: node, key: key, fallback: fallback });
+        return node;
+      }
+
+      if (api.i18n && typeof api.i18n.onDidChangeLocale === 'function') {
+        unsubscribeLocale = api.i18n.onDidChangeLocale(function () {
+          localizedNodes.forEach(function (item) {
+            item.node.textContent = tr(item.key, null, item.fallback);
+          });
+        });
+        containerEl.__ptSettingsCleanup = unsubscribeLocale;
+      }
 
       /* ── Counter state (local, not persisted) ──────────────────── */
       var counterState = { value: 0 };
@@ -684,7 +715,7 @@
       var header = div('pt-header', [
         span('pt-icon', '⚙️'),
         div('pt-title-group', [
-          el('h2', { className: 'pt-plugin-name' }, [tr('ui.settings', null, 'Platform Test Settings')]),
+          localized('h2', { className: 'pt-plugin-name' }, 'ui.settings', 'Platform Test Settings'),
           el('p', { className: 'pt-plugin-id' }, [api.pluginId]),
         ]),
       ]);
@@ -707,24 +738,24 @@
       var incrementBtn = el('button', { className: 'btn btn-primary', onClick: function () {
         counterState.value += 1;
         counterDisplay.firstChild.textContent = String(counterState.value);
-      }}, [tr('ui.increment', null, '+ Increment')]);
+      }}, [localized('span', {}, 'ui.increment', '+ Increment')]);
 
       var decrementBtn = el('button', { className: 'btn btn-secondary', onClick: function () {
         counterState.value = Math.max(0, counterState.value - 1);
         counterDisplay.firstChild.textContent = String(counterState.value);
-      }}, [tr('ui.decrement', null, '− Decrement')]);
+      }}, [localized('span', {}, 'ui.decrement', '− Decrement')]);
 
       var resetBtn = el('button', { className: 'btn btn-secondary', onClick: function () {
         counterState.value = 0;
         counterDisplay.firstChild.textContent = '0';
-      }}, [tr('ui.reset', null, '↺ Reset')]);
+      }}, [localized('span', {}, 'ui.reset', '↺ Reset')]);
 
       var btnGroup = el('div', { style: { display: 'flex', gap: '0.5rem' } }, [
         incrementBtn, decrementBtn, resetBtn,
       ]);
 
       var counterCard = div('pt-card', [
-        el('h3', { className: 'pt-card-title' }, [tr('ui.counter', null, 'Interactive Counter (Local State)')]),
+        localized('h3', { className: 'pt-card-title' }, 'ui.counter', 'Interactive Counter (Local State)'),
         counterDisplay,
         btnGroup,
         el('p', { style: { marginTop: '0.75rem', color: '#6c6c8a', fontSize: '0.7rem' } }, [
@@ -750,7 +781,7 @@
       });
 
       var settingsCard = div('pt-card', [
-        el('h3', { className: 'pt-card-title' }, [tr('ui.demoSettings', null, 'Plugin Settings (Demo)')]),
+        localized('h3', { className: 'pt-card-title' }, 'ui.demoSettings', 'Plugin Settings (Demo)'),
         settingsDemoList,
         el('p', { style: { marginTop: '0.5rem', color: '#6c6c8a', fontSize: '0.7rem' } }, [
           'Use api.settings.read() / api.settings.write() for persisted settings.',
@@ -765,8 +796,10 @@
     },
 
     unmount: function (containerEl) {
+      if (typeof containerEl.__ptSettingsCleanup === 'function') containerEl.__ptSettingsCleanup();
       containerEl.innerHTML = '';
       containerEl.className = '';
+      delete containerEl.__ptSettingsCleanup;
     },
   };
 

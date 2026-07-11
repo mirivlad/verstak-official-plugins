@@ -29,5 +29,11 @@
   "ui.copyToken": "Копировать токен",
   "ui.rotateToken": "Сменить токен",
   "ui.receiverUrl": "URL приёмника",
-  "ui.pairingToken": "Токен сопряжения"
+  "ui.pairingToken": "Токен сопряжения",
+  "ui.loading": "Загрузка...",
+  "ui.clipboardUnavailable": "Буфер обмена недоступен",
+  "ui.copied": "{label} скопирован",
+  "ui.rotateConfirm": "Сменить токен сопряжения?",
+  "ui.rotating": "Смена токена...",
+  "ui.tokenRotated": "Токен изменён"
 }

@@ -29,5 +29,7 @@
   "ui.deleted": "Entry deleted",
   "ui.empty": "No worklog entries yet.",
   "ui.edit": "Edit",
-  "ui.delete": "Delete"
+  "ui.delete": "Delete",
+  "ui.entryCount.one": "{count} entry",
+  "ui.entryCount.many": "{count} entries"
 }

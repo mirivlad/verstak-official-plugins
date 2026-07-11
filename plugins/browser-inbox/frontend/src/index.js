@@ -1059,7 +1059,7 @@
 
       function loadPairing() {
         setBusy(true);
-        setStatus('Loading...', false);
+        setStatus(tr('ui.loading', null, 'Loading...'), false);
         return Promise.resolve().then(function () {
           return pairingAPI().pairing();
         }).then(function (pairing) {
@@ -1075,11 +1075,11 @@
       function copyValue(value, label) {
         if (!value) return;
         if (typeof navigator === 'undefined' || !navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
-          setStatus('Clipboard unavailable', true);
+          setStatus(tr('ui.clipboardUnavailable', null, 'Clipboard unavailable'), true);
           return;
         }
         navigator.clipboard.writeText(value).then(function () {
-          setStatus(label + ' copied', false);
+          setStatus(tr('ui.copied', { label: label }, '{label} copied'), false);
         }).catch(function (err) {
           setStatus(text(err && err.message ? err.message : err), true);
         });
@@ -1092,14 +1092,14 @@
         copyValue(receiverTokenInput.value, 'Token');
       });
       rotateTokenButton.addEventListener('click', function () {
-        if (typeof window.confirm === 'function' && !window.confirm('Rotate pairing token?')) return;
+        if (typeof window.confirm === 'function' && !window.confirm(tr('ui.rotateConfirm', null, 'Rotate pairing token?'))) return;
         setBusy(true);
-        setStatus('Rotating...', false);
+        setStatus(tr('ui.rotating', null, 'Rotating...'), false);
         Promise.resolve().then(function () {
           return pairingAPI().rotateToken();
         }).then(function (pairing) {
           applyPairing(pairing);
-          setStatus('Token rotated', false);
+          setStatus(tr('ui.tokenRotated', null, 'Token rotated'), false);
         }).catch(function (err) {
           setStatus(text(err && err.message ? err.message : err), true);
         }).then(function () {

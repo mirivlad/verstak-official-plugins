@@ -29,5 +29,11 @@
   "ui.copyToken": "Copy Token",
   "ui.rotateToken": "Rotate Token",
   "ui.receiverUrl": "Receiver URL",
-  "ui.pairingToken": "Pairing Token"
+  "ui.pairingToken": "Pairing Token",
+  "ui.loading": "Loading...",
+  "ui.clipboardUnavailable": "Clipboard unavailable",
+  "ui.copied": "{label} copied",
+  "ui.rotateConfirm": "Rotate pairing token?",
+  "ui.rotating": "Rotating...",
+  "ui.tokenRotated": "Token rotated"
 }

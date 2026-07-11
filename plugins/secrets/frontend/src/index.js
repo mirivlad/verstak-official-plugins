@@ -423,7 +423,7 @@
       }
 
       function deleteSecret(id) {
-        if (!id || !window.confirm('Delete this secret?')) return;
+        if (!id || !window.confirm(tr('ui.deleteConfirm', null, 'Delete this secret?'))) return;
         api.secrets.delete(id).then(function () {
           selectedID = '';
           selectedRecord = null;
@@ -437,7 +437,7 @@
       function copySecretLink(id) {
         api.secrets.copyLink(id).then(function (link) {
           return writeClipboard(api, link).then(function () {
-            setStatus('Secret link copied', false);
+            setStatus(tr('ui.linkCopied', null, 'Secret link copied'), false);
           });
         }).catch(function (err) {
           setStatus((err && err.message) ? err.message : String(err), true);

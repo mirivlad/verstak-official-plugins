@@ -37,6 +37,15 @@ class FakeNode {
   addEventListener() {}
 }
 
+function findByClass(node, className) {
+  if (String(node.className || '').split(/\s+/).includes(className)) return node;
+  for (const child of node.children || []) {
+    const found = findByClass(child, className);
+    if (found) return found;
+  }
+  return null;
+}
+
 function makeDocument() {
   return {
     head: new FakeNode('head'),
@@ -76,6 +85,25 @@ if (!components) {
 
 const api = {
   pluginId: 'verstak.platform-test',
+  i18n: {
+    locale: 'en',
+    listeners: new Set(),
+    messages: {
+      en: { 'ui.diagnostics': 'Platform Diagnostics', 'ui.settings': 'Platform Test Settings' },
+      ru: { 'ui.diagnostics': 'Диагностика платформы', 'ui.settings': 'Настройки теста платформы' },
+    },
+    getLocale() { return this.locale; },
+    t(key, params, fallback) { return this.messages[this.locale][key] || fallback || key; },
+    onDidChangeLocale(listener) {
+      this.listeners.add(listener);
+      listener(this.locale);
+      return () => this.listeners.delete(listener);
+    },
+    setLocale(locale) {
+      this.locale = locale;
+      this.listeners.forEach((listener) => listener(locale));
+    },
+  },
   settings: {
     read: async () => 'initial value',
     write: async () => undefined,
@@ -179,9 +207,27 @@ const api = {
     if (container.children.length === 0) {
       throw new Error(`${name} mounted no DOM nodes`);
     }
+    if (name === 'DiagnosticsPanel') {
+      api.i18n.setLocale('ru');
+      if (findByClass(container, 'pt-plugin-name')?.textContent !== 'Диагностика платформы') {
+        throw new Error('DiagnosticsPanel did not update after locale change');
+      }
+    }
+    if (name === 'PlatformTestSettings') {
+      const counter = findByClass(container, 'pt-counter-value');
+      counter.textContent = '3';
+      api.i18n.setLocale('ru');
+      if (findByClass(container, 'pt-plugin-name')?.textContent !== 'Настройки теста платформы') {
+        throw new Error('PlatformTestSettings did not update after locale change');
+      }
+      if (counter.textContent !== '3') {
+        throw new Error('PlatformTestSettings lost counter state after locale change');
+      }
+    }
     if (typeof component.unmount === 'function') {
       component.unmount(container);
     }
+    api.i18n.setLocale('en');
   }
 
   console.log('platform-test frontend smoke passed');

@@ -505,7 +505,11 @@
     }
 
     function render() {
-      countEl.textContent = entries.length + ' entr' + (entries.length === 1 ? 'y' : 'ies');
+      countEl.textContent = tr(
+        entries.length === 1 ? 'ui.entryCount.one' : 'ui.entryCount.many',
+        { count: entries.length },
+        entries.length === 1 ? '{count} entry' : '{count} entries'
+      );
       statusEl.textContent = statusText;
       statusEl.className = 'journal-status' + (statusClass ? ' ' + statusClass : '');
       addBtn.disabled = scope.mode !== 'workspace';
