@@ -152,6 +152,48 @@ function makeApi(initialSettings = {}) {
     receiverToken: 'initial-browser-token',
   };
   let nextWriteError = null;
+  function backendCaptures() {
+    const keys = ['captures:global', 'captures', ...Object.keys(settings).filter((key) => key.startsWith('captures:workspace:'))];
+    const seen = new Set();
+    const captures = [];
+    for (const key of keys) {
+      for (const original of Array.isArray(settings[key]) ? settings[key] : []) {
+        if (!original || !original.captureId || seen.has(original.captureId)) continue;
+        seen.add(original.captureId);
+        const capture = { ...original };
+        if (!capture.workspaceRootPath && key.startsWith('captures:workspace:')) {
+          capture.workspaceRootPath = decodeURIComponent(key.slice('captures:workspace:'.length));
+          capture.workspaceName = capture.workspaceRootPath;
+        }
+        captures.push(capture);
+      }
+    }
+    return { keys, captures };
+  }
+  function backendWriteCaptures(captures, keys) {
+    settings['captures:global'] = captures.slice(0, 100);
+    keys.forEach((key) => {
+      if (key !== 'captures:global') settings[key] = [];
+    });
+  }
+  function backendMutate(payload) {
+    const { keys, captures } = backendCaptures();
+    const ids = new Set([payload.captureId, ...(payload.captureIds || [])].filter(Boolean));
+    const next = captures.flatMap((capture) => {
+      if (!ids.has(capture.captureId)) return [capture];
+      if (payload.action === 'delete') return [];
+      if (payload.action === 'assign') return [{ ...capture, workspaceRootPath: payload.workspaceRootPath || '', workspaceName: payload.workspaceRootPath || '' }];
+      if (payload.action === 'processed') return [{ ...capture, processed: payload.processed === true }];
+      return [capture];
+    });
+    backendWriteCaptures(next, keys);
+  }
+  function backendAppend(event) {
+    const { keys, captures } = backendCaptures();
+    const payload = { ...(event.payload || {}) };
+    const next = [payload, ...captures.filter((capture) => capture.captureId !== payload.captureId)];
+    backendWriteCaptures(next, keys);
+  }
   return {
     settings,
     handlers,
@@ -165,9 +207,13 @@ function makeApi(initialSettings = {}) {
     events: {
       publish: async (name, payload) => {
         publishedEvents.push({ name, payload });
+        if (name === 'browser-inbox.storage.mutate') backendMutate(payload || {});
       },
       subscribe: async (name, handler) => {
-        handlers[name] = handler;
+        handlers[name] = async (event) => {
+          if (name.startsWith('browser.capture.')) backendAppend(event);
+          return handler(event);
+        };
         return () => {
           unsubscribed.push(name);
           delete handlers[name];
@@ -214,7 +260,7 @@ function makeApi(initialSettings = {}) {
 }
 
 async function flush() {
-  for (let i = 0; i < 8; i += 1) await Promise.resolve();
+  for (let i = 0; i < 16; i += 1) await Promise.resolve();
 }
 
 async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, workspaceRootPath: 'Project' }, document = makeDocument()) {
@@ -236,6 +282,14 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
 (async () => {
   const settingsComponents = loadComponents(makeDocument());
   if (!settingsComponents.BrowserInboxSettings) throw new Error('BrowserInboxSettings was not registered');
+
+  const styleDocument = makeDocument();
+  const styledView = await mountWithApi(makeApi(), {}, styleDocument);
+  const injectedStyles = styleDocument.head.children.map((node) => node.textContent).join('\n');
+  if (!injectedStyles.includes('.browser-inbox-select{') || !injectedStyles.includes('appearance:none')) {
+    throw new Error('Browser Inbox selects do not use the application select styling');
+  }
+  styledView.component.unmount && styledView.component.unmount(styledView.container);
 
   const api = makeApi();
   const settingsView = await mountSettingsWithApi(makeApi());
@@ -413,6 +467,9 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   }
   if (!walk(legacyGlobal.container, (node) => node.getAttribute && node.getAttribute('data-browser-capture-id') === 'legacy-project-capture')) {
     throw new Error('legacy workspace capture was not rendered in global view');
+  }
+  if (legacyApi.getStoredCaptures('captures').length !== 0) {
+    throw new Error('legacy captures were not removed after canonical migration');
   }
   component.unmount && component.unmount(legacyGlobal.container);
 
@@ -612,7 +669,7 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   if (!noteWrite.content.includes('# Example Article')) throw new Error('note content missing heading');
   if (!noteWrite.content.includes('Source: https://example.com/article')) throw new Error('note content missing source URL');
   if (!noteWrite.content.includes('Selected text from the page')) throw new Error('note content missing selected text');
-  if (conversionApi.getStoredCaptures(projectKey).some((capture) => capture.captureId === 'convert-selection')) {
+  if (conversionApi.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'convert-selection')) {
     throw new Error('converted capture was not removed from queue');
   }
   const convertedEvent = conversionApi.publishedEvents.find((event) => event.name === 'browser.capture.converted');
@@ -639,7 +696,7 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   failedConversionApi.failNextWrite('file already exists');
   failedCreateNoteButton.click();
   await flush();
-  if (!failedConversionApi.getStoredCaptures(projectKey).some((capture) => capture.captureId === 'convert-conflict')) {
+  if (!failedConversionApi.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'convert-conflict')) {
     throw new Error('failed conversion removed capture from queue');
   }
   if (!failedConversionView.container.textContent.includes('Could not create note')) {
@@ -677,7 +734,7 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   }
   if (!linkWrite.content.includes('[InternetShortcut]')) throw new Error('link content missing InternetShortcut header');
   if (!linkWrite.content.includes('URL=https://example.com/article')) throw new Error('link content missing URL');
-  if (linkConversionApi.getStoredCaptures(projectKey).some((capture) => capture.captureId === 'convert-link')) {
+  if (linkConversionApi.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'convert-link')) {
     throw new Error('converted link capture was not removed from queue');
   }
   const convertedLinkEvent = linkConversionApi.publishedEvents.find((event) => event.name === 'browser.capture.converted');
@@ -704,7 +761,7 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   failedLinkApi.failNextWrite('link already exists');
   failedCreateLinkButton.click();
   await flush();
-  if (!failedLinkApi.getStoredCaptures(projectKey).some((capture) => capture.captureId === 'convert-link-conflict')) {
+  if (!failedLinkApi.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'convert-link-conflict')) {
     throw new Error('failed link conversion removed capture from queue');
   }
   if (!failedLinkView.container.textContent.includes('Could not create link')) {
@@ -745,7 +802,7 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   if (fileWrite.options.createIfMissing !== true || fileWrite.options.overwrite !== false) {
     throw new Error(`file write options mismatch: ${JSON.stringify(fileWrite.options)}`);
   }
-  if (fileConversionApi.getStoredCaptures(projectKey).some((capture) => capture.captureId === 'convert-file')) {
+  if (fileConversionApi.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'convert-file')) {
     throw new Error('converted file capture was not removed from queue');
   }
   const convertedFileEvent = fileConversionApi.publishedEvents.find((event) => event.name === 'browser.capture.converted');
@@ -811,7 +868,7 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   failedFileApi.failNextWrite('file already exists');
   failedCreateFileButton.click();
   await flush();
-  if (!failedFileApi.getStoredCaptures(projectKey).some((capture) => capture.captureId === 'convert-file-conflict')) {
+  if (!failedFileApi.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'convert-file-conflict')) {
     throw new Error('failed file conversion removed capture from queue');
   }
   if (!failedFileView.container.textContent.includes('Could not create file')) {

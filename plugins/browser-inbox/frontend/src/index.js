@@ -12,6 +12,7 @@
   var LEGACY_KEY = 'captures';
   var GLOBAL_KEY = 'captures:global';
   var WORKSPACE_PREFIX = 'captures:workspace:';
+  var MUTATION_EVENT = 'browser-inbox.storage.mutate';
 
   function injectStyles() {
     if (document.getElementById('browser-inbox-style-injected')) return;
@@ -29,7 +30,9 @@
     '.browser-inbox-filters{display:flex;align-items:center;gap:.35rem;min-width:0;flex:1;flex-wrap:wrap}',
     '.browser-inbox-input,.browser-inbox-select{box-sizing:border-box;min-height:1.85rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-surface,#15152c);color:var(--vt-color-text-secondary,#b7c0d4);font:inherit;font-size:.76rem;padding:.25rem .42rem}',
     '.browser-inbox-input{width:min(15rem,100%)}',
-    '.browser-inbox-select{max-width:12rem}',
+    '.browser-inbox-select{max-width:12rem;appearance:none;background-color:var(--vt-color-surface,#15152c);background-image:linear-gradient(45deg,transparent 50%,var(--vt-color-text-muted,#7f8aa3) 50%),linear-gradient(135deg,var(--vt-color-text-muted,#7f8aa3) 50%,transparent 50%);background-position:calc(100% - 14px) 50%,calc(100% - 9px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:1.65rem}',
+    '.browser-inbox-select option{background:var(--vt-color-surface,#15152c);color:var(--vt-color-text-primary,#f4f7fb)}',
+    '.browser-inbox-input:focus,.browser-inbox-select:focus{outline:none;border-color:var(--vt-color-accent,#4ecca3);box-shadow:0 0 0 1px var(--vt-color-accent,#4ecca3)}',
     '.browser-inbox-spacer{flex:1}',
     '.browser-inbox-btn{font-size:.78rem;padding:.32rem .65rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-md,6px);background:var(--vt-color-surface-hover,#1b2440);color:var(--vt-color-text-secondary,#b7c0d4);cursor:pointer}',
     '.browser-inbox-btn:hover{background:var(--vt-color-surface-hover,#1b2440);border-color:var(--vt-color-accent,#4ecca3);color:var(--vt-color-text-primary,#f4f7fb)}',
@@ -473,11 +476,32 @@
       });
     }
 
-    function persist() {
-      if (!api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve();
-      return api.settings.write(GLOBAL_KEY, storageCaptures(sortCaptures(captures))).catch(function (err) {
+    function publishMutation(action, payload, verify, verifySettings) {
+      if (!api || !api.events || typeof api.events.publish !== 'function') {
+        statusText = 'Could not save inbox: events API unavailable';
+        statusClass = 'error';
+        render();
+        return Promise.resolve(false);
+      }
+      return api.events.publish(MUTATION_EVENT, Object.assign({ action: action }, payload || {})).then(function () {
+        if (!api.settings || typeof api.settings.read !== 'function') throw new Error('settings API unavailable');
+        return api.settings.read();
+      }).then(function (settings) {
+        settings = settings || {};
+        if (typeof verifySettings === 'function' && !verifySettings(settings)) {
+          throw new Error('the stored inbox did not reach the expected state');
+        }
+        return loadStored(true);
+      }).then(function () {
+        if (typeof verify === 'function' && !verify()) {
+          throw new Error('the stored capture did not change');
+        }
+        return true;
+      }).catch(function (err) {
         statusText = 'Could not save inbox: ' + (err && err.message ? err.message : String(err));
         statusClass = 'error';
+        render();
+        return false;
       });
     }
 
@@ -486,30 +510,14 @@
       captureIds.forEach(function (captureId) {
         ids[captureId] = true;
       });
-      captures = captures.filter(function (item) {
-        return !ids[item.captureId];
-      });
-      if (ids[selectedId]) selectedId = '';
-      if (!api || !api.settings || typeof api.settings.read !== 'function' || typeof api.settings.write !== 'function') {
-        return persist().then(function () {
-          statusText = successText;
-          statusClass = '';
-        });
-      }
-      return api.settings.read().then(function (settings) {
-        var keys = globalCaptureKeys(settings || {});
-        return Promise.all(keys.map(function (key) {
-          var next = normalizeStoredCaptures((settings || {})[key], key).filter(function (item) {
-            return !ids[item.captureId];
-          });
-          return api.settings.write(key, storageCaptures(next));
-        }));
-      }).then(function () {
+      return publishMutation('delete', { captureIds: captureIds }, function () {
+        return !captures.some(function (capture) { return ids[capture.captureId]; });
+      }).then(function (saved) {
+        if (!saved) return;
+        if (ids[selectedId]) selectedId = '';
         statusText = successText;
         statusClass = '';
-      }).catch(function (err) {
-        statusText = 'Could not update inbox: ' + (err && err.message ? err.message : String(err));
-        statusClass = 'error';
+        render();
       });
     }
 
@@ -534,11 +542,13 @@
         return item.captureId === capture.captureId;
       });
       if (existing) return Promise.resolve();
-      captures = sortCaptures([capture].concat(captures));
       selectedId = capture.captureId;
       statusText = 'Capture received';
       statusClass = '';
-      return persist().then(render);
+      statusText = 'Could not load received capture from storage';
+      statusClass = 'error';
+      render();
+      return Promise.resolve();
     }
 
     function applyDomainBinding(capture) {
@@ -552,17 +562,20 @@
 
     function assignWorkspace(captureId, workspaceRoot) {
       workspaceRoot = cleanWorkspace(workspaceRoot);
-      captures = captures.map(function (capture) {
-        if (capture.captureId !== captureId) return capture;
-        return Object.assign({}, capture, {
-          workspaceRootPath: workspaceRoot,
-          workspaceName: workspaceRoot
+      return publishMutation('assign', {
+        captureId: captureId,
+        workspaceRootPath: workspaceRoot
+      }, function () {
+        return captures.some(function (capture) {
+          return capture.captureId === captureId && cleanWorkspace(capture.workspaceRootPath) === workspaceRoot;
         });
+      }).then(function (saved) {
+        if (!saved) return;
+        if (workspaceRoot && workspaceOptions.indexOf(workspaceRoot) === -1) workspaceOptions.push(workspaceRoot);
+        statusText = workspaceRoot ? 'Capture assigned to ' + workspaceRoot : 'Capture is unassigned';
+        statusClass = '';
+        render();
       });
-      if (workspaceRoot && workspaceOptions.indexOf(workspaceRoot) === -1) workspaceOptions.push(workspaceRoot);
-      statusText = workspaceRoot ? 'Capture assigned to ' + workspaceRoot : 'Capture is unassigned';
-      statusClass = '';
-      return persist().then(render);
     }
 
     function removeCapture(captureId) {
@@ -570,13 +583,19 @@
     }
 
     function setProcessed(captureId, processed) {
-      captures = captures.map(function (capture) {
-        if (capture.captureId !== captureId) return capture;
-        return Object.assign({}, capture, { processed: processed === true });
+      return publishMutation('processed', {
+        captureId: captureId,
+        processed: processed === true
+      }, function () {
+        return captures.some(function (capture) {
+          return capture.captureId === captureId && capture.processed === (processed === true);
+        });
+      }).then(function (saved) {
+        if (!saved) return;
+        statusText = processed ? 'Capture marked processed' : 'Capture marked unprocessed';
+        statusClass = '';
+        render();
       });
-      statusText = processed ? 'Capture marked processed' : 'Capture marked unprocessed';
-      statusClass = '';
-      return persist().then(render);
     }
 
     function createNoteFromCapture(capture) {
@@ -884,7 +903,7 @@
       renderDetail();
     }
 
-    function loadStored() {
+    function loadStored(skipMigration) {
       if (!api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve();
       return api.settings.read().then(function (settings) {
         domainBindings = normalizeDomainBindings((settings || {}).domainBindings);
@@ -896,10 +915,28 @@
           if (key !== GLOBAL_KEY && stored.length > 0) hasLegacyCaptures = true;
           all = all.concat(stored);
         });
-        captures = sortCaptures(all);
+        captures = sortCaptures(all).map(applyDomainBinding);
         if (!selectedId && captures[0]) selectedId = captures[0].captureId;
-        // Keep legacy records readable, then mirror the canonical state into the global queue.
-        return hasLegacyCaptures ? persist() : undefined;
+        // Read legacy records once, then ask the backend to migrate them atomically.
+        if (!hasLegacyCaptures || skipMigration) return undefined;
+        var expectedIds = captures.map(function (capture) { return capture.captureId; });
+        return publishMutation('migrate', {}, function () {
+          return expectedIds.every(function (captureId) {
+            return captures.some(function (capture) { return capture.captureId === captureId; });
+          });
+        }, function (migratedSettings) {
+          var canonicalIds = normalizeStoredCaptures(migratedSettings[GLOBAL_KEY], GLOBAL_KEY).map(function (capture) {
+            return capture.captureId;
+          });
+          var legacyIsEmpty = globalCaptureKeys(migratedSettings).filter(function (key) {
+            return key !== GLOBAL_KEY;
+          }).every(function (key) {
+            return normalizeStoredCaptures(migratedSettings[key], key).length === 0;
+          });
+          return legacyIsEmpty && expectedIds.every(function (captureId) {
+            return canonicalIds.indexOf(captureId) !== -1;
+          });
+        });
       }).catch(function (err) {
         statusText = 'Could not load inbox: ' + (err && err.message ? err.message : String(err));
         statusClass = 'error';
@@ -925,7 +962,34 @@
       if (!api || !api.events || typeof api.events.subscribe !== 'function') return Promise.resolve();
       return Promise.all(CAPTURE_EVENTS.map(function (eventName) {
         return api.events.subscribe(eventName, function (event) {
-          return addCapture(captureFromEvent(event));
+          var received = captureFromEvent(event);
+          return loadStored(true).then(function () {
+            var stored = captures.find(function (capture) {
+              return capture.captureId === received.captureId;
+            });
+            if (!stored) return addCapture(received);
+            if (!received.workspaceRootPath && stored.workspaceRootPath) {
+              return publishMutation('assign', {
+                captureId: stored.captureId,
+                workspaceRootPath: stored.workspaceRootPath
+              }, function () {
+                return captures.some(function (capture) {
+                  return capture.captureId === stored.captureId && capture.workspaceRootPath === stored.workspaceRootPath;
+                });
+              }).then(function (saved) {
+                if (!saved) return;
+                selectedId = received.captureId;
+                statusText = 'Capture received';
+                statusClass = '';
+                render();
+              });
+            }
+            selectedId = received.captureId;
+            statusText = 'Capture received';
+            statusClass = '';
+            render();
+            return undefined;
+          });
         }).then(function (unsubscribe) {
           if (typeof unsubscribe === 'function') unsubscribers.push(unsubscribe);
         });
