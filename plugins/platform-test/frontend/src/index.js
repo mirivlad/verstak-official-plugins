@@ -73,8 +73,23 @@
 
       function localized(tag, attrs, key, fallback) {
         var node = el(tag, attrs, [tr(key, null, fallback)]);
-        localizedNodes.push({ node: node, key: key, fallback: fallback });
+        var item = { node: node, key: key, params: null, fallback: fallback };
+        node.__ptLocalized = item;
+        localizedNodes.push(item);
         return node;
+      }
+
+      function setLocalized(node, key, params, fallback) {
+        var item = node.__ptLocalized;
+        if (!item) {
+          item = { node: node };
+          node.__ptLocalized = item;
+          localizedNodes.push(item);
+        }
+        item.key = key;
+        item.params = params || null;
+        item.fallback = fallback;
+        node.textContent = tr(key, params, fallback);
       }
 
       function trackCleanup(fn) {
@@ -89,7 +104,7 @@
       if (api.i18n && typeof api.i18n.onDidChangeLocale === 'function') {
         trackCleanup(api.i18n.onDidChangeLocale(function () {
           localizedNodes.forEach(function (item) {
-            item.node.textContent = tr(item.key, null, item.fallback);
+            if (item.key) item.node.textContent = tr(item.key, item.params, item.fallback);
           });
         }));
       }
@@ -112,44 +127,44 @@
       var badgeRow = div('', [badge]);
 
       /* ── Real Plugin API bridge checks ─────────────────────────── */
-      var savedValue = span('pt-list-value pt-saved-setting', 'Saved setting: loading...');
-      var capabilityValue = span('pt-list-value pt-capability-result', 'Capabilities: loading...');
-      var commandValue = span('pt-list-value pt-command-result', 'Command: registering...');
-      var eventValue = span('pt-list-value pt-event-result', 'Event: subscribing...');
-      var filesValue = span('pt-list-value pt-files-result', 'Files: running...');
-      var filesErrorValue = span('pt-list-value pt-files-error-result', 'Files error path: checking...');
-      var workbenchValue = span('pt-list-value pt-workbench-result', 'Workbench: ready');
-      function makeWorkbenchButton(className, label, request) {
+      var savedValue = localized('span', { className: 'pt-list-value pt-saved-setting' }, 'ui.savedLoading', 'Saved setting: loading...');
+      var capabilityValue = localized('span', { className: 'pt-list-value pt-capability-result' }, 'ui.capabilitiesLoading', 'Capabilities: loading...');
+      var commandValue = localized('span', { className: 'pt-list-value pt-command-result' }, 'ui.commandRegistering', 'Command: registering...');
+      var eventValue = localized('span', { className: 'pt-list-value pt-event-result' }, 'ui.eventSubscribing', 'Event: subscribing...');
+      var filesValue = localized('span', { className: 'pt-list-value pt-files-result' }, 'ui.filesRunning', 'Files: running...');
+      var filesErrorValue = localized('span', { className: 'pt-list-value pt-files-error-result' }, 'ui.filesPathChecking', 'Files error path: checking...');
+      var workbenchValue = localized('span', { className: 'pt-list-value pt-workbench-result' }, 'ui.workbenchReady', 'Workbench: ready');
+      function makeWorkbenchButton(className, key, label, request) {
         return el('button', {
           className: 'btn btn-primary ' + className,
           onClick: function () {
-          workbenchValue.textContent = 'Workbench: opening...';
+          setLocalized(workbenchValue, 'ui.workbenchOpening', null, 'Workbench: opening...');
           api.workbench.editResource(request)
             .then(function (result) {
-              workbenchValue.textContent = 'Workbench: opened ' + result.request.path + ' with ' + (result.providerId || 'no-provider');
+              setLocalized(workbenchValue, 'ui.workbenchOpened', { path: result.request.path, provider: result.providerId || 'no-provider' }, 'Workbench: opened {path} with {provider}');
               workbenchValue.setAttribute('data-workbench-status', result.status === 'opened' ? 'ok' : result.status);
             })
             .catch(function (err) {
-              workbenchValue.textContent = 'Workbench error: ' + (err && err.message ? err.message : String(err));
+              setLocalized(workbenchValue, 'ui.workbenchError', { error: err && err.message ? err.message : String(err) }, 'Workbench error: {error}');
               workbenchValue.setAttribute('data-workbench-status', 'error');
             });
           },
-        }, [label]);
+        }, [localized('span', {}, key, label)]);
       }
-      var openTextWorkbenchButton = makeWorkbenchButton('pt-open-workbench-text', 'Open Text Diagnostic', {
+      var openTextWorkbenchButton = makeWorkbenchButton('pt-open-workbench-text', 'ui.openTextDiagnostic', 'Open Text Diagnostic', {
         kind: 'vault-file',
         path: 'Docs/todo.txt',
         extension: '.txt',
         mime: 'text/plain',
         context: { sourceView: 'files' },
       });
-      var openMarkdownWorkbenchButton = makeWorkbenchButton('pt-open-workbench-markdown', 'Open Markdown Diagnostic', {
+      var openMarkdownWorkbenchButton = makeWorkbenchButton('pt-open-workbench-markdown', 'ui.openMarkdownDiagnostic', 'Open Markdown Diagnostic', {
         kind: 'vault-file',
         path: 'Docs/readme.md',
         extension: '.md',
         context: { sourceView: 'files' },
       });
-      var openNotesWorkbenchButton = makeWorkbenchButton('pt-open-workbench-notes', 'Open Notes Diagnostic', {
+      var openNotesWorkbenchButton = makeWorkbenchButton('pt-open-workbench-notes', 'ui.openNotesDiagnostic', 'Open Notes Diagnostic', {
         kind: 'vault-file',
         path: 'Notes/example.md',
         extension: '.md',
@@ -162,51 +177,51 @@
       var settingInput = el('input', {
         className: 'pt-setting-input',
         type: 'text',
-        'aria-label': 'Saved setting',
+        'aria-label': tr('ui.savedSetting', null, 'Saved setting'),
         value: 'changed value',
       });
       var saveStatus = span('pt-list-value', '');
       var saveButton = el('button', {
         className: 'btn btn-primary pt-save-setting',
         onClick: function () {
-          saveStatus.textContent = 'Saving...';
+          setLocalized(saveStatus, 'ui.saving', null, 'Saving...');
           api.settings.write('savedText', settingInput.value)
             .then(function () {
-              savedValue.textContent = 'Saved setting: ' + settingInput.value;
-              saveStatus.textContent = 'Saved';
+              setLocalized(savedValue, 'ui.savedSettingValue', { value: settingInput.value }, 'Saved setting: {value}');
+              setLocalized(saveStatus, 'ui.saved', null, 'Saved');
             })
             .catch(function (err) {
-              saveStatus.textContent = 'Error: ' + (err && err.message ? err.message : String(err));
+              setLocalized(saveStatus, 'ui.errorValue', { error: err && err.message ? err.message : String(err) }, 'Error: {error}');
             });
         },
-      }, ['Save Setting']);
+      }, [localized('span', {}, 'ui.saveSetting', 'Save Setting')]);
 
       api.settings.read('savedText')
         .then(function (value) {
           var text = value || '';
           settingInput.value = text || 'changed value';
-          savedValue.textContent = 'Saved setting: ' + text;
+          setLocalized(savedValue, 'ui.savedSettingValue', { value: text }, 'Saved setting: {value}');
         })
         .catch(function (err) {
-          savedValue.textContent = 'Settings error: ' + (err && err.message ? err.message : String(err));
+          setLocalized(savedValue, 'ui.settingsError', { error: err && err.message ? err.message : String(err) }, 'Settings error: {error}');
         });
 
       api.capabilities.list()
         .then(function (caps) {
-          capabilityValue.textContent = 'Capabilities: ' + caps.length + ' available';
+          setLocalized(capabilityValue, 'ui.capabilitiesAvailable', { count: caps.length }, 'Capabilities: {count} available');
         })
         .catch(function (err) {
-          capabilityValue.textContent = 'Capabilities error: ' + (err && err.message ? err.message : String(err));
+          setLocalized(capabilityValue, 'ui.capabilitiesError', { error: err && err.message ? err.message : String(err) }, 'Capabilities error: {error}');
         });
 
       api.capabilities.has('verstak/platform-test/v1')
         .then(function (available) {
           badge.setAttribute('data-capability-status', available ? 'available' : 'missing');
-          badge.lastChild.textContent = 'Frontend Bundle Loaded | capability ' + (available ? 'available' : 'missing');
+          setLocalized(badge.lastChild, available ? 'ui.bundleCapabilityAvailable' : 'ui.bundleCapabilityMissing', null, available ? 'Frontend Bundle Loaded | capability available' : 'Frontend Bundle Loaded | capability missing');
         })
         .catch(function (err) {
           badge.setAttribute('data-capability-status', 'error');
-          badge.lastChild.textContent = 'Capability error: ' + (err && err.message ? err.message : String(err));
+          setLocalized(badge.lastChild, 'ui.capabilityError', { error: err && err.message ? err.message : String(err) }, 'Capability error: {error}');
         });
 
       api.commands.register('verstak.platform-test.show-version', function () {
@@ -221,17 +236,17 @@
         })
         .then(function (result) {
           badge.setAttribute('data-command-status', result.status || '');
-          commandValue.textContent = 'Command: ' + result.status + ' ' + result.result.version + ' from ' + result.result.source;
+          setLocalized(commandValue, 'ui.commandResult', { status: result.status, version: result.result.version, source: result.result.source }, 'Command: {status} {version} from {source}');
         })
         .catch(function (err) {
           badge.setAttribute('data-command-status', 'error');
-          commandValue.textContent = 'Command error: ' + (err && err.message ? err.message : String(err));
+          setLocalized(commandValue, 'ui.commandError', { error: err && err.message ? err.message : String(err) }, 'Command error: {error}');
           console.error('[platform-test] command bridge error:', err);
         });
 
       api.events.subscribe('verstak.platform-test.echo', function (event) {
         var message = event && event.payload ? event.payload.message : '';
-        eventValue.textContent = 'Event: received ' + message;
+        setLocalized(eventValue, 'ui.eventReceived', { message: message }, 'Event: received {message}');
         eventValue.setAttribute('data-event-status', 'received');
       })
         .then(function (unsubscribe) {
@@ -239,7 +254,7 @@
           return api.events.publish('verstak.platform-test.echo', { message: 'hello-event' });
         })
         .catch(function (err) {
-          eventValue.textContent = 'Event error: ' + (err && err.message ? err.message : String(err));
+          setLocalized(eventValue, 'ui.eventError', { error: err && err.message ? err.message : String(err) }, 'Event error: {error}');
           eventValue.setAttribute('data-event-status', 'error');
         });
 
@@ -268,27 +283,27 @@
           return api.files.trash('PlatformTest/files-api-moved.txt');
         })
         .then(function () {
-          filesValue.textContent = 'Files: wrote/read/listed/moved/trashed';
+          setLocalized(filesValue, 'ui.filesPassed', null, 'Files: wrote/read/listed/moved/trashed');
           filesValue.setAttribute('data-files-status', 'ok');
         })
         .catch(function (err) {
-          filesValue.textContent = 'Files error: ' + (err && err.message ? err.message : String(err));
+          setLocalized(filesValue, 'ui.filesError', { error: err && err.message ? err.message : String(err) }, 'Files error: {error}');
           filesValue.setAttribute('data-files-status', 'error');
         });
 
       api.files.readText('.verstak/vault.json')
         .then(function () {
-          filesErrorValue.textContent = 'Files error path: unexpectedly allowed';
+          setLocalized(filesErrorValue, 'ui.filesPathAllowed', null, 'Files error path: unexpectedly allowed');
           filesErrorValue.setAttribute('data-files-error-status', 'error');
         })
         .catch(function (err) {
           var message = err && err.message ? err.message : String(err);
           if (message.indexOf('reserved-path') === -1 && message.indexOf('.verstak') === -1) {
-            filesErrorValue.textContent = 'Files error path: wrong error ' + message;
+            setLocalized(filesErrorValue, 'ui.filesPathWrongError', { error: message }, 'Files error path: wrong error {error}');
             filesErrorValue.setAttribute('data-files-error-status', 'error');
             return;
           }
-          filesErrorValue.textContent = 'Files error path: rejected reserved-path';
+          setLocalized(filesErrorValue, 'ui.filesPathRejected', null, 'Files error path: rejected reserved-path');
           filesErrorValue.setAttribute('data-files-error-status', 'expected');
         });
 
@@ -296,11 +311,11 @@
         localized('h3', { className: 'pt-card-title' }, 'ui.apiBridge', 'Real Plugin API Bridge'),
         el('ul', { className: 'pt-list' }, [
           el('li', { className: 'pt-list-item' }, [
-            span('pt-list-label', 'Persisted setting'),
+            localized('span', { className: 'pt-list-label' }, 'ui.persistedSetting', 'Persisted setting'),
             savedValue,
           ]),
           el('li', { className: 'pt-list-item' }, [
-            span('pt-list-label', 'New value'),
+            localized('span', { className: 'pt-list-label' }, 'ui.newValue', 'New value'),
             settingInput,
           ]),
           el('li', { className: 'pt-list-item' }, [
@@ -308,27 +323,27 @@
             saveStatus,
           ]),
           el('li', { className: 'pt-list-item' }, [
-            span('pt-list-label', 'Capabilities'),
+            localized('span', { className: 'pt-list-label' }, 'ui.capabilitiesLabel', 'Capabilities'),
             capabilityValue,
           ]),
           el('li', { className: 'pt-list-item' }, [
-            span('pt-list-label', 'Command runtime'),
+            localized('span', { className: 'pt-list-label' }, 'ui.commandRuntime', 'Command runtime'),
             commandValue,
           ]),
           el('li', { className: 'pt-list-item' }, [
-            span('pt-list-label', 'Event runtime'),
+            localized('span', { className: 'pt-list-label' }, 'ui.eventRuntime', 'Event runtime'),
             eventValue,
           ]),
           el('li', { className: 'pt-list-item' }, [
-            span('pt-list-label', 'Files runtime'),
+            localized('span', { className: 'pt-list-label' }, 'ui.filesRuntime', 'Files runtime'),
             filesValue,
           ]),
           el('li', { className: 'pt-list-item' }, [
-            span('pt-list-label', 'Files reserved path'),
+            localized('span', { className: 'pt-list-label' }, 'ui.filesReservedPath', 'Files reserved path'),
             filesErrorValue,
           ]),
           el('li', { className: 'pt-list-item' }, [
-            span('pt-list-label', 'Workbench routing'),
+            localized('span', { className: 'pt-list-label' }, 'ui.workbenchRouting', 'Workbench routing'),
             openTextWorkbenchButton,
             openMarkdownWorkbenchButton,
             openNotesWorkbenchButton,
@@ -339,12 +354,12 @@
 
       /* ── Test results summary ──────────────────────────────────── */
       var testsData = [
-        { label: 'Plugin Registration', status: 'pass' },
-        { label: 'Capability: verstak/platform-test/v1', status: 'pass' },
-        { label: 'Capability: verstak/diagnostics/v1', status: 'pass' },
-        { label: 'Capability: verstak/core/files/v1', status: 'pass' },
-        { label: 'Capability: verstak/core/workbench/v1', status: 'pass' },
-        { label: 'API Contract Compliance', status: 'pass' },
+        { key: 'registration', label: 'Plugin Registration', status: 'pass' },
+        { key: 'platformCapability', label: 'Capability: verstak/platform-test/v1', status: 'pass' },
+        { key: 'diagnosticsCapability', label: 'Capability: verstak/diagnostics/v1', status: 'pass' },
+        { key: 'filesCapability', label: 'Capability: verstak/core/files/v1', status: 'pass' },
+        { key: 'workbenchCapability', label: 'Capability: verstak/core/workbench/v1', status: 'pass' },
+        { key: 'apiContract', label: 'API Contract Compliance', status: 'pass' },
       ];
 
       var totalTests = testsData.length;
@@ -353,19 +368,19 @@
       var summaryRow = div('pt-test-summary', [
         div('pt-test-stat', [
           span('pt-test-stat-value pt-pass', String(passedTests)),
-          span('pt-test-stat-label', 'Passed'),
+          localized('span', { className: 'pt-test-stat-label' }, 'ui.passed', 'Passed'),
         ]),
         div('pt-test-stat', [
           span('pt-test-stat-value pt-fail', String(totalTests - passedTests)),
-          span('pt-test-stat-label', 'Failed'),
+          localized('span', { className: 'pt-test-stat-label' }, 'ui.failed', 'Failed'),
         ]),
         div('pt-test-stat', [
           span('pt-test-stat-value', String(totalTests)),
-          span('pt-test-stat-label', 'Total'),
+          localized('span', { className: 'pt-test-stat-label' }, 'ui.total', 'Total'),
         ]),
         div('pt-test-stat', [
           span('pt-test-stat-value pt-pass', '100%'),
-          span('pt-test-stat-label', 'Success Rate'),
+          localized('span', { className: 'pt-test-stat-label' }, 'ui.successRate', 'Success Rate'),
         ]),
       ]);
 
@@ -373,8 +388,8 @@
       testsData.forEach(function (t) {
         var dot = el('span', { className: 'pt-cap-dot pt-cap-dot-ok' });
         var item = el('li', { className: 'pt-list-item' }, [
-          el('span', { className: 'pt-list-label' }, [dot, ' ', t.label]),
-          span('pt-list-value pt-pass', t.status === 'pass' ? '✓ PASS' : '✗ FAIL'),
+          el('span', { className: 'pt-list-label' }, [dot, ' ', localized('span', {}, 'ui.test.' + t.key, t.label)]),
+          localized('span', { className: 'pt-list-value pt-pass' }, t.status === 'pass' ? 'ui.pass' : 'ui.fail', t.status === 'pass' ? '✓ PASS' : '✗ FAIL'),
         ]);
         testsList.appendChild(item);
       });
@@ -399,7 +414,7 @@
         var dot = el('span', {
           className: 'pt-cap-dot pt-cap-dot-missing',
         });
-        var statusText = span('pt-list-value', 'Checking...');
+        var statusText = localized('span', { className: 'pt-list-value' }, 'ui.checking', 'Checking...');
         var item = el('li', { className: 'pt-list-item' }, [
           el('span', { className: 'pt-list-label' }, [dot, ' ', cap.label]),
           statusText,
@@ -408,11 +423,11 @@
         api.capabilities.has(cap.id)
           .then(function (available) {
             dot.className = 'pt-cap-dot ' + (available ? 'pt-cap-dot-ok' : 'pt-cap-dot-missing');
-            statusText.textContent = available ? '✓ Available' : '— Unavailable';
+            setLocalized(statusText, available ? 'ui.available' : 'ui.unavailable', null, available ? '✓ Available' : '— Unavailable');
           })
           .catch(function () {
             dot.className = 'pt-cap-dot pt-cap-dot-missing';
-            statusText.textContent = 'Error';
+            setLocalized(statusText, 'ui.error', null, 'Error');
           });
       });
 
@@ -424,16 +439,16 @@
       /* ── Plugin info ───────────────────────────────────────────── */
       var infoList = el('ul', { className: 'pt-list' });
       var infoItems = [
-        { label: 'Plugin ID', value: api.pluginId },
-        { label: 'Bundle Status', value: 'Loaded ✓' },
-        { label: 'Registration Scheme', value: 'VerstakPluginRegister' },
-        { label: 'Components', value: 'DiagnosticsPanel, PlatformTestSettings' },
-        { label: 'Container', value: containerEl.tagName.toLowerCase() + (containerEl.id ? '#' + containerEl.id : '') },
+        { key: 'pluginId', label: 'Plugin ID', value: api.pluginId },
+        { key: 'bundleStatus', label: 'Bundle Status', value: tr('ui.loaded', null, 'Loaded ✓') },
+        { key: 'registration', label: 'Registration Scheme', value: 'VerstakPluginRegister' },
+        { key: 'components', label: 'Components', value: 'DiagnosticsPanel, PlatformTestSettings' },
+        { key: 'container', label: 'Container', value: containerEl.tagName.toLowerCase() + (containerEl.id ? '#' + containerEl.id : '') },
       ];
       infoItems.forEach(function (item) {
         infoList.appendChild(
           el('li', { className: 'pt-list-item' }, [
-            span('pt-list-label', item.label),
+            localized('span', { className: 'pt-list-label' }, 'ui.info.' + item.key, item.label),
             span('pt-list-value', item.value),
           ])
         );
@@ -469,7 +484,7 @@
         apiStatusList.appendChild(
           el('li', { className: 'pt-list-item' }, [
             el('span', { className: 'pt-list-label' }, [dot, ' ', chk.label]),
-            span('pt-list-value', chk.ok ? '✓ Ready' : '✗ Missing'),
+            localized('span', { className: 'pt-list-value' }, chk.ok ? 'ui.ready' : 'ui.missing', chk.ok ? '✓ Ready' : '✗ Missing'),
           ])
         );
       });
@@ -506,7 +521,7 @@
 
       function renderMouseLog() {
         if (mouseLog.length === 0) {
-          mouseLogContainer.textContent = '(no events captured)';
+          setLocalized(mouseLogContainer, 'ui.noMouseEvents', null, '(no events captured)');
           mouseCountSpan.textContent = '0';
           return;
         }
@@ -516,6 +531,7 @@
             '  defaultPrevented=' + e.defaultPrevented +
             '  target=' + e.targetTag + (e.targetClass ? '.' + e.targetClass : '');
         });
+        if (mouseLogContainer.__ptLocalized) mouseLogContainer.__ptLocalized.key = '';
         mouseLogContainer.textContent = lines.join('\n');
         mouseCountSpan.textContent = String(mouseLog.length);
         mouseLogContainer.scrollTop = mouseLogContainer.scrollHeight;
@@ -545,7 +561,7 @@
           window.addEventListener(type, handler, true);
           mouseHandlers.push({ type: type, handler: handler });
         });
-        startStopBtn.textContent = '■ Stop Capture';
+        setLocalized(startStopBtn, 'ui.stopCapture', null, '■ Stop Capture');
         startStopBtn.setAttribute('data-mouse-capturing', 'true');
         renderMouseLog();
       }
@@ -557,35 +573,35 @@
           window.removeEventListener(h.type, h.handler, true);
         });
         mouseHandlers = [];
-        startStopBtn.textContent = '▶ Start Capture';
+        setLocalized(startStopBtn, 'ui.startCapture', null, '▶ Start Capture');
         startStopBtn.setAttribute('data-mouse-capturing', 'false');
       }
 
-      var startStopBtn = el('button', {
+      var startStopBtn = localized('button', {
         className: 'btn btn-primary',
         style: { marginRight: '0.5rem' },
         onClick: function () {
           if (mouseCapturing) { stopMouseCapture(); } else { startMouseCapture(); }
         },
-      }, ['▶ Start Capture']);
+      }, 'ui.startCapture', '▶ Start Capture');
 
-      var clearBtn = el('button', {
+      var clearBtn = localized('button', {
         className: 'btn btn-secondary',
         style: { marginRight: '0.5rem' },
         onClick: function () {
           mouseLog = [];
           renderMouseLog();
         },
-      }, ['Clear']);
+      }, 'ui.clear', 'Clear');
 
-      var copyBtn = el('button', {
+      var copyBtn = localized('button', {
         className: 'btn btn-secondary',
         onClick: function () {
           var json = JSON.stringify(mouseLog, null, 2);
           if (navigator.clipboard) {
             navigator.clipboard.writeText(json).then(function () {
-              copyBtn.textContent = '✓ Copied!';
-              setTimeout(function () { copyBtn.textContent = 'Copy JSON'; }, 1500);
+              setLocalized(copyBtn, 'ui.copied', null, '✓ Copied!');
+              setTimeout(function () { setLocalized(copyBtn, 'ui.copyJson', null, 'Copy JSON'); }, 1500);
             });
           } else {
             var ta = document.createElement('textarea');
@@ -594,24 +610,22 @@
             ta.select();
             document.execCommand('copy');
             document.body.removeChild(ta);
-            copyBtn.textContent = '✓ Copied!';
-            setTimeout(function () { copyBtn.textContent = 'Copy JSON'; }, 1500);
+            setLocalized(copyBtn, 'ui.copied', null, '✓ Copied!');
+            setTimeout(function () { setLocalized(copyBtn, 'ui.copyJson', null, 'Copy JSON'); }, 1500);
           }
         },
-      }, ['Copy JSON']);
+      }, 'ui.copyJson', 'Copy JSON');
 
       trackCleanup(function () { stopMouseCapture(); });
 
       var mouseCard = div('pt-card', [
         localized('h3', { className: 'pt-card-title' }, 'ui.mouseInspector', 'Mouse Event Inspector'),
-        el('p', { style: { margin: '0 0 0.5rem', color: '#a0a0b8', fontSize: '0.8rem' } }, [
-          'Captures ALL mouse/pointer events on window. Press back/forward buttons to see what WebKitGTK reports.',
-        ]),
+        localized('p', { style: { margin: '0 0 0.5rem', color: '#a0a0b8', fontSize: '0.8rem' } }, 'ui.mouseHint', 'Captures ALL mouse/pointer events on window. Press back/forward buttons to see what WebKitGTK reports.'),
         el('div', { style: { display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' } }, [
           startStopBtn,
           clearBtn,
           copyBtn,
-          span('pt-list-label', ' Events:'),
+          localized('span', { className: 'pt-list-label' }, 'ui.eventsCount', 'Events:'),
           mouseCountSpan,
         ]),
         mouseLogContainer,
@@ -722,17 +736,13 @@
 
       /* ── Info card ──────────────────────────────────────────────── */
       var infoCard = div('pt-card', [
-        el('p', { style: { margin: '0', color: '#a0a0b8', fontSize: '0.85rem' } }, [
-          'Settings panel loaded from plugin frontend bundle via ',
-          el('code', { style: { background: '#1a1a2e', padding: '0.1rem 0.3rem', borderRadius: '3px', color: '#4ecca3' } }, ['VerstakPluginRegister']),
-          ' contract.',
-        ]),
+        localized('p', { style: { margin: '0', color: '#a0a0b8', fontSize: '0.85rem' } }, 'ui.settingsInfo', 'Settings panel loaded from the plugin frontend bundle through the VerstakPluginRegister contract.'),
       ]);
 
       /* ── Counter section ────────────────────────────────────────── */
       var counterDisplay = div('pt-counter', [
         el('span', { className: 'pt-counter-value' }, [String(counterState.value)]),
-        span('pt-counter-label', 'clicks (session only, no persistence)'),
+        localized('span', { className: 'pt-counter-label' }, 'ui.counterClicks', 'clicks (session only, no persistence)'),
       ]);
 
       var incrementBtn = el('button', { className: 'btn btn-primary', onClick: function () {
@@ -758,24 +768,22 @@
         localized('h3', { className: 'pt-card-title' }, 'ui.counter', 'Interactive Counter (Local State)'),
         counterDisplay,
         btnGroup,
-        el('p', { style: { marginTop: '0.75rem', color: '#6c6c8a', fontSize: '0.7rem' } }, [
-          'This counter is a local demo. State is not persisted — refreshing resets it.',
-        ]),
+        localized('p', { style: { marginTop: '0.75rem', color: '#6c6c8a', fontSize: '0.7rem' } }, 'ui.counterHint', 'This counter is a local demo. State is not persisted — refreshing resets it.'),
       ]);
 
       /* ── Settings stub ─────────────────────────────────────────── */
       var settingsDemoList = el('ul', { className: 'pt-list' });
       var settingsItems = [
-        { label: 'Auto-run on load', value: 'true' },
-        { label: 'Verbose logging', value: 'false' },
-        { label: 'Theme override', value: 'inherit' },
-        { label: 'Notifications', value: 'enabled' },
+        { key: 'autoRun', label: 'Auto-run on load', valueKey: 'true', value: 'true' },
+        { key: 'verbose', label: 'Verbose logging', valueKey: 'false', value: 'false' },
+        { key: 'theme', label: 'Theme override', valueKey: 'inherit', value: 'inherit' },
+        { key: 'notifications', label: 'Notifications', valueKey: 'enabled', value: 'enabled' },
       ];
       settingsItems.forEach(function (s) {
         settingsDemoList.appendChild(
           el('li', { className: 'pt-list-item' }, [
-            span('pt-list-label', s.label),
-            span('pt-list-value', s.value),
+            localized('span', { className: 'pt-list-label' }, 'ui.setting.' + s.key, s.label),
+            localized('span', { className: 'pt-list-value' }, 'ui.value.' + s.valueKey, s.value),
           ])
         );
       });
@@ -783,9 +791,7 @@
       var settingsCard = div('pt-card', [
         localized('h3', { className: 'pt-card-title' }, 'ui.demoSettings', 'Plugin Settings (Demo)'),
         settingsDemoList,
-        el('p', { style: { marginTop: '0.5rem', color: '#6c6c8a', fontSize: '0.7rem' } }, [
-          'Use api.settings.read() / api.settings.write() for persisted settings.',
-        ]),
+        localized('p', { style: { marginTop: '0.5rem', color: '#6c6c8a', fontSize: '0.7rem' } }, 'ui.settingsHint', 'Use api.settings.read() / api.settings.write() for persisted settings.'),
       ]);
 
       /* ── Assemble ──────────────────────────────────────────────── */

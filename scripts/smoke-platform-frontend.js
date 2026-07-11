@@ -6,6 +6,10 @@ const vm = require('vm');
 const root = path.resolve(__dirname, '..');
 const bundlePath = path.join(root, 'plugins', 'platform-test', 'frontend', 'src', 'index.js');
 const source = fs.readFileSync(bundlePath, 'utf8');
+const platformCatalogs = {
+  en: JSON.parse(fs.readFileSync(path.join(root, 'plugins', 'platform-test', 'locales', 'en.json'), 'utf8')),
+  ru: JSON.parse(fs.readFileSync(path.join(root, 'plugins', 'platform-test', 'locales', 'ru.json'), 'utf8')),
+};
 
 class FakeNode {
   constructor(tagName) {
@@ -44,6 +48,10 @@ function findByClass(node, className) {
     if (found) return found;
   }
   return null;
+}
+
+function allText(node) {
+  return [String(node.textContent || '')].concat((node.children || []).map(allText)).join(' ');
 }
 
 function makeDocument() {
@@ -88,10 +96,7 @@ const api = {
   i18n: {
     locale: 'en',
     listeners: new Set(),
-    messages: {
-      en: { 'ui.diagnostics': 'Platform Diagnostics', 'ui.settings': 'Platform Test Settings' },
-      ru: { 'ui.diagnostics': 'Диагностика платформы', 'ui.settings': 'Настройки теста платформы' },
-    },
+    messages: platformCatalogs,
     getLocale() { return this.locale; },
     t(key, params, fallback) { return this.messages[this.locale][key] || fallback || key; },
     onDidChangeLocale(listener) {
@@ -212,6 +217,10 @@ const api = {
       if (findByClass(container, 'pt-plugin-name')?.textContent !== 'Диагностика платформы') {
         throw new Error('DiagnosticsPanel did not update after locale change');
       }
+      const diagnosticsText = allText(container);
+      if (!diagnosticsText.includes('Сохранённая настройка') || !diagnosticsText.includes('Пройдено')) {
+        throw new Error('DiagnosticsPanel left primary diagnostic chrome untranslated');
+      }
     }
     if (name === 'PlatformTestSettings') {
       const counter = findByClass(container, 'pt-counter-value');
@@ -222,6 +231,10 @@ const api = {
       }
       if (counter.textContent !== '3') {
         throw new Error('PlatformTestSettings lost counter state after locale change');
+      }
+      const settingsText = allText(container);
+      if (!settingsText.includes('Панель настроек загружена') || !settingsText.includes('нажатий')) {
+        throw new Error('PlatformTestSettings left primary settings copy untranslated');
       }
     }
     if (typeof component.unmount === 'function') {
