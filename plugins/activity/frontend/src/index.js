@@ -8,6 +8,7 @@
 
   var PLUGIN_ID = 'verstak.activity';
   var MAX_EVENTS = 250;
+  var RAW_DATA_NAME = 'activity-events';
   var MAX_CANDIDATES = 12;
   var LEGACY_KEY = 'events';
   var GLOBAL_KEY = 'events:global';
@@ -30,7 +31,8 @@
     'browser.capture.selection',
     'browser.capture.link',
     'browser.capture.file',
-    'browser.capture.converted'
+    'browser.capture.converted',
+    'browser.activity.batch'
   ];
   var EVENT_LABELS = {
     'workspace.selected': 'Workspace selected',
@@ -44,7 +46,8 @@
     'browser.capture.selection': 'Selection captured',
     'browser.capture.link': 'Link captured',
     'browser.capture.file': 'File captured',
-    'browser.capture.converted': 'Capture converted'
+    'browser.capture.converted': 'Capture converted',
+    'browser.activity.domain': 'Browser domain activity'
   };
   var LOW_VALUE_EVENT_TYPES = {
     'workspace.selected': true,
@@ -347,6 +350,15 @@
     return sortEvents(scopedEvents.concat(globalEvents, legacyEvents));
   }
 
+  function eventsFromRecords(records, workspaceRoot) {
+    var normalized = normalizeStoredEvents(records, RAW_DATA_NAME);
+    var workspace = cleanWorkspace(workspaceRoot);
+    if (!workspace) return sortEvents(normalized);
+    return sortEvents(normalized.filter(function (item) {
+      return item.workspaceRootPath === workspace;
+    }));
+  }
+
   function candidateStorageKey(workspaceRoot) {
     return CANDIDATE_PREFIX + encodeKey(workspaceRoot);
   }
@@ -436,7 +448,7 @@
           return candidateWorkspace(activity) !== scope.workspaceRoot;
         });
         updateCandidates();
-        persist().then(render);
+        clearWorkspaceRaw(scope.workspaceRoot).then(persist).then(render);
       }
     });
     toolbar.appendChild(titleEl);
@@ -503,7 +515,12 @@
         events = [];
         return Promise.resolve();
       }
-      return api.settings.read().then(function (settings) {
+      var clearRaw = api.storage && api.storage.data && typeof api.storage.data.writeNDJSON === 'function'
+        ? api.storage.data.writeNDJSON(RAW_DATA_NAME, [])
+        : Promise.resolve();
+      return clearRaw.then(function () {
+        return api.settings.read();
+      }).then(function (settings) {
         var keys = globalEventKeys(settings || {}).concat(Object.keys(settings || {}).filter(function (key) {
           return key.indexOf(CANDIDATE_PREFIX) === 0 || key.indexOf(DISMISSAL_PREFIX) === 0;
         }));
@@ -522,6 +539,19 @@
       }).catch(function (err) {
         statusText = tr('ui.clearError', { error: err && err.message ? err.message : String(err) }, 'Could not clear activity: ' + (err && err.message ? err.message : String(err)));
         statusClass = 'error';
+      });
+    }
+
+    function clearWorkspaceRaw(workspaceRoot) {
+      if (!api || !api.storage || !api.storage.data || typeof api.storage.data.readNDJSON !== 'function' || typeof api.storage.data.writeNDJSON !== 'function') {
+        return Promise.resolve();
+      }
+      return api.storage.data.readNDJSON(RAW_DATA_NAME).then(function (records) {
+        var workspace = cleanWorkspace(workspaceRoot);
+        var kept = (Array.isArray(records) ? records : []).filter(function (record) {
+          return cleanWorkspace(record && (record.workspaceRootPath || workspaceFromPayload(record.payload || {}))) !== workspace;
+        });
+        return api.storage.data.writeNDJSON(RAW_DATA_NAME, kept);
       });
     }
 
@@ -634,10 +664,17 @@
 
     function loadStored() {
       if (!api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve();
-      return api.settings.read().then(function (settings) {
+      var readRaw = api.storage && api.storage.data && typeof api.storage.data.readNDJSON === 'function'
+        ? api.storage.data.readNDJSON(RAW_DATA_NAME)
+        : Promise.resolve([]);
+      return Promise.all([api.settings.read(), readRaw]).then(function (results) {
+        var settings = results[0] || {};
+        var rawRecords = Array.isArray(results[1]) ? results[1] : [];
         settings = settings || {};
-        candidateSourceEvents = eventsFromSettings(settings, '');
-        events = eventsFromSettings(settings, scope.mode === 'workspace' ? scope.workspaceRoot : '');
+        candidateSourceEvents = rawRecords.length ? eventsFromRecords(rawRecords, '') : eventsFromSettings(settings, '');
+        events = rawRecords.length
+          ? eventsFromRecords(rawRecords, scope.mode === 'workspace' ? scope.workspaceRoot : '')
+          : eventsFromSettings(settings, scope.mode === 'workspace' ? scope.workspaceRoot : '');
         dismissedByWorkspace = dismissedCandidatesFromSettings(settings);
         updateCandidates();
         return persistCandidateCaches();
@@ -652,9 +689,14 @@
       if (!api || !api.settings || typeof api.settings.read !== 'function') {
         return Promise.resolve({ candidates: visibleCandidates(candidateSourceEvents, workspace || (scope.mode === 'workspace' ? scope.workspaceRoot : ''), dismissedByWorkspace) });
       }
-      return api.settings.read().then(function (settings) {
-        settings = settings || {};
-        return { candidates: visibleCandidates(eventsFromSettings(settings, ''), workspace, dismissedCandidatesFromSettings(settings)) };
+      var readRaw = api.storage && api.storage.data && typeof api.storage.data.readNDJSON === 'function'
+        ? api.storage.data.readNDJSON(RAW_DATA_NAME)
+        : Promise.resolve([]);
+      return Promise.all([api.settings.read(), readRaw]).then(function (results) {
+        var settings = results[0] || {};
+        var rawRecords = Array.isArray(results[1]) ? results[1] : [];
+        var source = rawRecords.length ? eventsFromRecords(rawRecords, '') : eventsFromSettings(settings, '');
+        return { candidates: visibleCandidates(source, workspace, dismissedCandidatesFromSettings(settings)) };
       }).catch(function () {
         return { candidates: [] };
       });

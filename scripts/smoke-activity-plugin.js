@@ -116,8 +116,9 @@ function loadComponent(document) {
   return component;
 }
 
-function makeApi(initialSettings = {}) {
+function makeApi(initialSettings = {}, initialData = {}) {
   const settings = { ...initialSettings };
+  const data = { ...initialData };
   const handlers = {};
   const commandHandlers = new Map();
   const unsubscribed = [];
@@ -130,6 +131,14 @@ function makeApi(initialSettings = {}) {
       write: async (key, value) => {
         settings[key] = value;
         return { ...settings };
+      },
+    },
+    storage: {
+      data: {
+        readNDJSON: async (name) => Array.isArray(data[name]) ? data[name].slice() : [],
+        writeNDJSON: async (name, records) => {
+          data[name] = Array.isArray(records) ? records.slice() : [];
+        },
       },
     },
     events: {
@@ -150,11 +159,14 @@ function makeApi(initialSettings = {}) {
     storedEvents(key = 'events') {
       return settings[key] || [];
     },
+    storedData(name) {
+      return Array.isArray(data[name]) ? data[name] : [];
+    },
   };
 }
 
 async function flush() {
-  for (let i = 0; i < 10; i += 1) await Promise.resolve();
+  for (let i = 0; i < 20; i += 1) await Promise.resolve();
 }
 
 async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, workspaceRootPath: 'Project' }, document = makeDocument()) {
@@ -353,7 +365,7 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   if (api.storedEvents('work-session-candidates:workspace:Project').length !== 0) throw new Error('clear action did not remove cached candidates');
 
   component.unmount && component.unmount(container);
-  if (api.unsubscribed.length !== 33) throw new Error(`expected 33 unsubscribers, got ${api.unsubscribed.length}`);
+  if (api.unsubscribed.length !== 36) throw new Error(`expected 36 unsubscribers, got ${api.unsubscribed.length}`);
 
   const persistedApi = makeApi({
     'events:workspace:Project': [{
@@ -448,6 +460,28 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
     throw new Error('session candidates must contain only factual fields');
   }
   component.unmount && component.unmount(sessionView.container);
+
+  const rawApi = makeApi({}, {
+    'activity-events': [{
+      activityId: 'browser-domain:batch-1:0',
+      type: 'browser.activity.domain',
+      title: 'example.com',
+      summary: '5 min browser activity',
+      occurredAt: '2026-07-12T10:05:00Z',
+      sourcePluginId: 'verstak-browser-extension',
+      sourceBatchId: 'batch-1',
+      hostname: 'example.com',
+      durationSeconds: 300,
+      payload: { hostname: 'example.com', durationSeconds: 300 },
+    }],
+  });
+  const rawView = await mountWithApi(rawApi, {});
+  if (!rawView.container.textContent.includes('example.com')) throw new Error('append-only browser activity was not rendered');
+  const rawClear = walk(rawView.container, (node) => node.getAttribute && node.getAttribute('data-activity-action') === 'clear');
+  rawClear.click();
+  await flush();
+  if (rawApi.storedData('activity-events').length !== 0) throw new Error('clear activity did not replace append-only data');
+  component.unmount && component.unmount(rawView.container);
 
   console.log('activity plugin smoke passed');
 })().catch((err) => {
