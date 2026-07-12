@@ -142,6 +142,7 @@ function makeApi(initialSettings = {}) {
   const unsubscribed = [];
   const fileWrites = [];
   const fileByteWrites = [];
+  const openedURLs = [];
   const publishedEvents = [];
   const workspaceEntries = [
     { name: 'ClientA', relativePath: 'ClientA', type: 'folder' },
@@ -202,6 +203,7 @@ function makeApi(initialSettings = {}) {
     unsubscribed,
     fileWrites,
     fileByteWrites,
+    openedURLs,
     publishedEvents,
     failNextWrite(message) {
       nextWriteError = new Error(message || 'write failed');
@@ -246,6 +248,9 @@ function makeApi(initialSettings = {}) {
           throw err;
         }
         fileByteWrites.push({ relativePath, dataBase64, options });
+      },
+      openURL: async (url) => {
+        openedURLs.push(url);
       },
     },
     browserReceiver: {
@@ -756,6 +761,11 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   const linkConversionView = await mountWithApi(linkConversionApi);
   const createLinkButton = walk(linkConversionView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-action') === 'create-link');
   if (!createLinkButton) throw new Error('create link button was not rendered');
+  const openLinkButton = walk(linkConversionView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-action') === 'open-link');
+  if (!openLinkButton) throw new Error('open link action was not rendered');
+  openLinkButton.click();
+  await flush();
+  if (linkConversionApi.openedURLs.join(',') !== 'https://example.com/article') throw new Error('open link did not use browser URL capability');
   createLinkButton.click();
   await flush();
   if (linkConversionApi.fileWrites.length !== 1) throw new Error(`expected one link write, got ${linkConversionApi.fileWrites.length}`);
@@ -776,6 +786,25 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   if (convertedLinkEvent.payload.conversionType !== 'link') throw new Error('converted link event conversionType mismatch');
   if (convertedLinkEvent.payload.linkPath !== 'Project/Links/Example_Article.url') throw new Error('converted link event linkPath mismatch');
   component.unmount && component.unmount(linkConversionView.container);
+
+  const collisionLinkApi = makeApi({
+    'captures:workspace:Project': [{
+      captureId: 'convert-link-collision',
+      capturedAt: '2026-06-29T01:25:00.000Z',
+      kind: 'link',
+      url: 'https://example.com/collision',
+      title: 'Example Article',
+      workspaceRootPath: 'Project',
+    }],
+  });
+  collisionLinkApi.failNextWrite('conflict: Project/Links/Example_Article.url');
+  const collisionLinkView = await mountWithApi(collisionLinkApi);
+  walk(collisionLinkView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-action') === 'create-link').click();
+  await flush();
+  if (collisionLinkApi.fileWrites.length !== 1 || collisionLinkApi.fileWrites[0].relativePath !== 'Project/Links/Example_Article (2).url') {
+    throw new Error('link filename collision did not use the numbered suffix');
+  }
+  component.unmount && component.unmount(collisionLinkView.container);
 
   const failedLinkApi = makeApi({
     'captures:workspace:Project': [{

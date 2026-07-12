@@ -183,6 +183,12 @@
     return safeNoteFilename(title).replace(/\.md$/, '.url');
   }
 
+  function numberedLinkFilename(title, number) {
+    var filename = safeLinkFilename(title);
+    if (number <= 1) return filename;
+    return filename.replace(/\.url$/, ' (' + number + ').url');
+  }
+
   function safeFileFilename(name) {
     var base = text(name).trim()
       .replace(/[\\/:*?"<>|\r\n\t]+/g, '_')
@@ -686,14 +692,24 @@
         return Promise.resolve();
       }
       var title = noteTitle(capture);
-      var linkPath = capture.workspaceRootPath + '/Links/' + safeLinkFilename(title);
       statusText = 'Creating link...';
       statusClass = '';
       render();
-      return api.files.writeText(linkPath, captureToUrlShortcut(capture), {
-        createIfMissing: true,
-        overwrite: false
-      }).then(function () {
+      function writeLink(number) {
+        var linkPath = capture.workspaceRootPath + '/Links/' + numberedLinkFilename(title, number);
+        return api.files.writeText(linkPath, captureToUrlShortcut(capture), {
+          createIfMissing: true,
+          overwrite: false
+        }).then(function () {
+          return linkPath;
+        }).catch(function (error) {
+          if (number < 99 && /^conflict:/.test(text(error && error.message ? error.message : error))) {
+            return writeLink(number + 1);
+          }
+          throw error;
+        });
+      }
+      return writeLink(1).then(function (linkPath) {
         if (api.events && typeof api.events.publish === 'function') {
           return api.events.publish('browser.capture.converted', {
             captureId: capture.captureId,
@@ -703,15 +719,26 @@
             title: title,
             url: capture.url || '',
             sourcePluginId: PLUGIN_ID
+          }).then(function () {
+            return linkPath;
           });
         }
-        return undefined;
+        return linkPath;
       }).then(function () {
-        statusText = 'Created link: ' + linkPath;
+        statusText = 'Created link';
         statusClass = '';
         return archiveCapture(capture.captureId);
       }).catch(function (err) {
         statusText = 'Could not create link: ' + (err && err.message ? err.message : String(err));
+        statusClass = 'error';
+        render();
+      });
+    }
+
+    function openCaptureURL(capture) {
+      if (!capture || !capture.url || !api || !api.files || typeof api.files.openURL !== 'function') return Promise.resolve();
+      return api.files.openURL(capture.url).catch(function (err) {
+        statusText = 'Could not open link: ' + (err && err.message ? err.message : String(err));
         statusClass = 'error';
         render();
       });
@@ -879,6 +906,16 @@
           setProcessed(capture.captureId, !capture.processed);
         }
       }));
+      if (capture.url) {
+        actionButtons.push(el('button', {
+          className: 'browser-inbox-btn',
+          'data-browser-inbox-action': 'open-link',
+          textContent: 'Open link',
+          onClick: function () {
+            openCaptureURL(capture);
+          }
+        }));
+      }
       if (capture.workspaceRootPath) {
         actionButtons.push(el('button', {
           className: 'browser-inbox-btn',
