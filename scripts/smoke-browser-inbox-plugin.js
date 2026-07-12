@@ -182,6 +182,8 @@ function makeApi(initialSettings = {}) {
     const next = captures.flatMap((capture) => {
       if (!ids.has(capture.captureId)) return [capture];
       if (payload.action === 'delete') return [];
+      if (payload.action === 'archive') return [{ ...capture, globalState: 'archived' }];
+      if (payload.action === 'restore') return [{ ...capture, globalState: 'inbox' }];
       if (payload.action === 'assign') return [{ ...capture, workspaceRootPath: payload.workspaceRootPath || '', workspaceName: payload.workspaceRootPath || '' }];
       if (payload.action === 'processed') return [{ ...capture, processed: payload.processed === true }];
       return [capture];
@@ -424,8 +426,8 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   if (!clearButton) throw new Error('clear button not found');
   clearButton.click();
   await flush();
-  if (api.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'capture-1')) {
-    throw new Error('workspace clear action did not remove the Project capture');
+  if (!api.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'capture-1' && capture.globalState === 'archived')) {
+    throw new Error('workspace clear action did not archive the Project capture');
   }
   if (!api.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'capture-2')) {
     throw new Error('workspace clear action removed a capture from another workspace');
@@ -632,13 +634,45 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   if (!assignmentApi.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'assignment-unassigned' && capture.processed === false)) {
     throw new Error('mark unprocessed did not persist state');
   }
-  const deleteButton = walk(assignmentView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-action') === 'remove');
+  const deleteButton = walk(assignmentView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-action') === 'delete-permanently');
+  if (!deleteButton) throw new Error('permanent delete action was not rendered');
   deleteButton.click();
   await flush();
   if (assignmentApi.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'assignment-unassigned')) {
     throw new Error('delete did not remove the capture from global storage');
   }
   component.unmount && component.unmount(assignmentView.container);
+
+  const archiveApi = makeApi({
+    'captures:global': [{
+      captureId: 'archived-capture',
+      capturedAt: '2026-07-12T10:00:00.000Z',
+      kind: 'page',
+      url: 'https://example.com/archive',
+      title: 'Archived capture',
+      workspaceRootPath: 'Project',
+      globalState: 'archived',
+    }],
+  });
+  const archiveView = await mountWithApi(archiveApi, {});
+  if (walk(archiveView.container, (node) => node.getAttribute && node.getAttribute('data-browser-capture-id') === 'archived-capture')) {
+    throw new Error('archived capture leaked into the active inbox');
+  }
+  const archiveFilter = walk(archiveView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-filter') === 'status');
+  archiveFilter.value = 'archived';
+  archiveFilter.dispatchEvent('change');
+  await flush();
+  if (!walk(archiveView.container, (node) => node.getAttribute && node.getAttribute('data-browser-capture-id') === 'archived-capture')) {
+    throw new Error('archive filter did not reveal archived capture');
+  }
+  const restoreButton = walk(archiveView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-action') === 'restore');
+  if (!restoreButton) throw new Error('restore archived capture action was not rendered');
+  restoreButton.click();
+  await flush();
+  if (!archiveApi.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'archived-capture' && capture.globalState === 'inbox')) {
+    throw new Error('restore archived capture did not return it to Inbox');
+  }
+  component.unmount && component.unmount(archiveView.container);
 
   const conversionApi = makeApi({
     'captures:workspace:Project': [{
@@ -669,8 +703,8 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   if (!noteWrite.content.includes('# Example Article')) throw new Error('note content missing heading');
   if (!noteWrite.content.includes('Source: https://example.com/article')) throw new Error('note content missing source URL');
   if (!noteWrite.content.includes('Selected text from the page')) throw new Error('note content missing selected text');
-  if (conversionApi.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'convert-selection')) {
-    throw new Error('converted capture was not removed from queue');
+  if (!conversionApi.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'convert-selection' && capture.globalState === 'archived')) {
+    throw new Error('converted capture was not archived');
   }
   const convertedEvent = conversionApi.publishedEvents.find((event) => event.name === 'browser.capture.converted');
   if (!convertedEvent) throw new Error('browser.capture.converted event was not published');
@@ -734,8 +768,8 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   }
   if (!linkWrite.content.includes('[InternetShortcut]')) throw new Error('link content missing InternetShortcut header');
   if (!linkWrite.content.includes('URL=https://example.com/article')) throw new Error('link content missing URL');
-  if (linkConversionApi.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'convert-link')) {
-    throw new Error('converted link capture was not removed from queue');
+  if (!linkConversionApi.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'convert-link' && capture.globalState === 'archived')) {
+    throw new Error('converted link capture was not archived');
   }
   const convertedLinkEvent = linkConversionApi.publishedEvents.find((event) => event.name === 'browser.capture.converted');
   if (!convertedLinkEvent) throw new Error('browser.capture.converted link event was not published');
@@ -802,8 +836,8 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   if (fileWrite.options.createIfMissing !== true || fileWrite.options.overwrite !== false) {
     throw new Error(`file write options mismatch: ${JSON.stringify(fileWrite.options)}`);
   }
-  if (fileConversionApi.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'convert-file')) {
-    throw new Error('converted file capture was not removed from queue');
+  if (!fileConversionApi.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'convert-file' && capture.globalState === 'archived')) {
+    throw new Error('converted file capture was not archived');
   }
   const convertedFileEvent = fileConversionApi.publishedEvents.find((event) => event.name === 'browser.capture.converted');
   if (!convertedFileEvent) throw new Error('browser.capture.converted file event was not published');

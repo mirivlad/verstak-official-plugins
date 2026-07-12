@@ -238,8 +238,10 @@
       fileDataBase64: text(payload.fileDataBase64).trim(),
       source: text(payload.source).trim(),
       browserName: text(payload.browserName).trim(),
-      // The receiver provides the active workspace. Untagged captures remain unassigned.
-      workspaceRootPath: workspaceFromPayload(payload)
+      workspaceRootPath: workspaceFromPayload(payload),
+      workspaceId: text(payload.workspaceId).trim(),
+      workspaceState: text(payload.workspaceState || 'unassigned').trim(),
+      workspaceTrashId: text(payload.workspaceTrashId).trim()
     };
   }
 
@@ -258,7 +260,6 @@
     return value.filter(function (item) {
       return item && typeof item === 'object' && item.captureId;
     }).map(function (item) {
-      // Workspace root paths are the current stable identifiers; core has no immutable workspace ID yet.
       var workspaceRootPath = cleanWorkspace(item.workspaceRootPath) || workspaceFromStorageKey(storageKey);
       return {
         captureId: text(item.captureId),
@@ -278,6 +279,10 @@
         browserName: text(item.browserName),
         workspaceRootPath: workspaceRootPath,
         workspaceName: cleanWorkspace(item.workspaceName || workspaceRootPath),
+        workspaceId: text(item.workspaceId),
+        workspaceState: text(item.workspaceState || (workspaceRootPath ? 'active' : 'unassigned')),
+        workspaceTrashId: text(item.workspaceTrashId),
+        globalState: text(item.globalState || 'inbox') === 'archived' ? 'archived' : 'inbox',
         processed: item.processed === true,
         _storageKey: storageKey || ''
       };
@@ -304,6 +309,10 @@
         browserName: item.browserName,
         workspaceRootPath: item.workspaceRootPath,
         workspaceName: item.workspaceName || item.workspaceRootPath || '',
+        workspaceId: item.workspaceId || '',
+        workspaceState: item.workspaceState || (item.workspaceRootPath ? 'active' : 'unassigned'),
+        workspaceTrashId: item.workspaceTrashId || '',
+        globalState: item.globalState === 'archived' ? 'archived' : 'inbox',
         processed: item.processed === true
       };
     });
@@ -381,7 +390,8 @@
       el('option', { value: 'all', textContent: tr('ui.allCaptures', null, 'All captures') }),
       el('option', { value: 'unassigned', textContent: tr('ui.unassigned', null, 'Unassigned') }),
       el('option', { value: 'unprocessed', textContent: tr('ui.unprocessed', null, 'Unprocessed') }),
-      el('option', { value: 'processed', textContent: tr('ui.processed', null, 'Processed') })
+      el('option', { value: 'processed', textContent: tr('ui.processed', null, 'Processed') }),
+      el('option', { value: 'archived', textContent: tr('ui.archive', null, 'Archive') })
     ]);
     var workspaceFilterEl = el('select', {
       className: 'browser-inbox-select',
@@ -468,6 +478,8 @@
         var workspaceRoot = cleanWorkspace(capture && capture.workspaceRootPath);
         if (scope.mode === 'workspace' && workspaceRoot !== scope.workspaceRoot) return false;
         if (scope.mode === 'global' && workspaceFilter && workspaceRoot !== workspaceFilter) return false;
+        if (statusFilter === 'archived' && capture.globalState !== 'archived') return false;
+        if (statusFilter !== 'archived' && capture.globalState === 'archived') return false;
         if (statusFilter === 'unassigned' && workspaceRoot) return false;
         if (statusFilter === 'unprocessed' && capture.processed === true) return false;
         if (statusFilter === 'processed' && capture.processed !== true) return false;
@@ -505,13 +517,15 @@
       });
     }
 
-    function removeCaptures(captureIds, successText) {
+    function archiveCaptures(captureIds, successText) {
       var ids = {};
       captureIds.forEach(function (captureId) {
         ids[captureId] = true;
       });
-      return publishMutation('delete', { captureIds: captureIds }, function () {
-        return !captures.some(function (capture) { return ids[capture.captureId]; });
+      return publishMutation('archive', { captureIds: captureIds }, function () {
+        return captures.every(function (capture) {
+          return !ids[capture.captureId] || capture.globalState === 'archived';
+        });
       }).then(function (saved) {
         if (!saved) return;
         if (ids[selectedId]) selectedId = '';
@@ -525,7 +539,7 @@
       var ids = scope.mode === 'global'
         ? captures.map(function (capture) { return capture.captureId; })
         : captures.filter(function (capture) { return capture.workspaceRootPath === scope.workspaceRoot; }).map(function (capture) { return capture.captureId; });
-      return removeCaptures(ids, scope.mode === 'global' ? 'Inbox cleared' : 'Workspace captures cleared');
+      return archiveCaptures(ids, scope.mode === 'global' ? 'Inbox archived' : 'Workspace captures archived');
     }
 
     function selectedCapture() {
@@ -578,8 +592,33 @@
       });
     }
 
-    function removeCapture(captureId) {
-      return removeCaptures([captureId], 'Capture deleted');
+    function archiveCapture(captureId) {
+      return archiveCaptures([captureId], 'Capture archived');
+    }
+
+    function restoreCapture(captureId) {
+      return publishMutation('restore', { captureId: captureId }, function () {
+        return captures.some(function (capture) {
+          return capture.captureId === captureId && capture.globalState === 'inbox';
+        });
+      }).then(function (saved) {
+        if (!saved) return;
+        statusText = 'Capture restored to Inbox';
+        statusClass = '';
+        render();
+      });
+    }
+
+    function permanentlyDeleteCapture(captureId) {
+      return publishMutation('delete', { captureId: captureId, permanent: true }, function () {
+        return !captures.some(function (capture) { return capture.captureId === captureId; });
+      }).then(function (saved) {
+        if (!saved) return;
+        if (selectedId === captureId) selectedId = '';
+        statusText = 'Capture permanently deleted';
+        statusClass = '';
+        render();
+      });
     }
 
     function setProcessed(captureId, processed) {
@@ -630,7 +669,7 @@
       }).then(function () {
         statusText = 'Created note: ' + notePath;
         statusClass = '';
-        return removeCapture(capture.captureId);
+        return archiveCapture(capture.captureId);
       }).catch(function (err) {
         statusText = 'Could not create note: ' + (err && err.message ? err.message : String(err));
         statusClass = 'error';
@@ -670,7 +709,7 @@
       }).then(function () {
         statusText = 'Created link: ' + linkPath;
         statusClass = '';
-        return removeCapture(capture.captureId);
+        return archiveCapture(capture.captureId);
       }).catch(function (err) {
         statusText = 'Could not create link: ' + (err && err.message ? err.message : String(err));
         statusClass = 'error';
@@ -717,7 +756,7 @@
       }).then(function () {
         statusText = 'Created file: ' + filePath;
         statusClass = '';
-        return removeCapture(capture.captureId);
+        return archiveCapture(capture.captureId);
       }).catch(function (err) {
         statusText = 'Could not create file: ' + (err && err.message ? err.message : String(err));
         statusClass = 'error';
@@ -759,7 +798,8 @@
           el('span', {
             className: 'browser-inbox-badge' + (capture.processed ? ' processed' : ''),
             textContent: capture.processed ? 'Processed' : 'Unprocessed'
-          })
+          }),
+          capture.globalState === 'archived' ? el('span', { className: 'browser-inbox-badge', textContent: 'Archived' }) : null
         ]));
         if (capture.text) {
           row.appendChild(el('div', { className: 'browser-inbox-row-text', textContent: capture.text }));
@@ -869,12 +909,31 @@
           }));
         }
       }
+      if (capture.globalState === 'archived') {
+        actionButtons.push(el('button', {
+          className: 'browser-inbox-btn',
+          'data-browser-inbox-action': 'restore',
+          textContent: 'Restore to Inbox',
+          onClick: function () {
+            restoreCapture(capture.captureId);
+          }
+        }));
+      } else {
+        actionButtons.push(el('button', {
+          className: 'browser-inbox-btn',
+          'data-browser-inbox-action': 'archive',
+          textContent: 'Archive',
+          onClick: function () {
+            archiveCapture(capture.captureId);
+          }
+        }));
+      }
       actionButtons.push(el('button', {
           className: 'browser-inbox-btn danger',
-          'data-browser-inbox-action': 'remove',
-          textContent: tr('ui.delete', null, 'Delete'),
+          'data-browser-inbox-action': 'delete-permanently',
+          textContent: 'Delete permanently',
           onClick: function () {
-            removeCapture(capture.captureId);
+            permanentlyDeleteCapture(capture.captureId);
           }
         }));
       detailEl.appendChild(el('div', { className: 'browser-inbox-detail-actions' }, actionButtons));
