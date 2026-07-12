@@ -47,6 +47,18 @@ cd ../verstak-desktop
 The command rebuilds all packages and writes
 `release/verstak-official-plugins-<version>.tar.gz` plus `SHA256SUMS`.
 
+## Publish a GitHub Release
+
+```bash
+./scripts/publish-github-release.sh v0.1.0-alpha.1
+```
+
+The publisher requires an authenticated [`gh`](https://cli.github.com/) CLI
+and a clean, up-to-date `main`. It runs the local release command, creates and
+pushes an annotated tag if necessary, then creates or updates the GitHub
+Release with the archive and `SHA256SUMS`. Re-running it for a tag that points
+at the current commit replaces the release assets.
+
 ## License
 
 Copyright © 2026 Verstak contributors. Licensed under
