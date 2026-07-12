@@ -287,7 +287,7 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   const candidateNode = walk(container, (node) => node.getAttribute && node.getAttribute('data-work-session-candidate'));
   if (!candidateNode) throw new Error('work session candidate data attribute was not rendered');
   if (!candidateNode.textContent.includes('Workspace: Project')) throw new Error('candidate workspace was not rendered');
-  if (!candidateNode.textContent.includes('Estimated duration: 30 min')) throw new Error('candidate duration was not rendered');
+  if (!candidateNode.textContent.includes('Estimated duration: 20 min')) throw new Error('candidate duration was not rendered');
   if (!candidateNode.textContent.includes('Activities: 3')) throw new Error('candidate activity count was not rendered');
   if (!walk(candidateNode, (node) => node.getAttribute && node.getAttribute('data-work-session-action') === 'review')) throw new Error('candidate review action was not rendered');
   if (!walk(candidateNode, (node) => node.getAttribute && node.getAttribute('data-work-session-action') === 'dismiss')) throw new Error('candidate dismiss action was not rendered');
@@ -299,7 +299,7 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   if (!candidate.candidateId) throw new Error('candidate id is missing');
   if (candidate.workspaceRootPath !== 'Project') throw new Error('candidate workspace mismatch');
   if (candidate.startedAt !== '2026-06-27T00:00:00.000Z' || candidate.endedAt !== '2026-06-27T00:30:00.000Z') throw new Error('candidate range mismatch');
-  if (candidate.estimatedMinutes !== 30) throw new Error(`expected 30 candidate minutes, got ${candidate.estimatedMinutes}`);
+  if (candidate.estimatedMinutes !== 20) throw new Error(`expected 20 candidate minutes, got ${candidate.estimatedMinutes}`);
   if (candidate.activityCount !== 3) throw new Error(`expected three candidate activities, got ${candidate.activityCount}`);
   if (candidate.activityIds.join(',') !== 'capture-1,note-1,capture-1:browser.capture.converted') throw new Error('candidate activity ids mismatch');
   if (!Array.isArray(candidate.activities) || candidate.activities.length !== 3) throw new Error('candidate activity list is missing');
@@ -365,7 +365,7 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   if (api.storedEvents('work-session-candidates:workspace:Project').length !== 0) throw new Error('clear action did not remove cached candidates');
 
   component.unmount && component.unmount(container);
-  if (api.unsubscribed.length !== 36) throw new Error(`expected 36 unsubscribers, got ${api.unsubscribed.length}`);
+  if (api.unsubscribed.length !== 39) throw new Error(`expected 39 unsubscribers, got ${api.unsubscribed.length}`);
 
   const persistedApi = makeApi({
     'events:workspace:Project': [{
@@ -460,6 +460,57 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
     throw new Error('session candidates must contain only factual fields');
   }
   component.unmount && component.unmount(sessionView.container);
+
+  const lateApi = makeApi({
+    'events:workspace:Project': [
+      { activityId: 'late-a', type: 'note.saved', occurredAt: '2026-07-12T10:00:00Z', workspaceRootPath: 'Project' },
+      { activityId: 'late-b', type: 'file.changed', occurredAt: '2026-07-12T10:10:00Z', workspaceRootPath: 'Project' },
+    ],
+  });
+  const lateView = await mountWithApi(lateApi);
+  const lateCommand = lateApi.commandHandlers.get(WORKLOG_COMMAND_ID);
+  const firstLateCandidate = (await lateCommand({ workspaceRootPath: 'Project' })).candidates[0];
+  if (!firstLateCandidate || !firstLateCandidate.sessionId || firstLateCandidate.estimatedMinutes !== 10) {
+    throw new Error('file activity duration must use the capped adjacent-event algorithm');
+  }
+  await lateApi.settings.write('events:workspace:Project', [
+    { activityId: 'late-before', type: 'note.saved', occurredAt: '2026-07-12T09:55:00Z', workspaceRootPath: 'Project' },
+    { activityId: 'late-a', type: 'note.saved', occurredAt: '2026-07-12T10:00:00Z', workspaceRootPath: 'Project' },
+    { activityId: 'late-b', type: 'file.changed', occurredAt: '2026-07-12T10:10:00Z', workspaceRootPath: 'Project' },
+  ]);
+  await lateApi.handlers['note.saved']({ name: 'note.saved', payload: {} });
+  await flush();
+  const afterLateCandidate = (await lateCommand({ workspaceRootPath: 'Project' })).candidates[0];
+  if (!afterLateCandidate || afterLateCandidate.sessionId !== firstLateCandidate.sessionId) {
+    throw new Error('late events changed an immutable session identity');
+  }
+  const dismissLate = walk(lateView.container, (node) => node.getAttribute && node.getAttribute('data-work-session-action') === 'dismiss');
+  dismissLate.click();
+  await flush();
+  await lateApi.settings.write('events:workspace:Project', [
+    { activityId: 'late-before', type: 'note.saved', occurredAt: '2026-07-12T09:55:00Z', workspaceRootPath: 'Project' },
+    { activityId: 'late-a', type: 'note.saved', occurredAt: '2026-07-12T10:00:00Z', workspaceRootPath: 'Project' },
+    { activityId: 'late-b', type: 'file.changed', occurredAt: '2026-07-12T10:10:00Z', workspaceRootPath: 'Project' },
+    { activityId: 'late-one', type: 'note.saved', occurredAt: '2026-07-12T10:15:00Z', workspaceRootPath: 'Project' },
+  ]);
+  await lateApi.handlers['note.saved']({ name: 'note.saved', payload: {} });
+  await flush();
+  if ((await lateCommand({ workspaceRootPath: 'Project' })).candidates.length !== 0) {
+    throw new Error('dismissed session was re-offered without substantial new activity');
+  }
+  await lateApi.settings.write('events:workspace:Project', [
+    { activityId: 'late-before', type: 'note.saved', occurredAt: '2026-07-12T09:55:00Z', workspaceRootPath: 'Project' },
+    { activityId: 'late-a', type: 'note.saved', occurredAt: '2026-07-12T10:00:00Z', workspaceRootPath: 'Project' },
+    { activityId: 'late-b', type: 'file.changed', occurredAt: '2026-07-12T10:10:00Z', workspaceRootPath: 'Project' },
+    { activityId: 'late-one', type: 'note.saved', occurredAt: '2026-07-12T10:15:00Z', workspaceRootPath: 'Project' },
+    { activityId: 'late-two', type: 'file.changed', occurredAt: '2026-07-12T10:25:00Z', workspaceRootPath: 'Project' },
+  ]);
+  await lateApi.handlers['file.changed']({ name: 'file.changed', payload: {} });
+  await flush();
+  if ((await lateCommand({ workspaceRootPath: 'Project' })).candidates.length !== 1) {
+    throw new Error('dismissed session was not re-offered after substantial new activity');
+  }
+  component.unmount && component.unmount(lateView.container);
 
   const rawApi = makeApi({}, {
     'activity-events': [{

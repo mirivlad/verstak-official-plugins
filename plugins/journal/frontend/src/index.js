@@ -227,6 +227,8 @@
     }
     return {
       candidateId: text(value.candidateId),
+      sessionId: text(value.sessionId),
+      handledThrough: text(value.handledThrough || value.endedAt),
       workspaceRootPath: workspace,
       startedAt: text(value.startedAt),
       endedAt: text(value.endedAt),
@@ -368,6 +370,8 @@
           minutes: minutesInput.value,
           billable: billableInput.checked === true,
           sourceCandidateId: reviewingCandidate ? candidate.candidateId : (existingEntry ? existingEntry.sourceCandidateId : ''),
+          sessionId: reviewingCandidate ? candidate.sessionId : '',
+          handledThrough: reviewingCandidate ? candidate.handledThrough : '',
           sourceTodoId: reviewingTodo ? completedTodo.id : (existingEntry ? existingEntry.sourceTodoId : ''),
           activityIds: reviewingCandidate
             ? activityInputs.filter(function (item) { return item.input.checked === true; }).map(function (item) { return item.activity.activityId; })
@@ -431,6 +435,8 @@
         return;
       }
       var sourceCandidateId = text(formValue && formValue.sourceCandidateId || (existingEntry && existingEntry.sourceCandidateId)).trim();
+      var sessionID = text(formValue && formValue.sessionId).trim();
+      var handledThrough = text(formValue && formValue.handledThrough).trim();
       var sourceTodoId = text(formValue && formValue.sourceTodoId || (existingEntry && existingEntry.sourceTodoId)).trim();
       if (!existingEntry && sourceCandidateId && entries.some(function (entry) { return entry.sourceCandidateId === sourceCandidateId; })) {
         statusText = 'A journal entry already references this candidate';
@@ -467,7 +473,14 @@
       closeEntryModal();
       statusText = existingEntry ? 'Entry updated' : 'Entry added';
       statusClass = '';
-      persist().then(render);
+      persist().then(function () {
+        if (!sessionID || !handledThrough || !api || !api.events || typeof api.events.publish !== 'function') return undefined;
+        return api.events.publish('activity.session.handled', {
+          sessionId: sessionID,
+          handledThrough: handledThrough,
+          status: 'accepted'
+        });
+      }).then(render);
     }
 
     function deleteEntry(entry) {

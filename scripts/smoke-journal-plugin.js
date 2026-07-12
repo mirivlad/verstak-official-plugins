@@ -133,12 +133,19 @@ function loadComponent(document) {
 
 function makeApi(initialSettings = {}) {
   const settings = { ...initialSettings };
+  const publishedEvents = [];
   return {
+    publishedEvents,
     settings: {
       read: async (key) => (key ? settings[key] : { ...settings }),
       write: async (key, value) => {
         settings[key] = value;
         return { ...settings };
+      },
+    },
+    events: {
+      publish: async (name, payload) => {
+        publishedEvents.push({ name, payload });
       },
     },
     storedEntries(key) {
@@ -172,6 +179,7 @@ function byData(container, attr, value) {
   }
   if ((manifest.optionalRequires || []).includes('activity.reconstruction')) throw new Error('Journal must remain available without Activity');
   if (!manifest.permissions.includes('storage.namespace')) throw new Error('journal manifest must request storage.namespace');
+  if (!manifest.permissions.includes('events.publish')) throw new Error('journal manifest must request events.publish');
   if (!manifest.permissions.includes('ui.register')) throw new Error('journal manifest must request ui.register');
   if (!(manifest.contributes.workspaceItems || []).some((item) => item.component === 'JournalView')) throw new Error('journal workspace item missing');
   if (!(manifest.contributes.sidebarItems || []).some((item) => item.view === 'verstak.journal.view')) throw new Error('journal sidebar item missing');
@@ -212,6 +220,8 @@ function byData(container, attr, value) {
 
   const candidate = {
     candidateId: 'work-session:Project:capture-1:note-1',
+    sessionId: 'session-journal-1',
+    handledThrough: '2026-06-27T11:03:00.000Z',
     workspaceRootPath: 'Project',
     startedAt: '2026-06-27T10:12:00.000Z',
     endedAt: '2026-06-27T11:03:00.000Z',
@@ -249,6 +259,10 @@ function byData(container, attr, value) {
     throw new Error('candidate review did not keep the user-authored entry fields');
   }
   if (linkedEntry.activityIds.join(',') !== 'capture-1') throw new Error('candidate review did not persist selected activity ids');
+  const handledEvent = api.publishedEvents.find((event) => event.name === 'activity.session.handled');
+  if (!handledEvent || handledEvent.payload.sessionId !== 'session-journal-1' || handledEvent.payload.handledThrough !== '2026-06-27T11:03:00.000Z' || handledEvent.payload.status !== 'accepted') {
+    throw new Error('accepted Journal candidate did not persist a session watermark');
+  }
   if (walk(candidateView.container, (node) => node.getAttribute && node.getAttribute('data-journal-action') === 'view-activity')) {
     throw new Error('journal rows must not navigate to Activity by default');
   }
