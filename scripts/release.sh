@@ -12,18 +12,4 @@ fi
 
 echo "=== verstak official plugins release $VERSION ==="
 "$ROOT/scripts/check.sh"
-"$ROOT/scripts/build.sh"
-
-RELEASE_ROOT="$ROOT/release"
-STAGING="$RELEASE_ROOT/verstak-official-plugins-$VERSION"
-ARCHIVE="$RELEASE_ROOT/verstak-official-plugins-$VERSION.tar.gz"
-rm -rf "$STAGING" "$ARCHIVE"
-mkdir -p "$STAGING"
-
-cp "$ROOT/README.md" "$ROOT/LICENSE" "$STAGING/"
-cp -R "$ROOT/dist" "$STAGING/dist"
-tar -C "$RELEASE_ROOT" -czf "$ARCHIVE" "$(basename "$STAGING")"
-(cd "$RELEASE_ROOT" && sha256sum "$(basename "$ARCHIVE")" > SHA256SUMS)
-
-echo "release archive: $ARCHIVE"
-echo "checksums:       $RELEASE_ROOT/SHA256SUMS"
+"$ROOT/scripts/package-portable.sh" "$VERSION"

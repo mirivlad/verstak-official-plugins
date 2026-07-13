@@ -5,7 +5,10 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PUBLISHER="$ROOT/scripts/publish-github-release.sh"
 VERSION="v0.0.0-test"
 REPOSITORY="mirivlad/verstak-official-plugins"
-ASSET_NAME="verstak-official-plugins-${VERSION}.tar.gz"
+ASSET_NAMES=(
+  "verstak-official-plugins-linux-amd64-v0.0.0-test.tar.gz"
+  "verstak-official-plugins-windows-amd64-v0.0.0-test.zip"
+)
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -22,7 +25,8 @@ cat > "$WORK/release.sh" <<'SCRIPT'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'release:%s\n' "$1" >> "$LOG"
-printf 'archive\n' > "$VERSTAK_RELEASE_DIR/verstak-official-plugins-$1.tar.gz"
+printf 'linux\n' > "$VERSTAK_RELEASE_DIR/verstak-official-plugins-linux-amd64-$1.tar.gz"
+printf 'windows\n' > "$VERSTAK_RELEASE_DIR/verstak-official-plugins-windows-amd64-$1.zip"
 printf 'checksum\n' > "$VERSTAK_RELEASE_DIR/SHA256SUMS"
 SCRIPT
 chmod +x "$WORK/release.sh"
@@ -82,8 +86,11 @@ grep -Fqx "release:$VERSION" "$LOG"
 grep -Fqx "tag:$VERSION" "$LOG"
 grep -Fqx "push:origin:refs/tags/$VERSION" "$LOG"
 grep -F "release create $VERSION" "$LOG" >/dev/null
-grep -F "$ASSET_NAME" "$LOG" >/dev/null
+for asset in "${ASSET_NAMES[@]}"; do
+  grep -F "$asset" "$LOG" >/dev/null
+done
 grep -F "SHA256SUMS" "$LOG" >/dev/null
+grep -F -- "--prerelease" "$LOG" >/dev/null
 
 run_publisher
 grep -F "release upload $VERSION" "$LOG" >/dev/null

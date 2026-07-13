@@ -17,5 +17,6 @@ grep -Fq 'verstak-official-plugins-windows-amd64-' "$PACKAGER"
 grep -Fq 'tar -C' "$PACKAGER"
 grep -Fq 'zip -qr' "$PACKAGER"
 grep -Fq 'SHA256SUMS' "$PACKAGER"
+grep -Fq 'package-portable.sh' "$ROOT/scripts/release.sh"
 
 echo "portable plugin package script contract passed"

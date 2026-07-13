@@ -63,8 +63,10 @@ create a GitHub Release.
 The publisher requires an authenticated [`gh`](https://cli.github.com/) CLI
 and a clean, up-to-date `main`. It runs the local release command, creates and
 pushes an annotated tag if necessary, then creates or updates the GitHub
-Release with the archive and `SHA256SUMS`. Re-running it for a tag that points
-at the current commit replaces the release assets.
+Release with the Linux archive, Windows archive and `SHA256SUMS`. Alpha, beta
+and release-candidate tags are published as prereleases; stable tags are
+marked latest. Re-running it for a tag that points at the current commit
+replaces the release assets.
 
 ## License
 
