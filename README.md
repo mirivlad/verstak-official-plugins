@@ -28,6 +28,20 @@ cd ../verstak-desktop
 ./scripts/install-dev-plugins.sh
 ```
 
+## Windows test packages from Linux
+
+Install a MinGW cross-compiler, then build a separate Windows amd64 package
+tree:
+
+```bash
+sudo apt install gcc-mingw-w64-x86-64
+./scripts/build-windows.sh
+```
+
+The result is `dist-windows/`. Go sidecars, when a plugin has one, are emitted
+as `backend/<plugin-id>.exe`; frontends and manifests are the same packaged
+files used on Linux. This is a local test output and is not a GitHub Release.
+
 ## Alpha behaviour
 
 - Browser Inbox archives processed captures and can restore them; permanent

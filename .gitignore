@@ -1,4 +1,5 @@
 dist/
+dist-windows/
 release/
 node_modules/
 # compiled backend binaries (built from source)
