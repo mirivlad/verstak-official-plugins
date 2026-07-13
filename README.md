@@ -28,19 +28,21 @@ cd ../verstak-desktop
 ./scripts/install-dev-plugins.sh
 ```
 
-## Windows test packages from Linux
+## Portable plugin archives
 
-Install a MinGW cross-compiler, then build a separate Windows amd64 package
-tree:
+Build target-specific archives on Linux:
 
 ```bash
 sudo apt install gcc-mingw-w64-x86-64
-./scripts/build-windows.sh
+./scripts/package-portable.sh v0.1.0-alpha.1
 ```
 
-The result is `dist-windows/`. Go sidecars, when a plugin has one, are emitted
-as `backend/<plugin-id>.exe`; frontends and manifests are the same packaged
-files used on Linux. This is a local test output and is not a GitHub Release.
+The command creates `release/verstak-official-plugins-linux-amd64-<version>.tar.gz`
+and `release/verstak-official-plugins-windows-amd64-<version>.zip`, plus
+`SHA256SUMS`. Each archive expands directly into the desktop application's
+`plugins/` directory. Frontends and manifests are shared; native Go sidecars
+are built for the target OS. This is a local package operation and does not
+create a GitHub Release.
 
 ## Alpha behaviour
 
@@ -51,15 +53,6 @@ files used on Linux. This is a local test output and is not a GitHub Release.
 - Activity sessions can be scoped to a durable workspace identity or to an
   explicit unassigned scope. Journal creation is always a user action.
 - Todo is optional: Overview uses it only when the Todo capability is present.
-
-## Release package
-
-```bash
-./scripts/release.sh v0.1.0-alpha.1
-```
-
-The command rebuilds all packages and writes
-`release/verstak-official-plugins-<version>.tar.gz` plus `SHA256SUMS`.
 
 ## Publish a GitHub Release
 
