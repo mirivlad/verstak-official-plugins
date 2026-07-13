@@ -340,18 +340,45 @@
       });
     }
 
+    function notificationRequests() {
+      return sortTodos(todos).filter(function (todo) {
+        return todo.status === 'open' && todo.reminderAt;
+      }).map(function (todo) {
+        var dueAt = new Date(todo.reminderAt);
+        if (isNaN(dueAt.getTime())) return null;
+        var title = todo.title || tr('ui.untitled', null, 'Untitled todo');
+        return {
+          id: todo.id,
+          dueAt: dueAt.toISOString(),
+          title: tr('ui.notificationTitle', null, 'Todo reminder'),
+          body: tr('ui.notificationBody', { title: title }, title)
+        };
+      }).filter(function (item) { return item !== null; });
+    }
+
+    function syncNotifications() {
+      if (!api || !api.notifications || typeof api.notifications.replace !== 'function') return Promise.resolve();
+      return api.notifications.replace(notificationRequests()).catch(function (err) {
+        statusText = tr('ui.notificationError', { error: err && err.message ? err.message : String(err) }, 'Could not schedule reminders: ' + (err && err.message ? err.message : String(err)));
+        statusClass = 'error';
+      });
+    }
+
     function persist() {
-      if (!api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve();
-      return api.settings.write(GLOBAL_KEY, storageTodos(sortTodos(todos))).catch(function (err) {
+      if (!api || !api.settings || typeof api.settings.write !== 'function') return syncNotifications();
+      return api.settings.write(GLOBAL_KEY, storageTodos(sortTodos(todos))).then(function () {
+        return syncNotifications();
+      }).catch(function (err) {
         statusText = tr('ui.saveError', { error: err && err.message ? err.message : String(err) }, 'Could not save todos: ' + (err && err.message ? err.message : String(err)));
         statusClass = 'error';
       });
     }
 
     function loadStored() {
-      if (!api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve();
+      if (!api || !api.settings || typeof api.settings.read !== 'function') return syncNotifications();
       return api.settings.read().then(function (settings) {
         todos = sortTodos(normalizeTodos((settings || {})[GLOBAL_KEY]));
+        return syncNotifications();
       }).catch(function (err) {
         statusText = tr('ui.loadError', { error: err && err.message ? err.message : String(err) }, 'Could not load todos: ' + (err && err.message ? err.message : String(err)));
         statusClass = 'error';
@@ -589,6 +616,7 @@
         searchInput.setAttribute('placeholder', tr('ui.search', null, 'Search todos'));
         addBtn.textContent = tr('ui.add', null, 'Add Todo');
         render();
+        syncNotifications().then(render);
       });
     }
   };

@@ -12,10 +12,14 @@
     "todo.list",
     "todo.workspace"
   ],
+  "requires": [
+    "verstak/core/notifications/v1"
+  ],
   "permissions": [
     "files.read",
     "storage.namespace",
-    "ui.register"
+    "ui.register",
+    "notifications.schedule"
   ],
   "frontend": {
     "entry": "frontend/src/index.js"

@@ -146,10 +146,12 @@ function loadComponent(document, emittedEvents) {
 
 function makeApi(initialSettings = {}, initialLocale = 'en') {
   const settings = { ...initialSettings };
+  const notificationCalls = [];
   let locale = initialLocale;
   const localeListeners = [];
   return {
     settings,
+    notificationCalls,
     settingsApi: {
       read: async (key) => (key ? settings[key] : { ...settings }),
       write: async (key, value) => {
@@ -163,6 +165,11 @@ function makeApi(initialSettings = {}, initialLocale = 'en') {
         { name: 'Project', relativePath: 'Project', type: 'folder' },
       ],
     },
+    notifications: {
+      replace: async (items) => {
+        notificationCalls.push((Array.isArray(items) ? items : []).map((item) => ({ ...item })));
+      },
+    },
     setLocale(nextLocale) {
       locale = nextLocale;
       localeListeners.slice().forEach((listener) => listener(locale));
@@ -171,6 +178,7 @@ function makeApi(initialSettings = {}, initialLocale = 'en') {
       return {
         settings: this.settingsApi,
         files: this.files,
+        notifications: this.notifications,
         i18n: {
           getLocale: () => locale,
           t: (key, params, fallback) => {
@@ -208,6 +216,8 @@ async function mountWithApi(apiState, props, emittedEvents = [], document = make
   if (manifest.id !== 'verstak.todo') throw new Error('todo manifest id mismatch');
   if (!manifest.permissions.includes('storage.namespace')) throw new Error('todo manifest must request storage.namespace');
   if (!manifest.permissions.includes('files.read')) throw new Error('todo manifest must request files.read');
+  if (!manifest.permissions.includes('notifications.schedule')) throw new Error('todo manifest must request notifications.schedule');
+  if (!manifest.requires.includes('verstak/core/notifications/v1')) throw new Error('todo manifest must require native notifications');
   if (!(manifest.contributes.views || []).length) throw new Error('todo manifest must contribute a global view');
   if (!(manifest.contributes.workspaceItems || []).length) throw new Error('todo manifest must contribute a workspace item');
 
@@ -233,6 +243,14 @@ async function mountWithApi(apiState, props, emittedEvents = [], document = make
   if (createdTodo.status !== 'open' || createdTodo.priority !== 'high') throw new Error('Todo status or priority was not stored');
   if (createdTodo.dueAt !== '2000-01-01' || createdTodo.reminderAt !== '2000-01-01T09:00') throw new Error('Todo due/reminder metadata was not stored');
   if (!container.textContent.includes('Overdue') || !container.textContent.includes('Reminder due')) throw new Error('due/reminder indicators were not rendered');
+  const scheduledAfterCreate = apiState.notificationCalls.at(-1) || [];
+  if (scheduledAfterCreate.length !== 1
+    || scheduledAfterCreate[0].id !== createdTodo.id
+    || scheduledAfterCreate[0].dueAt !== new Date(createdTodo.reminderAt).toISOString()
+    || scheduledAfterCreate[0].title !== 'Todo reminder'
+    || scheduledAfterCreate[0].body !== 'Prepare project review') {
+    throw new Error('open Todo reminder was not scheduled as a native notification');
+  }
 
   apiState.setLocale('ru');
   if (!container.textContent.includes('Задачи · Project') || !container.textContent.includes('Просрочено')) {
@@ -251,6 +269,9 @@ async function mountWithApi(apiState, props, emittedEvents = [], document = make
   await flush();
   if (apiState.settings['todos:global'][0].status !== 'done' || !apiState.settings['todos:global'][0].completedAt) {
     throw new Error('mark done did not persist completed state');
+  }
+  if ((apiState.notificationCalls.at(-1) || []).length !== 0) {
+    throw new Error('completed Todo reminder was not removed from native notification schedules');
   }
   if (!byData(container, 'data-todo-action', 'reopen')) throw new Error('done Todo did not expose reopen action');
   if (!byData(container, 'data-todo-action', 'create-journal-entry')) throw new Error('done workspace Todo did not expose Journal conversion');
