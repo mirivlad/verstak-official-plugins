@@ -1,5 +1,5 @@
 /* ===========================================================
-   Browser Inbox Plugin — Verstak v2 Frontend Bundle
+   Browser Plugin — Verstak v2 Frontend Bundle
    Contract: window.VerstakPluginRegister(id, { components })
    =========================================================== */
 
@@ -146,7 +146,7 @@
   function scopeFromProps(props) {
     var workspaceRoot = workspaceFromProps(props);
     if (!workspaceRoot) {
-      return { mode: 'global', key: GLOBAL_KEY, label: 'All workspaces', workspaceRoot: '' };
+      return { mode: 'global', key: GLOBAL_KEY, label: '', workspaceRoot: '' };
     }
     return {
       mode: 'workspace',
@@ -161,13 +161,13 @@
     return value === 'selection' || value === 'link' || value === 'file' || value === 'page' ? value : 'page';
   }
 
-  function displayTitle(capture) {
+  function displayTitle(capture, fallbackTitle) {
     if (capture && capture.kind === 'file' && capture.fileName) return capture.fileName;
-    return capture.title || capture.url || capture.captureId || 'Untitled capture';
+    return capture.title || capture.url || capture.captureId || fallbackTitle || '';
   }
 
-  function noteTitle(capture) {
-    return text((capture && (capture.title || capture.domain || capture.captureId)) || 'Browser Capture').trim() || 'Browser Capture';
+  function noteTitle(capture, fallbackTitle) {
+    return text((capture && (capture.title || capture.domain || capture.captureId)) || fallbackTitle).trim() || text(fallbackTitle).trim();
   }
 
   function safeNoteFilename(title) {
@@ -199,8 +199,8 @@
     return base;
   }
 
-  function captureToMarkdown(capture) {
-    var title = noteTitle(capture);
+  function captureToMarkdown(capture, fallbackTitle) {
+    var title = noteTitle(capture, fallbackTitle);
     var lines = ['# ' + title, ''];
     if (capture && capture.url) lines.push('Source: ' + capture.url);
     if (capture && capture.capturedAt) lines.push('Captured: ' + capture.capturedAt);
@@ -363,7 +363,7 @@
     var scope = scopeFromProps(props || {});
     var captures = [];
     var selectedId = '';
-    var statusText = 'Connecting to receiver events...';
+    var statusText = '';
     var statusClass = '';
     var disposed = false;
     var unsubscribers = [];
@@ -375,6 +375,18 @@
     function tr(key, params, fallback) {
       if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
       return fallback || key;
+    }
+
+    function localizedItemCount(count) {
+      var locale = api && api.i18n && typeof api.i18n.getLocale === 'function' ? api.i18n.getLocale() : 'en';
+      if (locale === 'ru') {
+        var mod10 = count % 10;
+        var mod100 = count % 100;
+        if (mod10 === 1 && mod100 !== 11) return tr('ui.items.one', { count: count }, count + ' материал');
+        if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return tr('ui.items.few', { count: count }, count + ' материала');
+        return tr('ui.items.many', { count: count }, count + ' материалов');
+      }
+      return tr(count === 1 ? 'ui.items.one' : 'ui.items.other', { count: count }, count + (count === 1 ? ' item' : ' items'));
     }
 
     function reportError(key, fallback, err) {
@@ -389,14 +401,14 @@
     statusText = tr('ui.connecting', null, 'Connecting to receiver events...');
 
     var toolbar = el('div', { className: 'browser-inbox-toolbar' });
-    var titleEl = el('span', { className: 'browser-inbox-title', textContent: scope.mode === 'global' ? tr('ui.title', null, 'Browser Inbox') : tr('ui.workspaceTitle', { workspace: scope.label }, 'Browser Inbox · ' + scope.label) });
+    var titleEl = el('span', { className: 'browser-inbox-title', textContent: scope.mode === 'global' ? tr('ui.title', null, 'Browser') : tr('ui.workspaceTitle', { workspace: scope.label }, 'Browser · ' + scope.label) });
     var countEl = el('span', { className: 'browser-inbox-count' });
     var statusEl = el('span', { className: 'browser-inbox-status' });
     var filtersEl = el('div', { className: 'browser-inbox-filters' });
     var statusFilterEl = el('select', {
       className: 'browser-inbox-select',
       'data-browser-inbox-filter': 'status',
-      'aria-label': 'Capture status filter',
+      'aria-label': tr('ui.statusFilter', null, 'Material status filter'),
       onChange: function (event) {
         statusFilter = text(event && event.target && event.target.value) || 'all';
         selectedId = '';
@@ -412,7 +424,7 @@
     var workspaceFilterEl = el('select', {
       className: 'browser-inbox-select',
       'data-browser-inbox-filter': 'workspace',
-      'aria-label': 'Workspace filter',
+      'aria-label': tr('ui.workspaceFilter', null, 'Deal filter'),
       onChange: function (event) {
         workspaceFilter = cleanWorkspace(event && event.target && event.target.value);
         selectedId = '';
@@ -424,7 +436,7 @@
       type: 'search',
       placeholder: tr('ui.search', null, 'Search captures'),
       'data-browser-inbox-filter': 'search',
-      'aria-label': 'Search captures',
+      'aria-label': tr('ui.search', null, 'Search captures'),
       onInput: function (event) {
         searchQuery = text(event && event.target && event.target.value).trim().toLowerCase();
         selectedId = '';
@@ -482,7 +494,7 @@
     function renderWorkspaceFilterOptions() {
       if (scope.mode !== 'global') return;
       workspaceFilterEl.innerHTML = '';
-      workspaceFilterEl.appendChild(option('', 'All workspaces'));
+      workspaceFilterEl.appendChild(option('', tr('ui.allDeals', null, 'All Deals')));
       workspaceRoots().forEach(function (root) {
         workspaceFilterEl.appendChild(option(root, root));
       });
@@ -506,7 +518,7 @@
 
     function publishMutation(action, payload, verify, verifySettings) {
       if (!api || !api.events || typeof api.events.publish !== 'function') {
-        reportError('ui.saveError', 'Could not update the browser inbox. Please try again.');
+        reportError('ui.saveError', 'Could not update browser materials. Please try again.');
         return Promise.resolve(false);
       }
       return api.events.publish(MUTATION_EVENT, Object.assign({ action: action }, payload || {})).then(function () {
@@ -524,7 +536,7 @@
         }
         return true;
       }).catch(function (err) {
-        reportError('ui.saveError', 'Could not update the browser inbox. Please try again.', err);
+        reportError('ui.saveError', 'Could not update browser materials. Please try again.', err);
         return false;
       });
     }
@@ -551,7 +563,9 @@
       var ids = scope.mode === 'global'
         ? captures.map(function (capture) { return capture.captureId; })
         : captures.filter(function (capture) { return capture.workspaceRootPath === scope.workspaceRoot; }).map(function (capture) { return capture.captureId; });
-      return archiveCaptures(ids, scope.mode === 'global' ? 'Inbox archived' : 'Workspace captures archived');
+      return archiveCaptures(ids, scope.mode === 'global'
+        ? tr('ui.inboxArchived', null, 'Inbox archived')
+        : tr('ui.workspaceCapturesArchived', null, 'Deal materials archived'));
     }
 
     function selectedCapture() {
@@ -569,10 +583,8 @@
       });
       if (existing) return Promise.resolve();
       selectedId = capture.captureId;
-      statusText = 'Capture received';
+      statusText = tr('ui.captureReceived', null, 'Material received');
       statusClass = '';
-      statusText = 'Could not load received capture from storage';
-      statusClass = 'error';
       render();
       return Promise.resolve();
     }
@@ -598,14 +610,16 @@
       }).then(function (saved) {
         if (!saved) return;
         if (workspaceRoot && workspaceOptions.indexOf(workspaceRoot) === -1) workspaceOptions.push(workspaceRoot);
-        statusText = workspaceRoot ? 'Capture assigned to ' + workspaceRoot : 'Capture is unassigned';
+        statusText = workspaceRoot
+          ? tr('ui.assignedToWorkspace', { workspace: workspaceRoot }, 'Material assigned to ' + workspaceRoot)
+          : tr('ui.captureUnassigned', null, 'Material is unassigned');
         statusClass = '';
         render();
       });
     }
 
     function archiveCapture(captureId) {
-      return archiveCaptures([captureId], 'Capture archived');
+      return archiveCaptures([captureId], tr('ui.captureArchived', null, 'Material archived'));
     }
 
     function restoreCapture(captureId) {
@@ -615,7 +629,7 @@
         });
       }).then(function (saved) {
         if (!saved) return;
-        statusText = 'Capture restored to Inbox';
+        statusText = tr('ui.captureRestored', null, 'Material restored to Inbox');
         statusClass = '';
         render();
       });
@@ -627,7 +641,7 @@
       }).then(function (saved) {
         if (!saved) return;
         if (selectedId === captureId) selectedId = '';
-        statusText = 'Capture permanently deleted';
+        statusText = tr('ui.captureDeleted', null, 'Material permanently deleted');
         statusClass = '';
         render();
       });
@@ -643,7 +657,9 @@
         });
       }).then(function (saved) {
         if (!saved) return;
-        statusText = processed ? 'Capture marked processed' : 'Capture marked unprocessed';
+        statusText = processed
+          ? tr('ui.captureProcessed', null, 'Material marked processed')
+          : tr('ui.captureUnprocessed', null, 'Material marked unprocessed');
         statusClass = '';
         render();
       });
@@ -655,12 +671,12 @@
         reportError('ui.createNoteError', 'Could not create the note. Please try again.');
         return Promise.resolve();
       }
-      var title = noteTitle(capture);
+      var title = noteTitle(capture, tr('ui.untitledCapture', null, 'Untitled material'));
       var notePath = capture.workspaceRootPath + '/Notes/' + safeNoteFilename(title);
-      statusText = 'Creating note...';
+      statusText = tr('ui.creatingNote', null, 'Creating note...');
       statusClass = '';
       render();
-      return api.files.writeText(notePath, captureToMarkdown(capture), {
+      return api.files.writeText(notePath, captureToMarkdown(capture, tr('ui.untitledCapture', null, 'Untitled material')), {
         createIfMissing: true,
         overwrite: false
       }).then(function () {
@@ -677,7 +693,7 @@
         }
         return undefined;
       }).then(function () {
-        statusText = 'Created note: ' + notePath;
+        statusText = tr('ui.noteCreated', { path: notePath }, 'Note created: ' + notePath);
         statusClass = '';
         return archiveCapture(capture.captureId);
       }).catch(function (err) {
@@ -691,8 +707,8 @@
         reportError('ui.createLinkError', 'Could not create the link. Please try again.');
         return Promise.resolve();
       }
-      var title = noteTitle(capture);
-      statusText = 'Creating link...';
+      var title = noteTitle(capture, tr('ui.untitledCapture', null, 'Untitled material'));
+      statusText = tr('ui.creatingLink', null, 'Creating link...');
       statusClass = '';
       render();
       function writeLink(number) {
@@ -725,7 +741,7 @@
         }
         return linkPath;
       }).then(function () {
-        statusText = 'Created link';
+        statusText = tr('ui.linkCreated', null, 'Link created');
         statusClass = '';
         return archiveCapture(capture.captureId);
       }).catch(function (err) {
@@ -748,7 +764,7 @@
       }
       var fileName = safeFileFilename(capture.fileName);
       var filePath = capture.workspaceRootPath + '/Files/' + fileName;
-      statusText = 'Creating file...';
+      statusText = tr('ui.creatingFile', null, 'Creating file...');
       statusClass = '';
       render();
       var writeOptions = {
@@ -775,7 +791,7 @@
         }
         return undefined;
       }).then(function () {
-        statusText = 'Created file: ' + filePath;
+        statusText = tr('ui.fileCreated', { path: filePath }, 'File created: ' + filePath);
         statusClass = '';
         return archiveCapture(capture.captureId);
       }).catch(function (err) {
@@ -788,8 +804,8 @@
       var visible = visibleCaptures();
       if (visible.length === 0) {
         var emptyText = captures.length === 0
-          ? 'No browser captures yet. Keep this view open, then send a page, selection, or link from the extension.'
-          : 'No captures match the current filters.';
+          ? tr('ui.empty', null, 'No browser materials yet. Send a page, selection, or link from the extension.')
+          : tr('ui.emptyFiltered', null, 'No materials match the current filters.');
         listEl.appendChild(el('div', { className: 'browser-inbox-empty', textContent: emptyText }));
         return;
       }
@@ -805,20 +821,22 @@
         }, [
           el('div', { className: 'browser-inbox-row-head' }, [
             el('span', { className: 'browser-inbox-kind', textContent: capture.kind }),
-            el('span', { className: 'browser-inbox-row-title', textContent: displayTitle(capture) })
+            el('span', { className: 'browser-inbox-row-title', textContent: displayTitle(capture, tr('ui.untitledCapture', null, 'Untitled material')) })
           ]),
           el('div', { className: 'browser-inbox-row-url', textContent: capture.url || capture.domain || capture.captureId })
         ]);
         row.appendChild(el('div', { className: 'browser-inbox-row-meta' }, [
           el('span', {
             className: 'browser-inbox-badge' + (workspaceRoot ? '' : ' unassigned'),
-            textContent: workspaceRoot || 'Unassigned'
+            textContent: workspaceRoot || tr('ui.unassigned', null, 'Unassigned')
           }),
           el('span', {
             className: 'browser-inbox-badge' + (capture.processed ? ' processed' : ''),
-            textContent: capture.processed ? 'Processed' : 'Unprocessed'
+            textContent: capture.processed
+              ? tr('ui.processed', null, 'Processed')
+              : tr('ui.unprocessed', null, 'Unprocessed')
           }),
-          capture.globalState === 'archived' ? el('span', { className: 'browser-inbox-badge', textContent: 'Archived' }) : null
+          capture.globalState === 'archived' ? el('span', { className: 'browser-inbox-badge', textContent: tr('ui.archive', null, 'Archive') }) : null
         ]));
         if (capture.text) {
           row.appendChild(el('div', { className: 'browser-inbox-row-text', textContent: capture.text }));
@@ -835,45 +853,47 @@
         return;
       }
       selectedId = capture.captureId;
-      detailEl.appendChild(el('div', { className: 'browser-inbox-detail-title', textContent: displayTitle(capture) }));
+      detailEl.appendChild(el('div', { className: 'browser-inbox-detail-title', textContent: displayTitle(capture, tr('ui.untitledCapture', null, 'Untitled material')) }));
       detailEl.appendChild(el('div', { className: 'browser-inbox-meta' }, [
         el('div', { className: 'browser-inbox-meta-label', textContent: tr('ui.kind', null, 'Kind') }),
         el('div', { className: 'browser-inbox-meta-value', textContent: capture.kind }),
-        el('div', { className: 'browser-inbox-meta-label', textContent: 'URL' }),
+        el('div', { className: 'browser-inbox-meta-label', textContent: tr('ui.url', null, 'URL') }),
         el('div', { className: 'browser-inbox-meta-value', textContent: capture.url || '-' }),
         el('div', { className: 'browser-inbox-meta-label', textContent: tr('ui.domain', null, 'Domain') }),
         el('div', { className: 'browser-inbox-meta-value', textContent: capture.domain || '-' }),
         el('div', { className: 'browser-inbox-meta-label', textContent: tr('ui.captured', null, 'Captured') }),
         el('div', { className: 'browser-inbox-meta-value', textContent: formatDate(capture.capturedAt) || '-' }),
-        el('div', { className: 'browser-inbox-meta-label', textContent: 'Browser' }),
+        el('div', { className: 'browser-inbox-meta-label', textContent: tr('ui.browser', null, 'Browser') }),
         el('div', { className: 'browser-inbox-meta-value', textContent: capture.browserName || capture.source || '-' }),
         el('div', { className: 'browser-inbox-meta-label', textContent: tr('ui.workspace', null, 'Workspace') }),
-        el('div', { className: 'browser-inbox-meta-value', textContent: capture.workspaceRootPath || 'Unassigned' }),
+        el('div', { className: 'browser-inbox-meta-value', textContent: capture.workspaceRootPath || tr('ui.unassigned', null, 'Unassigned') }),
         el('div', { className: 'browser-inbox-meta-label', textContent: tr('ui.status', null, 'Status') }),
-        el('div', { className: 'browser-inbox-meta-value', textContent: capture.processed ? 'Processed' : 'Unprocessed' })
+        el('div', { className: 'browser-inbox-meta-value', textContent: capture.processed
+          ? tr('ui.processed', null, 'Processed')
+          : tr('ui.unprocessed', null, 'Unprocessed') })
       ]));
       var assignmentSelect = el('select', {
         className: 'browser-inbox-select',
         'data-browser-inbox-assignment': capture.captureId,
-        'aria-label': 'Assign capture workspace',
+        'aria-label': tr('ui.assignment', null, 'Assign to Deal'),
         onChange: function (event) {
           assignWorkspace(capture.captureId, event && event.target && event.target.value);
         }
       });
-      assignmentSelect.appendChild(option('', 'Unassigned'));
+      assignmentSelect.appendChild(option('', tr('ui.unassigned', null, 'Unassigned')));
       workspaceRoots().forEach(function (workspaceRoot) {
         assignmentSelect.appendChild(option(workspaceRoot, workspaceRoot));
       });
       assignmentSelect.value = capture.workspaceRootPath || '';
       var assignmentControls = [
-        el('span', { className: 'browser-inbox-meta-label', textContent: 'Assign workspace' }),
+        el('span', { className: 'browser-inbox-meta-label', textContent: tr('ui.assignment', null, 'Assign to Deal') }),
         assignmentSelect
       ];
       if (capture.workspaceRootPath) {
         assignmentControls.push(el('button', {
           className: 'browser-inbox-btn',
           'data-browser-inbox-action': 'clear-assignment',
-          textContent: 'Clear assignment',
+          textContent: tr('ui.clearAssignment', null, 'Clear assignment'),
           onClick: function () {
             assignWorkspace(capture.captureId, '');
           }
@@ -881,7 +901,7 @@
       }
       detailEl.appendChild(el('div', { className: 'browser-inbox-assignment' }, assignmentControls));
       if (!capture.workspaceRootPath) {
-        detailEl.appendChild(el('div', { className: 'browser-inbox-detail-note', textContent: 'Assign a workspace before creating a note, link, or file.' }));
+        detailEl.appendChild(el('div', { className: 'browser-inbox-detail-note', textContent: tr('ui.assignBeforeCreation', null, 'Assign a Deal before creating a note, link, or file.') }));
       }
       if (capture.text) {
         detailEl.appendChild(el('div', { className: 'browser-inbox-text', textContent: capture.text }));
@@ -893,7 +913,9 @@
       actionButtons.push(el('button', {
         className: 'browser-inbox-btn',
         'data-browser-inbox-action': 'toggle-processed',
-        textContent: capture.processed ? 'Mark Unprocessed' : 'Mark Processed',
+        textContent: capture.processed
+          ? tr('ui.markUnprocessed', null, 'Mark unprocessed')
+          : tr('ui.markProcessed', null, 'Mark processed'),
         onClick: function () {
           setProcessed(capture.captureId, !capture.processed);
         }
@@ -902,7 +924,7 @@
         actionButtons.push(el('button', {
           className: 'browser-inbox-btn',
           'data-browser-inbox-action': 'open-link',
-          textContent: 'Open link',
+          textContent: tr('ui.openLink', null, 'Open link'),
           onClick: function () {
             openCaptureURL(capture);
           }
@@ -942,7 +964,7 @@
         actionButtons.push(el('button', {
           className: 'browser-inbox-btn',
           'data-browser-inbox-action': 'restore',
-          textContent: 'Restore to Inbox',
+          textContent: tr('ui.restore', null, 'Restore to Inbox'),
           onClick: function () {
             restoreCapture(capture.captureId);
           }
@@ -951,7 +973,7 @@
         actionButtons.push(el('button', {
           className: 'browser-inbox-btn',
           'data-browser-inbox-action': 'archive',
-          textContent: 'Archive',
+          textContent: tr('ui.archive', null, 'Archive'),
           onClick: function () {
             archiveCapture(capture.captureId);
           }
@@ -960,7 +982,7 @@
       actionButtons.push(el('button', {
           className: 'browser-inbox-btn danger',
           'data-browser-inbox-action': 'delete-permanently',
-          textContent: 'Delete permanently',
+          textContent: tr('ui.deletePermanently', null, 'Delete permanently'),
           onClick: function () {
             permanentlyDeleteCapture(capture.captureId);
           }
@@ -972,8 +994,11 @@
       var visibleCount = visibleCaptures().length;
       var total = captures.length;
       countEl.textContent = visibleCount === total
-        ? total + ' item' + (total === 1 ? '' : 's')
-        : visibleCount + ' of ' + total + ' items';
+        ? localizedItemCount(total)
+        : tr('ui.items.filtered', {
+          visible: localizedItemCount(visibleCount),
+          total: localizedItemCount(total)
+        }, localizedItemCount(visibleCount) + ' of ' + localizedItemCount(total));
       var scopeCount = scope.mode === 'global'
         ? total
         : captures.filter(function (capture) { return capture.workspaceRootPath === scope.workspaceRoot; }).length;
@@ -1026,7 +1051,7 @@
           });
         });
       }).catch(function (err) {
-        reportError('ui.loadError', 'Could not load the browser inbox. Please try again.', err);
+        reportError('ui.loadError', 'Could not load browser materials. Please try again.', err);
       });
     }
 
@@ -1066,13 +1091,13 @@
               }).then(function (saved) {
                 if (!saved) return;
                 selectedId = received.captureId;
-                statusText = 'Capture received';
+                statusText = tr('ui.captureReceived', null, 'Material received');
                 statusClass = '';
                 render();
               });
             }
             selectedId = received.captureId;
-            statusText = 'Capture received';
+            statusText = tr('ui.captureReceived', null, 'Material received');
             statusClass = '';
             render();
             return undefined;
@@ -1081,7 +1106,9 @@
           if (typeof unsubscribe === 'function') unsubscribers.push(unsubscribe);
         });
       })).then(function () {
-        statusText = scope.mode === 'global' ? 'Receiver ready for all workspaces' : 'Receiver ready for workspace';
+        statusText = scope.mode === 'global'
+          ? tr('ui.receiverReadyAll', null, 'Receiver ready for all Deals')
+          : tr('ui.receiverReadyWorkspace', null, 'Receiver ready for this Deal');
         statusClass = '';
       }).catch(function (err) {
         reportError('ui.receiverError', 'The browser receiver is unavailable. Please try again.', err);
@@ -1098,8 +1125,11 @@
     });
     if (api && api.i18n && typeof api.i18n.onDidChangeLocale === 'function') {
       api.i18n.onDidChangeLocale(function () {
-        titleEl.textContent = scope.mode === 'global' ? tr('ui.title', null, 'Browser Inbox') : tr('ui.workspaceTitle', { workspace: scope.label }, 'Browser Inbox · ' + scope.label);
+        titleEl.textContent = scope.mode === 'global' ? tr('ui.title', null, 'Browser') : tr('ui.workspaceTitle', { workspace: scope.label }, 'Browser · ' + scope.label);
         searchInput.setAttribute('placeholder', tr('ui.search', null, 'Search captures'));
+        statusFilterEl.setAttribute('aria-label', tr('ui.statusFilter', null, 'Material status filter'));
+        workspaceFilterEl.setAttribute('aria-label', tr('ui.workspaceFilter', null, 'Deal filter'));
+        searchInput.setAttribute('aria-label', tr('ui.search', null, 'Search captures'));
         clearBtn.textContent = tr('ui.clear', null, 'Clear');
         render();
       });

@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "id": "verstak.browser-inbox",
-  "name": "Browser Inbox",
+  "name": "Browser",
   "version": "0.1.0",
   "apiVersion": "0.1.0",
-  "description": "Global browser capture queue with explicit workspace assignment delivered through the local receiver event protocol.",
+  "description": "Global browser materials with explicit Deal assignment delivered through the local receiver event protocol.",
   "localization": { "defaultLocale": "en", "locales": { "en": "locales/en.json", "ru": "locales/ru.json" } },
   "source": "official",
   "icon": "inbox",
@@ -29,7 +29,7 @@
     "views": [
       {
         "id": "verstak.browser-inbox.view",
-        "title": "Browser Inbox",
+        "title": "Browser",
         "icon": "inbox",
         "component": "BrowserInboxView"
       }
@@ -37,7 +37,7 @@
     "sidebarItems": [
       {
         "id": "verstak.browser-inbox.sidebar",
-        "title": "Browser Inbox",
+        "title": "Browser",
         "icon": "inbox",
         "view": "verstak.browser-inbox.view",
         "position": 30
@@ -46,7 +46,7 @@
     "workspaceItems": [
       {
         "id": "verstak.browser-inbox.workspace",
-        "title": "Browser Inbox",
+        "title": "Browser",
         "icon": "inbox",
         "component": "BrowserInboxView"
       }
@@ -54,7 +54,7 @@
     "settingsPanels": [
       {
         "id": "verstak.browser-inbox.settings",
-        "title": "Browser Inbox",
+        "title": "Browser",
         "component": "BrowserInboxSettings"
       }
     ]

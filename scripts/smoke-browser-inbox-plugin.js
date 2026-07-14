@@ -6,6 +6,10 @@ const vm = require('vm');
 const root = path.resolve(__dirname, '..');
 const sourcePath = path.join(root, 'plugins', 'browser-inbox', 'frontend', 'src', 'index.js');
 const source = fs.readFileSync(sourcePath, 'utf8');
+const catalogs = {
+  en: JSON.parse(fs.readFileSync(path.join(root, 'plugins', 'browser-inbox', 'locales', 'en.json'), 'utf8')),
+  ru: JSON.parse(fs.readFileSync(path.join(root, 'plugins', 'browser-inbox', 'locales', 'ru.json'), 'utf8')),
+};
 const technicalErrors = [];
 
 class FakeNode {
@@ -145,7 +149,7 @@ function loadComponent(document) {
   return component;
 }
 
-function makeApi(initialSettings = {}) {
+function makeApi(initialSettings = {}, locale = 'en') {
   const settings = { ...initialSettings };
   const handlers = {};
   const unsubscribed = [];
@@ -162,6 +166,13 @@ function makeApi(initialSettings = {}) {
     receiverToken: 'initial-browser-token',
   };
   let nextWriteError = null;
+  function translate(key, params, fallback) {
+    let value = catalogs[locale]?.[key] || catalogs.en[key] || fallback || key;
+    Object.entries(params || {}).forEach(([name, replacement]) => {
+      value = value.replace(new RegExp(`\\{${name}\\}`, 'g'), String(replacement));
+    });
+    return value;
+  }
   function backendCaptures() {
     const keys = ['captures:global', 'captures', ...Object.keys(settings).filter((key) => key.startsWith('captures:workspace:'))];
     const seen = new Set();
@@ -214,6 +225,11 @@ function makeApi(initialSettings = {}) {
     fileByteWrites,
     openedURLs,
     publishedEvents,
+    i18n: {
+      getLocale: () => locale,
+      t: translate,
+      onDidChangeLocale: () => () => {},
+    },
     failNextWrite(message) {
       nextWriteError = new Error(message || 'write failed');
     },
@@ -306,6 +322,18 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
     throw new Error('Browser Inbox selects do not use the application select styling');
   }
   styledView.component.unmount && styledView.component.unmount(styledView.container);
+
+  const russianView = await mountWithApi(makeApi({}, 'ru'), {});
+  if (!russianView.container.textContent.includes('Браузер')) {
+    throw new Error('Browser Inbox does not use the localized Browser title');
+  }
+  if (!russianView.container.textContent.includes('Все Дела')) {
+    throw new Error('Browser Inbox does not use the localized Deal filter');
+  }
+  if (!russianView.container.textContent.includes('Пока нет материалов из браузера')) {
+    throw new Error('Browser Inbox empty state is not localized');
+  }
+  russianView.component.unmount && russianView.component.unmount(russianView.container);
 
   const api = makeApi();
   const settingsView = await mountSettingsWithApi(makeApi());
