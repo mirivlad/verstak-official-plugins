@@ -79,6 +79,7 @@
     '.activity-btn.danger{border-color:rgba(233,69,96,.42);color:#ff9a9a}',
     '.activity-status{font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3);white-space:nowrap}',
     '.activity-status.error{display:inline-flex;border:1px solid rgba(233,69,96,.45);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-danger-muted,rgba(233,69,96,.14));color:#ffc6ce;padding:.18rem .4rem}',
+    '.activity-modal-host[hidden]{display:none}.activity-modal-overlay{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:1rem;background:rgba(0,0,0,.58)}.activity-modal{width:440px;max-width:96vw;display:grid;gap:.75rem;padding:1rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface,#15152c);box-shadow:0 18px 44px rgba(0,0,0,.38)}.activity-modal-title{font-size:.95rem;font-weight:650}.activity-modal-copy{color:var(--vt-color-text-secondary,#b7c0d4);font-size:.84rem;line-height:1.45}.activity-modal-actions{display:flex;justify-content:flex-end;gap:.5rem}.activity-btn.destructive{background:var(--vt-color-danger,#e94560);border-color:var(--vt-color-danger,#e94560);color:#fff}',
     '.activity-candidates{border-bottom:1px solid rgba(32,43,70,.72);background:var(--vt-color-surface-muted,#111629);padding:.65rem .75rem;display:grid;gap:.5rem}',
     '.activity-candidates-title{font-size:.76rem;font-weight:600;color:var(--vt-color-text-muted,#7f8aa3);text-transform:uppercase;letter-spacing:.04em}',
     '.activity-candidate{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.65rem;align-items:start;padding:.65rem .75rem;border:1px solid rgba(78,204,163,.34);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface,#15152c)}',
@@ -570,18 +571,7 @@
       className: 'activity-btn danger',
       'data-activity-action': 'clear',
       textContent: tr('ui.clear', null, 'Clear'),
-      onClick: function () {
-        if (scope.mode === 'global') {
-          clearGlobal().then(render);
-          return;
-        }
-        events = [];
-        candidateSourceEvents = candidateSourceEvents.filter(function (activity) {
-          return candidateWorkspace(activity) !== scope.workspaceRoot;
-        });
-        updateCandidates();
-        clearWorkspaceRaw(scope.workspaceRoot).then(persist).then(render);
-      }
+      onClick: showClearConfirmation
     });
     toolbar.appendChild(titleEl);
     toolbar.appendChild(countEl);
@@ -594,9 +584,11 @@
       'data-activity-section': 'work-session-candidates'
     });
     var listEl = el('div', { className: 'activity-list' });
+    var modalHost = el('div', { className: 'activity-modal-host', hidden: 'hidden' });
     containerEl.appendChild(toolbar);
     containerEl.appendChild(candidatesEl);
     containerEl.appendChild(listEl);
+    containerEl.appendChild(modalHost);
 
     function candidatesForWorkspace(workspaceRoot) {
       return visibleCandidates(candidateSourceEvents, workspaceRoot, sessionRegistry, dismissedByWorkspace, handledSessions);
@@ -679,6 +671,57 @@
         statusText = tr('ui.clearError', { error: err && err.message ? err.message : String(err) }, 'Could not clear activity: ' + (err && err.message ? err.message : String(err)));
         statusClass = 'error';
       });
+    }
+
+    function closeClearConfirmation() {
+      modalHost.innerHTML = '';
+      modalHost.setAttribute('hidden', 'hidden');
+    }
+
+    function clearCurrentScope() {
+      if (scope.mode === 'global') {
+        return clearGlobal().then(render);
+      }
+      events = [];
+      candidateSourceEvents = candidateSourceEvents.filter(function (activity) {
+        return candidateWorkspace(activity) !== scope.workspaceRoot;
+      });
+      updateCandidates();
+      return clearWorkspaceRaw(scope.workspaceRoot).then(persist).then(render);
+    }
+
+    function showClearConfirmation() {
+      var scopeMessage = scope.mode === 'global'
+        ? tr('ui.clearGlobalWarning', null, 'This permanently deletes all recorded activity and journal suggestions in every case.')
+        : tr('ui.clearWorkspaceWarning', { workspace: scope.label }, 'This permanently deletes recorded activity for ' + scope.label + '. Activity in other cases remains.');
+      var confirmBtn = el('button', {
+        className: 'activity-btn danger destructive',
+        type: 'button',
+        'data-activity-clear-confirm': '',
+        textContent: tr('ui.confirmClear', null, 'Clear activity'),
+        onClick: function () {
+          confirmBtn.disabled = true;
+          clearCurrentScope().then(closeClearConfirmation);
+        }
+      });
+      modalHost.innerHTML = '';
+      if (typeof modalHost.removeAttribute === 'function') modalHost.removeAttribute('hidden');
+      else delete modalHost.attributes.hidden;
+      modalHost.appendChild(el('div', {
+        className: 'activity-modal-overlay',
+        onClick: function (event) {
+          if (event.target === event.currentTarget) closeClearConfirmation();
+        }
+      }, [
+        el('div', { className: 'activity-modal', role: 'dialog', 'aria-modal': 'true', 'data-activity-clear-confirmation': '' }, [
+          el('div', { className: 'activity-modal-title', textContent: tr('ui.clearConfirmTitle', null, 'Clear activity?') }),
+          el('div', { className: 'activity-modal-copy', textContent: scopeMessage }),
+          el('div', { className: 'activity-modal-actions' }, [
+            el('button', { className: 'activity-btn', type: 'button', 'data-activity-clear-cancel': '', textContent: tr('ui.cancel', null, 'Cancel'), onClick: closeClearConfirmation }),
+            confirmBtn
+          ])
+        ])
+      ]));
     }
 
     function clearWorkspaceRaw(workspaceRoot) {
