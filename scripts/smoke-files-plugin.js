@@ -198,6 +198,8 @@ function loadFilesComponent(document) {
 function makeApi() {
   const externalCalls = [];
   const contributionCalls = [];
+  const created = [];
+  const moved = [];
   const eventHandlers = {};
   let restored = false;
   let externalVisible = false;
@@ -212,6 +214,8 @@ function makeApi() {
   return {
     externalCalls,
     contributionCalls,
+    created,
+    moved,
     emitFileChanged(payload) {
       (eventHandlers['file.changed'] || []).forEach((handler) => handler({
         name: 'file.changed',
@@ -253,9 +257,15 @@ function makeApi() {
       },
       metadata: async () => { throw new Error('not-found'); },
       readText: async () => '# Readme\n',
-      writeText: async () => undefined,
-      createFolder: async () => undefined,
-      move: async () => undefined,
+      writeText: async (relativePath, content, options) => {
+        created.push({ type: 'file', relativePath, content, options });
+      },
+      createFolder: async (relativePath) => {
+        created.push({ type: 'folder', relativePath });
+      },
+      move: async (fromRelativePath, toRelativePath) => {
+        moved.push({ fromRelativePath, toRelativePath });
+      },
       trash: async () => undefined,
       listTrash: async () => trashEntries.slice(),
       restoreTrash: async (trashId) => {
@@ -327,6 +337,62 @@ async function flush() {
 
   const row = walk(container, (node) => node.getAttribute && node.getAttribute('data-file-path') === 'Docs/readme.md');
   if (!row) throw new Error('file row not rendered');
+
+  const newFolder = walk(container, (node) => node.getAttribute && node.getAttribute('data-files-action') === 'new-folder');
+  if (!newFolder) throw new Error('new folder button not found');
+  newFolder.click();
+  const createModal = walk(document.body, (node) => node.getAttribute && node.getAttribute('data-files-create-modal') !== undefined);
+  if (!createModal) throw new Error('create file modal not found');
+  const createInput = walk(createModal, (node) => node.getAttribute && node.getAttribute('data-files-create-input') !== undefined);
+  if (!createInput) throw new Error('create file input not found');
+  const createConfirm = walk(createModal, (node) => node.tagName === 'BUTTON' && node.textContent === 'Create');
+  if (!createConfirm) throw new Error('create file confirm button not found');
+  createConfirm.click();
+  const createError = walk(createModal, (node) => node.getAttribute && node.getAttribute('data-files-create-error') !== undefined);
+  if (!createError || !createError.textContent.includes('Enter a name') || createInput.getAttribute('aria-invalid') !== 'true') {
+    throw new Error('create file modal does not show a validation error for an empty name');
+  }
+  createInput.value = 'New folder';
+  createInput.dispatchEvent('keydown', { key: 'Enter' });
+  await flush();
+  if (!api.created.some((entry) => entry.type === 'folder' && entry.relativePath === 'New folder')) {
+    throw new Error(`new folder was not created: ${JSON.stringify(api.created)}`);
+  }
+  if (walk(document.body, (node) => node.getAttribute && node.getAttribute('data-files-create-modal') !== undefined)) {
+    throw new Error('create file modal should close after a successful create');
+  }
+
+  const newMarkdown = walk(container, (node) => node.getAttribute && node.getAttribute('data-files-action') === 'new-markdown');
+  if (!newMarkdown) throw new Error('new markdown button not found');
+  newMarkdown.click();
+  const markdownModal = walk(document.body, (node) => node.getAttribute && node.getAttribute('data-files-create-modal') !== undefined);
+  const markdownInput = walk(markdownModal, (node) => node.getAttribute && node.getAttribute('data-files-create-input') !== undefined);
+  markdownInput.value = 'Readme';
+  markdownInput.dispatchEvent('keydown', { key: 'Enter' });
+  await flush();
+  if (!api.created.some((entry) => entry.type === 'file' && entry.relativePath === 'Readme.md')) {
+    throw new Error(`new markdown file was not created: ${JSON.stringify(api.created)}`);
+  }
+
+  const rename = walk(container, (node) => node.getAttribute && node.getAttribute('data-files-action') === 'row-rename');
+  if (!rename) throw new Error('rename file button not found');
+  rename.click();
+  const renameModal = walk(document.body, (node) => node.getAttribute && node.getAttribute('data-files-rename-modal') !== undefined);
+  if (!renameModal) throw new Error('rename file modal not found');
+  const renameInput = walk(renameModal, (node) => node.getAttribute && node.getAttribute('data-files-rename-input') !== undefined);
+  if (!renameInput || renameInput.value !== 'readme.md') throw new Error('rename file input should keep the current filename and extension');
+  renameInput.value = '';
+  renameInput.dispatchEvent('keydown', { key: 'Enter' });
+  const renameError = walk(renameModal, (node) => node.getAttribute && node.getAttribute('data-files-rename-error') !== undefined);
+  if (!renameError || !renameError.textContent.includes('Enter a name') || renameInput.getAttribute('aria-invalid') !== 'true') {
+    throw new Error('rename file modal does not show a validation error for an empty name');
+  }
+  renameInput.value = 'renamed.md';
+  renameInput.dispatchEvent('keydown', { key: 'Enter' });
+  await flush();
+  if (!api.moved.some((entry) => entry.fromRelativePath === 'Docs/readme.md' && entry.toRelativePath === 'Docs/renamed.md')) {
+    throw new Error(`rename did not preserve the extension: ${JSON.stringify(api.moved)}`);
+  }
 
   const list = walk(container, (node) => node.getAttribute && node.getAttribute('data-files-list') !== undefined);
   if (!list) throw new Error('files list not rendered');

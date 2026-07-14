@@ -34,10 +34,10 @@
     '.files-breadcrumb-item:hover{background:var(--vt-color-accent-muted,rgba(78,204,163,.14))}',
     '.files-breadcrumb-current{color:var(--vt-color-text-primary,#f4f7fb);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
     '.files-breadcrumb-sep{color:var(--vt-color-text-muted,#7f8aa3)}',
-    '.files-filter,.files-sort,.files-create-input,.files-rename-input{font-size:.78rem;padding:.32rem .5rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:#0f1424;color:var(--vt-color-text-primary,#f4f7fb);outline:none}',
+    '.files-filter,.files-sort{font-size:.78rem;padding:.32rem .5rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:#0f1424;color:var(--vt-color-text-primary,#f4f7fb);outline:none}',
     '.files-filter{width:11rem}',
     '.files-sort{width:9.5rem;appearance:none;background-color:#0f1424;background-image:linear-gradient(45deg,transparent 50%,#8b8ba8 50%),linear-gradient(135deg,#8b8ba8 50%,transparent 50%);background-position:calc(100% - 14px) 50%,calc(100% - 9px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:1.6rem}.files-sort option{background:#0f1424;color:var(--vt-color-text-primary,#f4f7fb)}',
-    '.files-filter:focus,.files-sort:focus,.files-create-input:focus,.files-rename-input:focus{border-color:var(--vt-color-accent,#4ecca3);box-shadow:var(--vt-focus-ring,0 0 0 2px rgba(78,204,163,.34))}',
+    '.files-filter:focus,.files-sort:focus{border-color:var(--vt-color-accent,#4ecca3);box-shadow:var(--vt-focus-ring,0 0 0 2px rgba(78,204,163,.34))}',
     '.files-list{flex:1;overflow:auto;min-height:0}',
     '.files-header,.files-item{display:grid;grid-template-columns:minmax(160px,1fr) 90px 90px 150px 220px;align-items:center;gap:.5rem;padding:.38rem .75rem;border-bottom:1px solid rgba(22,33,62,.55)}',
     '.files-header{position:sticky;top:0;background:var(--vt-color-surface-muted,#111629);color:var(--vt-color-text-muted,#7f8aa3);font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;z-index:1}',
@@ -60,10 +60,6 @@
     '.files-empty-btn svg{width:15px;height:15px;display:block;fill:currentColor}',
     '.files-error{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--vt-color-danger,#e94560);gap:.5rem;padding:1rem}',
     '.files-error-msg{font-size:.85rem;color:var(--vt-color-text-secondary,#b7c0d4);max-width:420px;text-align:center}',
-    '.files-panel{display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem;border-top:1px solid var(--vt-color-border,#202b46);flex-shrink:0;background:var(--vt-color-surface-muted,#111629)}',
-    '.files-field-stack{display:flex;flex:1;min-width:160px;flex-direction:column;gap:.25rem}',
-    '.files-panel-error{display:none;color:#ff9aaa;font-size:.72rem;line-height:1.2}',
-    '.files-create-input,.files-rename-input{flex:1;min-width:160px}',
     '@media(max-width:760px){.files-header,.files-item{grid-template-columns:minmax(130px,1fr) 70px 0 0 150px}.files-header span:nth-child(3),.files-header span:nth-child(4),.files-item-meta.hide-narrow{display:none}.files-toolbar{align-items:stretch}.files-filter,.files-sort{width:100%}}',
     '.files-ctx-menu{position:fixed;z-index:9999;min-width:180px;background:var(--vt-color-surface,#15152c);border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-md,6px);padding:6px 0;box-shadow:var(--vt-elevation-menu,0 14px 32px rgba(0,0,0,.42));font-size:.84rem;color:var(--vt-color-text-primary,#f4f7fb);user-select:none}',
     '.files-ctx-menu-item{padding:6px 16px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:.5rem}',
@@ -75,6 +71,12 @@
     '.files-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:center;justify-content:center}',
     '.files-modal{width:400px;max-width:90vw;padding:24px;background:#1a1a2e;border:1px solid #333;border-radius:12px;color:#e0e0e0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;box-shadow:0 12px 40px rgba(0,0,0,.5)}',
     '.files-modal-title{font-size:.95rem;line-height:1.5;margin-bottom:20px;word-wrap:break-word}',
+    '.files-modal-form{display:grid;gap:.65rem}',
+    '.files-modal-form .files-modal-title{margin-bottom:0}',
+    '.files-modal-input{width:100%;font:inherit;font-size:.86rem;padding:.52rem .65rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:#0f1424;color:var(--vt-color-text-primary,#f4f7fb);outline:none}',
+    '.files-modal-input:focus{border-color:var(--vt-color-accent,#4ecca3);box-shadow:var(--vt-focus-ring,0 0 0 2px rgba(78,204,163,.34))}',
+    '.files-modal-input[aria-invalid="true"]{border-color:var(--vt-color-danger,#e94560)}',
+    '.files-modal-error{display:none;color:#ff9aaa;font-size:.78rem;line-height:1.35}',
     '.files-modal-actions{display:flex;justify-content:flex-end;gap:8px}',
     '.files-modal-btn{font-size:.82rem;padding:.4rem 1rem;border:1px solid #333;border-radius:6px;cursor:pointer;font-family:inherit}',
     '.files-modal-btn.cancel{background:#2a2a4e;color:#ccc;border-color:#444}',
@@ -346,7 +348,7 @@
 
       var workspaceNode = props && props.workspaceNode;
       var workspaceRoot = cleanPath(props && (props.workspaceRootPath || (workspaceNode && (workspaceNode.rootPath || workspaceNode.name || workspaceNode.id))) || '');
-      var workspaceName = workspaceRoot || (workspaceNode && (workspaceNode.name || workspaceNode.title || workspaceNode.id)) || 'Workspace';
+      var workspaceName = workspaceRoot || (workspaceNode && (workspaceNode.name || workspaceNode.title || workspaceNode.id)) || '';
       window.__filesHistoryByWorkspace = window.__filesHistoryByWorkspace || {};
       var historyKey = workspaceRoot || workspaceName;
       var savedHistory = window.__filesHistoryByWorkspace[historyKey] || { stack: [''], index: 0, currentPath: '' };
@@ -358,6 +360,12 @@
       var sortMode = 'folder-name';
       var createMode = '';
       var renameTarget = null;
+      var createModal = null;
+      var createInput = null;
+      var createError = null;
+      var renameModal = null;
+      var renameInput = null;
+      var renameError = null;
       var disposed = false;
       var fileActions = [];
       var contextMenuEntries = [];
@@ -437,32 +445,6 @@
 
       var listContainer = el('div', { className: 'files-list', 'data-files-list': '' });
       containerEl.appendChild(listContainer);
-
-      var createPanel = el('div', { className: 'files-panel', style: { display: 'none' } });
-      var createField = el('div', { className: 'files-field-stack' });
-      var createInput = el('input', { className: 'files-create-input', 'data-files-create-input': '' });
-      var createError = el('div', { className: 'files-panel-error', 'data-files-create-error': '', role: 'alert' });
-      var createConfirm = el('button', { className: 'files-toolbar-btn', 'data-files-create-confirm': '' }, [tr('ui.create', null, 'Create')]);
-      var createCancel = el('button', { className: 'files-toolbar-btn' }, [tr('ui.cancel', null, 'Cancel')]);
-      createField.appendChild(createInput);
-      createField.appendChild(createError);
-      createPanel.appendChild(createField);
-      createPanel.appendChild(createConfirm);
-      createPanel.appendChild(createCancel);
-      containerEl.appendChild(createPanel);
-
-      var renamePanel = el('div', { className: 'files-panel', style: { display: 'none' } });
-      var renameField = el('div', { className: 'files-field-stack' });
-      var renameInput = el('input', { className: 'files-rename-input', 'data-files-rename-input': '' });
-      var renameError = el('div', { className: 'files-panel-error', 'data-files-rename-error': '', role: 'alert' });
-      var renameConfirm = el('button', { className: 'files-toolbar-btn', 'data-files-rename-confirm': '' }, [tr('ui.rename', null, 'Rename')]);
-      var renameCancel = el('button', { className: 'files-toolbar-btn' }, [tr('ui.cancel', null, 'Cancel')]);
-      renameField.appendChild(renameInput);
-      renameField.appendChild(renameError);
-      renamePanel.appendChild(renameField);
-      renamePanel.appendChild(renameConfirm);
-      renamePanel.appendChild(renameCancel);
-      containerEl.appendChild(renamePanel);
 
       function selectedEntry() {
         var keys = Object.keys(selectedPaths);
@@ -820,35 +802,131 @@
         }).catch(function (err) { console.error('[files] openResource error:', err); });
       }
 
+      function showFileFormModal(mode, details) {
+        var isRename = mode === 'rename';
+        var overlay = el('div', {
+          className: 'files-modal-overlay',
+          role: 'presentation'
+        });
+        overlay.setAttribute('data-files-' + mode + '-modal', '');
+        var input = el('input', {
+          className: 'files-modal-input',
+          type: 'text',
+          value: details.value || '',
+          placeholder: details.placeholder || '',
+          autocomplete: 'off',
+          'aria-invalid': 'false'
+        });
+        input.setAttribute('data-files-' + mode + '-input', '');
+        input.value = details.value || '';
+        var error = el('div', {
+          className: 'files-modal-error',
+          role: 'alert'
+        });
+        error.setAttribute('data-files-' + mode + '-error', '');
+        function closeForm() {
+          if (isRename) cancelRename();
+          else cancelCreate();
+        }
+        function confirmForm() {
+          if (isRename) confirmRename();
+          else confirmCreate();
+        }
+        input.addEventListener('input', function () {
+          if (isRename) setRenameError('');
+          else setCreateError('');
+        });
+        input.addEventListener('keydown', function (event) {
+          if (event.key === 'Enter') {
+            if (event.preventDefault) event.preventDefault();
+            confirmForm();
+          }
+          if (event.key === 'Escape') {
+            if (event.preventDefault) event.preventDefault();
+            closeForm();
+          }
+        });
+        var modal = el('div', {
+          className: 'files-modal files-modal-form',
+          role: 'dialog',
+          'aria-modal': 'true',
+          'aria-label': details.title
+        }, [
+          el('div', { className: 'files-modal-title', textContent: details.title }),
+          input,
+          error,
+          el('div', { className: 'files-modal-actions' }, [
+            el('button', {
+              className: 'files-modal-btn cancel',
+              type: 'button',
+              textContent: tr('ui.cancel', null, 'Cancel'),
+              onClick: closeForm
+            }),
+            el('button', {
+              className: 'files-modal-btn confirm',
+              type: 'button',
+              textContent: details.confirmLabel,
+              onClick: confirmForm
+            })
+          ])
+        ]);
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+        if (isRename) {
+          renameInput = input;
+          renameError = error;
+        } else {
+          createInput = input;
+          createError = error;
+        }
+        input.focus();
+        if (isRename && input.select) input.select();
+        return overlay;
+      }
+
       function startCreate(mode) {
+        cancelCreate();
         createMode = mode;
-        createInput.value = '';
-        createInput.placeholder = mode === 'folder' ? 'Folder name' : (mode === 'markdown' ? 'Markdown file name' : 'Text file name');
-        setCreateError('');
-        createPanel.style.display = 'flex';
-        createInput.focus();
+        createModal = showFileFormModal('create', {
+          title: mode === 'folder'
+            ? tr('ui.createFolderTitle', null, 'Create folder')
+            : (mode === 'markdown'
+              ? tr('ui.createMarkdownTitle', null, 'Create Markdown file')
+              : tr('ui.createTextTitle', null, 'Create text file')),
+          placeholder: mode === 'folder'
+            ? tr('ui.folderName', null, 'Folder name')
+            : (mode === 'markdown'
+              ? tr('ui.markdownFileName', null, 'Markdown file name')
+              : tr('ui.textFileName', null, 'Text file name')),
+          confirmLabel: tr('ui.create', null, 'Create')
+        });
       }
 
       function setCreateError(message) {
+        if (!createError || !createInput) return;
         createError.textContent = message || '';
         createError.style.display = message ? 'block' : 'none';
         createInput.setAttribute('aria-invalid', message ? 'true' : 'false');
       }
 
       function validateCreateName(name) {
-        if (!name) return 'Name is required';
-        if (/[\\/:*?"<>|\x00-\x1f]/.test(name)) return 'Invalid characters in name';
-        if (name === '.' || name === '..' || name[0] === ' ' || name[name.length - 1] === ' ' || name[name.length - 1] === '.') return 'Invalid name';
+        if (!name) return tr('ui.nameRequired', null, 'Enter a name.');
+        if (/[\\/:*?"<>|\x00-\x1f]/.test(name)) return tr('ui.invalidCharacters', null, 'The name contains invalid characters.');
+        if (name === '.' || name === '..' || name[0] === ' ' || name[name.length - 1] === ' ' || name[name.length - 1] === '.') return tr('ui.invalidName', null, 'Enter a valid name.');
         return '';
       }
 
       function cancelCreate() {
         createMode = '';
-        setCreateError('');
-        createPanel.style.display = 'none';
+        if (createModal && typeof createModal.remove === 'function') createModal.remove();
+        else if (createModal && createModal.parentNode) createModal.parentNode.removeChild(createModal);
+        createModal = null;
+        createInput = null;
+        createError = null;
       }
 
       function confirmCreate() {
+        if (!createInput || !createMode) return;
         var name = createInput.value.trim();
         var validationError = validateCreateName(name);
         if (validationError) {
@@ -877,39 +955,49 @@
       function beginRename(entry) {
         entry = entry || selectedEntry();
         if (!entry) return;
+        cancelRename();
         renameTarget = entry;
-        renameInput.value = entry.name;
-        setRenameError('');
-        renamePanel.style.display = 'flex';
-        renameInput.focus();
-        renameInput.select();
+        renameModal = showFileFormModal('rename', {
+          title: tr('ui.renameTitle', { name: entry.name }, 'Rename ' + entry.name),
+          placeholder: tr('ui.fileName', null, 'File or folder name'),
+          value: entry.name,
+          confirmLabel: tr('ui.rename', null, 'Rename')
+        });
       }
 
       function cancelRename() {
         renameTarget = null;
-        setRenameError('');
-        renamePanel.style.display = 'none';
+        if (renameModal && typeof renameModal.remove === 'function') renameModal.remove();
+        else if (renameModal && renameModal.parentNode) renameModal.parentNode.removeChild(renameModal);
+        renameModal = null;
+        renameInput = null;
+        renameError = null;
       }
 
       function setRenameError(message) {
+        if (!renameError || !renameInput) return;
         renameError.textContent = message || '';
         renameError.style.display = message ? 'block' : 'none';
         renameInput.setAttribute('aria-invalid', message ? 'true' : 'false');
       }
 
       function confirmRename() {
-        if (!renameTarget) return;
+        if (!renameTarget || !renameInput) return;
         var newName = renameInput.value.trim();
-        if (!newName || newName === renameTarget.name) {
+        if (!newName) {
+          setRenameError(tr('ui.nameRequired', null, 'Enter a name.'));
+          return;
+        }
+        if (newName === renameTarget.name) {
           cancelRename();
           return;
         }
         if (/[\\/:*?"<>|\x00-\x1f]/.test(newName)) {
-          setRenameError('Invalid characters in name');
+          setRenameError(tr('ui.invalidCharacters', null, 'The name contains invalid characters.'));
           return;
         }
         if (newName === '.' || newName === '..' || newName[0] === ' ' || newName[newName.length - 1] === ' ' || newName[newName.length - 1] === '.') {
-          setRenameError('Invalid name');
+          setRenameError(tr('ui.invalidName', null, 'Enter a valid name.'));
           return;
         }
         var from = renameTarget.relativePath;
@@ -917,17 +1005,17 @@
         var to = targetParent ? targetParent + '/' + newName : newName;
         api.files.metadata(to).then(function () {
           if (to.toLowerCase() === from.toLowerCase() && to !== from) {
-            setRenameError('Name differs only by case');
+            setRenameError(tr('ui.nameDiffersOnlyByCase', null, 'The name differs only by letter case.'));
             return;
           }
-          setRenameError('A file with that name already exists');
+          setRenameError(tr('ui.nameConflict', null, 'An item with that name already exists.'));
         }, function () {
           api.files.move(from, to, { overwrite: false }).then(function () {
             cancelRename();
             loadEntries();
           }).catch(function (err) {
             if (isConflictError(err)) {
-              setRenameError('A file with that name already exists');
+              setRenameError(tr('ui.nameConflict', null, 'An item with that name already exists.'));
               return;
             }
             setRenameError(reportError('ui.renameError', 'Could not rename this item. Please try again.', err));
@@ -963,14 +1051,6 @@
 
       filterInput.addEventListener('input', function () { filterText = filterInput.value; renderList(); });
       sortSelect.addEventListener('change', function () { sortMode = sortSelect.value; renderList(); });
-      createConfirm.addEventListener('click', confirmCreate);
-      createCancel.addEventListener('click', cancelCreate);
-      renameConfirm.addEventListener('click', confirmRename);
-      renameCancel.addEventListener('click', cancelRename);
-      createInput.addEventListener('input', function () { setCreateError(''); });
-      createInput.addEventListener('keydown', function (event) { if (event.key === 'Enter') confirmCreate(); if (event.key === 'Escape') cancelCreate(); });
-      renameInput.addEventListener('input', function () { setRenameError(''); });
-      renameInput.addEventListener('keydown', function (event) { if (event.key === 'Enter') confirmRename(); if (event.key === 'Escape') cancelRename(); });
       /* --- Context menu --- */
       var ctxMenu = el('div', { className: 'files-ctx-menu', style: { display: 'none' } });
       document.body.appendChild(ctxMenu);
@@ -1508,10 +1588,6 @@
             item[0].setAttribute('aria-label', label);
           });
           filterInput.setAttribute('placeholder', tr('ui.filter', null, 'Filter current folder'));
-          createConfirm.textContent = tr('ui.create', null, 'Create');
-          createCancel.textContent = tr('ui.cancel', null, 'Cancel');
-          renameConfirm.textContent = tr('ui.rename', null, 'Rename');
-          renameCancel.textContent = tr('ui.cancel', null, 'Cancel');
           renderList();
         });
       }
@@ -1530,6 +1606,8 @@
 
       containerEl.__filesCleanup = function () {
         disposed = true;
+        cancelCreate();
+        cancelRename();
         if (typeof localeUnsubscribe === 'function') localeUnsubscribe();
         if (typeof fileChangedUnsubscribe === 'function') fileChangedUnsubscribe();
         document.removeEventListener('click', onDocClick);

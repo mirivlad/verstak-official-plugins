@@ -4,7 +4,7 @@
   "name": "Files",
   "version": "0.1.0",
   "apiVersion": "0.1.0",
-  "description": "Workspace-scoped vault file explorer with create, rename, trash, filtering, sorting, and Workbench openResource integration.",
+  "description": "Deal-scoped vault file explorer with create, rename, trash, filtering, sorting, and Workbench openResource integration.",
   "localization": { "defaultLocale": "en", "locales": { "en": "locales/en.json", "ru": "locales/ru.json" } },
   "source": "official",
   "icon": "folder",
