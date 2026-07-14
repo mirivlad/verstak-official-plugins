@@ -322,15 +322,16 @@
     return Promise.reject(new Error('clipboard unavailable'));
   }
 
-  function showExternalFallback(entry, mode) {
+  function showExternalFallback(entry, mode, labels) {
     if (!entry) return;
+    labels = labels || {};
     var pathToShow = entry.relativePath;
     if (mode === 'explorer' && entry.type !== 'folder') {
       pathToShow = parentPath(entry.relativePath) || entry.relativePath;
     }
-    var title = mode === 'explorer' ? 'Show in Explorer' : 'Open External';
-    var message = title + ' failed.\nVault-relative path:\n' + pathToShow;
-    confirmModal(message, { confirmText: 'Copy Path', cancelText: 'Close' }).then(function (copy) {
+    var title = mode === 'explorer' ? (labels.showInFolder || 'Show in folder') : (labels.openExternal || 'Open externally');
+    var message = (labels.externalFailed || '{action} failed.').replace('{action}', title) + '\n' + (labels.vaultRelativePath || 'Vault-relative path:') + '\n' + pathToShow;
+    confirmModal(message, { confirmText: labels.copyPath || 'Copy path', cancelText: labels.close || 'Close' }).then(function (copy) {
       if (!copy) return;
       copyTextToClipboard(pathToShow).catch(function (err) {
         console.error('[files] copy path failed:', err);
@@ -1026,7 +1027,11 @@
       function trashEntry(entry) {
         var count = selectedCount();
         if (entry) {
-          confirmModal('Move "' + entry.name + '" to trash?', { danger: true }).then(function (ok) {
+          confirmModal(tr('ui.trashConfirm', { name: entry.name }, 'Move "' + entry.name + '" to trash?'), {
+            danger: true,
+            confirmText: tr('ui.trash', null, 'Move to trash'),
+            cancelText: tr('ui.cancel', null, 'Cancel')
+          }).then(function (ok) {
             if (!ok) return;
             api.files.trash(entry.relativePath).then(function () {
               loadEntries();
@@ -1035,7 +1040,11 @@
             });
           });
         } else if (count > 1) {
-          confirmModal('Move ' + count + ' items to trash?', { danger: true }).then(function (ok) {
+          confirmModal(tr('ui.trashManyConfirm', { count: count }, 'Move ' + count + ' items to trash?'), {
+            danger: true,
+            confirmText: tr('ui.trash', null, 'Move to trash'),
+            cancelText: tr('ui.cancel', null, 'Cancel')
+          }).then(function (ok) {
             if (!ok) return;
             var paths = Object.keys(selectedPaths);
             Promise.allSettled(paths.map(function (p) { return api.files.trash(p); })).then(function () {
@@ -1080,15 +1089,23 @@
 
       function openExternalEntry(entry, mode) {
         if (!entry) return;
+        var fallbackLabels = {
+          openExternal: tr('ui.openExternal', null, 'Open externally'),
+          showInFolder: tr('ui.showInFolder', null, 'Show in folder'),
+          externalFailed: tr('ui.externalFailed', null, '{action} failed.'),
+          vaultRelativePath: tr('ui.vaultRelativePath', null, 'Vault-relative path:'),
+          copyPath: tr('ui.copyPath', null, 'Copy path'),
+          close: tr('ui.close', null, 'Close')
+        };
         var filesApi = api && api.files;
         var action = mode === 'explorer' ? filesApi && filesApi.showInFolder : filesApi && filesApi.openExternal;
         if (typeof action !== 'function') {
-          showExternalFallback(entry, mode);
+          showExternalFallback(entry, mode, fallbackLabels);
           return;
         }
         action(entry.relativePath).catch(function (err) {
           console.warn('[verstak.files] external open error:', err);
-          showExternalFallback(entry, mode);
+          showExternalFallback(entry, mode, fallbackLabels);
         });
       }
 
@@ -1134,27 +1151,27 @@
             renderList();
           }
           var isFolder = entry.type === 'folder';
-          ctxMenu.appendChild(ctxItem(isFolder ? 'Open Folder' : 'Open', '', function () { openEntry(entry); }, 'open', 'open'));
-          ctxMenu.appendChild(ctxItem('Open External', '', function () { openExternalEntry(entry, 'external'); }, 'open-external', 'external'));
-          ctxMenu.appendChild(ctxItem('Show in Explorer', '', function () { openExternalEntry(entry, 'explorer'); }, 'show-in-explorer', 'explorer'));
+          ctxMenu.appendChild(ctxItem(isFolder ? tr('ui.openFolder', null, 'Open folder') : tr('ui.open', null, 'Open'), '', function () { openEntry(entry); }, 'open', 'open'));
+          ctxMenu.appendChild(ctxItem(tr('ui.openExternal', null, 'Open externally'), '', function () { openExternalEntry(entry, 'external'); }, 'open-external', 'external'));
+          ctxMenu.appendChild(ctxItem(tr('ui.showInFolder', null, 'Show in folder'), '', function () { openExternalEntry(entry, 'explorer'); }, 'show-in-explorer', 'explorer'));
           appendContributionMenuItems(entry);
           ctxMenu.appendChild(ctxSep());
-          ctxMenu.appendChild(ctxItem('Rename', '', function () { beginRename(entry); }, 'rename', 'rename'));
+          ctxMenu.appendChild(ctxItem(tr('ui.rename', null, 'Rename'), '', function () { beginRename(entry); }, 'rename', 'rename'));
           if (entry.type !== 'folder') {
-            ctxMenu.appendChild(ctxItem('Duplicate', '', function () { duplicateEntry(entry); }, 'duplicate', 'duplicate'));
+            ctxMenu.appendChild(ctxItem(tr('ui.duplicate', null, 'Duplicate'), '', function () { duplicateEntry(entry); }, 'duplicate', 'duplicate'));
           }
           ctxMenu.appendChild(ctxSep());
-          ctxMenu.appendChild(ctxItem('Cut', '', function () { cutSelection(); }, 'cut', 'cut'));
-          ctxMenu.appendChild(ctxItem('Copy', '', function () { copySelection(); }, 'copy', 'copy'));
+          ctxMenu.appendChild(ctxItem(tr('ui.cut', null, 'Cut'), '', function () { cutSelection(); }, 'cut', 'cut'));
+          ctxMenu.appendChild(ctxItem(tr('ui.copy', null, 'Copy'), '', function () { copySelection(); }, 'copy', 'copy'));
           ctxMenu.appendChild(ctxSep());
-          ctxMenu.appendChild(ctxItem('Move to Trash', 'danger', function () { trashEntry(); }, 'trash', 'trash'));
+          ctxMenu.appendChild(ctxItem(tr('ui.trash', null, 'Move to trash'), 'danger', function () { trashEntry(); }, 'trash', 'trash'));
         } else {
-          ctxMenu.appendChild(ctxItem('New Folder', '', function () { startCreate('folder'); }, 'new-folder', 'folderAdd'));
-          ctxMenu.appendChild(ctxItem('New Markdown', '', function () { startCreate('markdown'); }, 'new-markdown', 'markdownAdd'));
-          ctxMenu.appendChild(ctxItem('New Text', '', function () { startCreate('text'); }, 'new-text', 'textAdd'));
+          ctxMenu.appendChild(ctxItem(tr('ui.newFolder', null, 'New folder'), '', function () { startCreate('folder'); }, 'new-folder', 'folderAdd'));
+          ctxMenu.appendChild(ctxItem(tr('ui.newMarkdown', null, 'New Markdown file'), '', function () { startCreate('markdown'); }, 'new-markdown', 'markdownAdd'));
+          ctxMenu.appendChild(ctxItem(tr('ui.newText', null, 'New text file'), '', function () { startCreate('text'); }, 'new-text', 'textAdd'));
           if (window.__filesClipboard && window.__filesClipboard.items && window.__filesClipboard.items.length) {
             ctxMenu.appendChild(ctxSep());
-            ctxMenu.appendChild(ctxItem('Paste', '', function () { pasteEntry(); }, 'paste', 'paste'));
+            ctxMenu.appendChild(ctxItem(tr('ui.paste', null, 'Paste'), '', function () { pasteEntry(); }, 'paste', 'paste'));
           }
         }
         ctxMenu.style.display = 'block';
@@ -1247,7 +1264,7 @@
         var clip = window.__filesClipboard;
         if (!clip || !clip.items || clip.items.length === 0) return;
         if (clip.workspaceRoot && clip.workspaceRoot !== workspaceRoot) {
-          window.alert('Clipboard items belong to another workspace.');
+          window.alert(tr('ui.clipboardDifferentDeal', null, 'Clipboard items belong to another Deal.'));
           return;
         }
         var destinationDir = scopedPath(currentPath);

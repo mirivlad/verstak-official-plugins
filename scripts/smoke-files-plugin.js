@@ -195,7 +195,7 @@ function loadFilesComponent(document) {
   return { component, clipboard: sandbox.navigator.clipboard };
 }
 
-function makeApi() {
+function makeApi(options = {}) {
   const externalCalls = [];
   const contributionCalls = [];
   const created = [];
@@ -315,6 +315,15 @@ function makeApi() {
         return () => {
           eventHandlers[eventName] = (eventHandlers[eventName] || []).filter((candidate) => candidate !== handler);
         };
+      },
+    },
+    i18n: {
+      t: (key, params, fallback) => {
+        let value = options.translations && options.translations[key] ? options.translations[key] : (fallback || key);
+        Object.entries(params || {}).forEach(([name, replacement]) => {
+          value = value.replace(`{${name}}`, String(replacement));
+        });
+        return value;
       },
     },
     showExternalFile() {
@@ -443,6 +452,31 @@ async function flush() {
   if (!externalRow) {
     throw new Error(`external file row not rendered after file.changed: ${container.textContent}`);
   }
+
+  const russianDocument = makeDocument();
+  const { component: russianComponent } = loadFilesComponent(russianDocument);
+  const russianApi = makeApi({
+    translations: {
+      'ui.open': 'Открыть',
+      'ui.openExternal': 'Открыть во внешнем приложении',
+      'ui.showInFolder': 'Показать в папке',
+      'ui.rename': 'Переименовать',
+      'ui.duplicate': 'Создать копию',
+      'ui.cut': 'Вырезать',
+      'ui.copy': 'Копировать',
+      'ui.trash': 'Переместить в корзину',
+    },
+  });
+  const russianContainer = new FakeNode('div');
+  russianComponent.mount(russianContainer, {}, russianApi);
+  await flush();
+  const russianList = walk(russianContainer, (node) => node.getAttribute && node.getAttribute('data-files-list') !== undefined);
+  const russianRow = walk(russianContainer, (node) => node.getAttribute && node.getAttribute('data-file-path') === 'Docs/readme.md');
+  russianList.dispatchEvent('contextmenu', { target: russianRow, clientX: 20, clientY: 20 });
+  const russianMenuText = russianDocument.body.textContent;
+  ['Открыть во внешнем приложении', 'Показать в папке', 'Переименовать', 'Создать копию', 'Вырезать', 'Копировать', 'Переместить в корзину'].forEach((label) => {
+    if (!russianMenuText.includes(label)) throw new Error(`context menu label was not localized: ${label}`);
+  });
 
   console.log('files frontend smoke passed');
 })().catch((err) => {
