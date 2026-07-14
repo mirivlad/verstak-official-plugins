@@ -361,6 +361,13 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   if (!clearButton) throw new Error('clear activity button not found');
   clearButton.click();
   await flush();
+  if (api.storedEvents(projectKey).length === 0) throw new Error('clear action removed activity before confirmation');
+  const clearConfirmation = walk(container, (node) => node.getAttribute && node.getAttribute('data-activity-clear-confirmation') === '');
+  if (!clearConfirmation) throw new Error('clear activity confirmation was not rendered');
+  const confirmClear = walk(clearConfirmation, (node) => node.getAttribute && node.getAttribute('data-activity-clear-confirm') === '');
+  if (!confirmClear) throw new Error('clear activity confirmation button was not rendered');
+  confirmClear.click();
+  await flush();
   if (api.storedEvents(projectKey).length !== 0) throw new Error('clear action did not remove activity events');
   if (api.storedEvents('work-session-candidates:workspace:Project').length !== 0) throw new Error('clear action did not remove cached candidates');
 
@@ -530,6 +537,13 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   if (!rawView.container.textContent.includes('example.com')) throw new Error('append-only browser activity was not rendered');
   const rawClear = walk(rawView.container, (node) => node.getAttribute && node.getAttribute('data-activity-action') === 'clear');
   rawClear.click();
+  await flush();
+  if (rawApi.storedData('activity-events').length === 0) throw new Error('append-only activity was removed before confirmation');
+  const rawClearConfirmation = walk(rawView.container, (node) => node.getAttribute && node.getAttribute('data-activity-clear-confirmation') === '');
+  if (!rawClearConfirmation) throw new Error('append-only activity confirmation was not rendered');
+  const rawConfirmClear = walk(rawClearConfirmation, (node) => node.getAttribute && node.getAttribute('data-activity-clear-confirm') === '');
+  if (!rawConfirmClear) throw new Error('append-only activity confirmation button was not rendered');
+  rawConfirmClear.click();
   await flush();
   if (rawApi.storedData('activity-events').length !== 0) throw new Error('clear activity did not replace append-only data');
   component.unmount && component.unmount(rawView.container);
