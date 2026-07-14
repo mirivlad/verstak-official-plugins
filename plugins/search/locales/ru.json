@@ -1,6 +1,6 @@
 {
   "manifest.name": "Поиск",
-  "manifest.description": "Поиск текста в хранилище в пределах рабочего пространства.",
+  "manifest.description": "Поиск текста в хранилище в пределах Дела.",
   "contributions.workspaceItems.verstak.search.workspace.title": "Поиск",
   "contributions.commands.verstak.search.searchVaultText.title": "Искать текст в хранилище",
   "contributions.searchProviders.verstak.search.vault-text.label": "Поиск по тексту хранилища",

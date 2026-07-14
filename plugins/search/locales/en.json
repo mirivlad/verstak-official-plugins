@@ -1,6 +1,6 @@
 {
   "manifest.name": "Search",
-  "manifest.description": "Workspace-scoped vault text search provider.",
+  "manifest.description": "Deal-scoped vault text search provider.",
   "contributions.workspaceItems.verstak.search.workspace.title": "Search",
   "contributions.commands.verstak.search.searchVaultText.title": "Search Vault Text",
   "contributions.searchProviders.verstak.search.vault-text.label": "Vault Text Search",
