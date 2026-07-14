@@ -233,11 +233,14 @@ async function mountWithApi(apiState, props, emittedEvents = [], document = make
   byData(container, 'data-todo-input', 'priority').value = 'high';
   byData(container, 'data-todo-input', 'dueAt').value = '01/02/2000';
   const reminderDate = byData(container, 'data-todo-input', 'reminderDate');
-  const reminderTime = byData(container, 'data-todo-input', 'reminderTime');
+  const reminderHour = byData(container, 'data-todo-input', 'reminderHour');
+  const reminderMinute = byData(container, 'data-todo-input', 'reminderMinute');
   if (!reminderDate || reminderDate.getAttribute('type') !== 'date') throw new Error('Todo reminder date input was not rendered');
-  if (!reminderTime || reminderTime.getAttribute('type') !== 'time') throw new Error('Todo reminder time input was not rendered');
+  if (!reminderHour || reminderHour.tagName !== 'SELECT') throw new Error('Todo reminder hour selector was not rendered');
+  if (!reminderMinute || reminderMinute.tagName !== 'SELECT') throw new Error('Todo reminder minute selector was not rendered');
   reminderDate.value = '01/02/2000';
-  reminderTime.value = '09:00';
+  reminderHour.value = '09';
+  reminderMinute.value = '30';
   byData(container, 'data-todo-action', 'save').click();
   await flush();
 
@@ -246,7 +249,7 @@ async function mountWithApi(apiState, props, emittedEvents = [], document = make
   const createdTodo = storedAfterCreate[0];
   if (createdTodo.workspaceRootPath !== 'Project') throw new Error('workspace Todo did not keep the Project root path');
   if (createdTodo.status !== 'open' || createdTodo.priority !== 'high') throw new Error('Todo status or priority was not stored');
-  if (createdTodo.dueAt !== '2000-01-02' || createdTodo.reminderAt !== '2000-01-02T09:00') throw new Error('Todo due/reminder metadata was not stored');
+  if (createdTodo.dueAt !== '2000-01-02' || createdTodo.reminderAt !== '2000-01-02T09:30') throw new Error('Todo due/reminder metadata was not stored');
   if (!container.textContent.includes('Overdue') || !container.textContent.includes('Reminder due')) throw new Error('due/reminder indicators were not rendered');
   const scheduledAfterCreate = apiState.notificationCalls.at(-1) || [];
   if (scheduledAfterCreate.length !== 1
