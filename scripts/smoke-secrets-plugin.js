@@ -129,8 +129,11 @@ async function flush() {
   if (!manifest.provides.includes('secrets.write-ui')) throw new Error('secrets manifest must provide secrets.write-ui');
   if (!manifest.permissions.includes('secrets.read')) throw new Error('secrets manifest must request secrets.read');
   if (!manifest.permissions.includes('secrets.write')) throw new Error('secrets manifest must request secrets.write');
+  if (!manifest.permissions.includes('files.read')) throw new Error('secrets manifest must request files.read for the Deal selector');
   if (!manifest.permissions.includes('ui.register')) throw new Error('secrets manifest must request ui.register');
   if (!(manifest.contributes.openProviders || []).some((item) => (item.supports || []).some((support) => support.kind === 'secret'))) throw new Error('secrets secret open provider missing');
+  if (!(manifest.contributes.views || []).some((item) => item.component === 'SecretsView')) throw new Error('secrets global view missing');
+  if (!(manifest.contributes.sidebarItems || []).some((item) => item.view === 'verstak.secrets.view')) throw new Error('secrets global sidebar item missing');
   if (!(manifest.contributes.workspaceItems || []).some((item) => item.component === 'SecretsView')) throw new Error('secrets workspace item missing');
   if (!(manifest.contributes.settingsPanels || []).some((item) => item.component === 'SecretsView')) throw new Error('secrets settings panel missing');
 
@@ -176,6 +179,12 @@ async function flush() {
     },
     clipboard: {
       writeText: async (text) => copied.push(text),
+    },
+    files: {
+      list: async () => [
+        { type: 'folder', relativePath: 'ClientA' },
+        { type: 'folder', relativePath: 'ClientB' },
+      ],
     },
   };
 
@@ -227,6 +236,53 @@ async function flush() {
   deleteButton.click();
   await flush();
   if (!deleted.includes('client-a.db')) throw new Error('secret delete was not called');
+
+  records.push({ id: 'client-a.global-view', title: 'Client A Global View', username: 'app', scope: { kind: 'workspace', workspaceRootPath: 'ClientA' }, updatedAt: '2026-06-29T00:00:00Z' });
+  const globalContainer = document.createElement('div');
+  component.mount(globalContainer, {}, api);
+  await flush();
+
+  if (!globalContainer.textContent.includes('Global Server') || !globalContainer.textContent.includes('Client A Global View')) {
+    throw new Error('global secrets view did not show global and Deal-scoped records');
+  }
+  const scopeFilter = walk(globalContainer, (node) => node.getAttribute && node.getAttribute('data-secret-scope-filter') === '');
+  if (!scopeFilter) throw new Error('global secrets scope filter missing');
+  scopeFilter.value = 'workspace:ClientA';
+  scopeFilter.dispatchEvent('change');
+  await flush();
+  if (!globalContainer.textContent.includes('Client A Global View') || globalContainer.textContent.includes('Global Server')) {
+    throw new Error('global secrets scope filter did not isolate the selected Deal');
+  }
+  const searchInput = walk(globalContainer, (node) => node.getAttribute && node.getAttribute('data-secret-search') === '');
+  if (!searchInput) throw new Error('global secrets search missing');
+  searchInput.value = 'no-match';
+  searchInput.dispatchEvent('input');
+  await flush();
+  if (!globalContainer.textContent.includes('No secrets')) throw new Error('global secrets search did not filter records');
+
+  scopeFilter.value = 'all';
+  scopeFilter.dispatchEvent('change');
+  await flush();
+  const newButton = walk(globalContainer, (node) => node.tagName === 'BUTTON' && node.textContent === 'New');
+  if (!newButton) throw new Error('global secrets new button missing');
+  newButton.click();
+  await flush();
+  const globalTitleInput = walk(globalContainer, (node) => node.getAttribute && node.getAttribute('data-secret-title') === '');
+  const globalValueInput = walk(globalContainer, (node) => node.getAttribute && node.getAttribute('data-secret-value') === '');
+  const scopeInput = walk(globalContainer, (node) => node.getAttribute && node.getAttribute('data-secret-scope') === '');
+  const workspaceInput = walk(globalContainer, (node) => node.getAttribute && node.getAttribute('data-secret-workspace') === '');
+  const globalSaveButton = walk(globalContainer, (node) => node.getAttribute && node.getAttribute('data-secret-save') === '');
+  if (!globalTitleInput || !globalValueInput || !scopeInput || !workspaceInput || !globalSaveButton) throw new Error('global Deal-scoped secret form controls missing');
+  globalTitleInput.value = 'Client B API';
+  globalValueInput.value = 'client-b-api-value';
+  scopeInput.value = 'workspace';
+  scopeInput.dispatchEvent('change');
+  workspaceInput.value = 'ClientB';
+  globalSaveButton.click();
+  await flush();
+  if (!records.some((record) => record.title === 'Client B API' && record.scope && record.scope.workspaceRootPath === 'ClientB')) {
+    throw new Error('global secrets form did not create a Deal-scoped secret');
+  }
 
   console.log('secrets plugin smoke passed');
 })().catch((err) => {

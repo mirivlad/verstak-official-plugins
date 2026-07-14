@@ -23,6 +23,7 @@
     '.secrets-panel{min-height:0;overflow:auto;border-right:1px solid var(--vt-color-border,#202b46);background:var(--vt-color-surface-muted,#111629)}',
     '.secrets-main{min-width:0;min-height:0;overflow:auto;padding:1rem;background:var(--vt-color-background,#101020)}',
     '.secrets-toolbar{display:flex;align-items:center;gap:.5rem;min-height:2.75rem;padding:.65rem .75rem;border-bottom:1px solid var(--vt-color-border,#202b46)}',
+    '.secrets-filters{display:grid;grid-template-columns:minmax(0,1fr) minmax(8rem,.8fr);gap:.4rem;padding:.5rem .55rem;border-bottom:1px solid var(--vt-color-border,#202b46)}',
     '.secrets-title{font-weight:600;font-size:.88rem}',
     '.secrets-count{color:var(--vt-color-text-muted,#7f8aa3);font-size:.76rem}',
     '.secrets-spacer{flex:1}',
@@ -44,10 +45,11 @@
     '.secrets-form{display:grid;gap:.65rem;border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-lg,8px);padding:.9rem;background:var(--vt-color-surface,#15152c)}',
     '.secrets-row{display:grid;grid-template-columns:8rem minmax(0,1fr);gap:.65rem;align-items:center}',
     '.secrets-label{font-size:.78rem;color:var(--vt-color-text-muted,#7f8aa3)}',
-    '.secrets-input,.secrets-textarea,.secrets-select{width:100%;box-sizing:border-box;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:#0f1424;color:var(--vt-color-text-primary,#f4f7fb);font:inherit;font-size:.84rem;padding:.45rem .55rem;outline:none}',
+    '.secrets-input,.secrets-textarea,.secrets-select,.secrets-search{width:100%;box-sizing:border-box;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:#0f1424;color:var(--vt-color-text-primary,#f4f7fb);font:inherit;font-size:.84rem;padding:.45rem .55rem;outline:none}',
+    '.secrets-search{font-size:.76rem}',
     '.secrets-select{appearance:none;background-color:#0d1117;background-image:linear-gradient(45deg,transparent 50%,#8b949e 50%),linear-gradient(135deg,#8b949e 50%,transparent 50%);background-position:calc(100% - 16px) 50%,calc(100% - 11px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:2rem}.secrets-select option{background:#0d1117;color:var(--vt-color-text-primary,#f4f7fb)}',
     '.secrets-textarea{min-height:6rem;resize:vertical;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}',
-    '.secrets-input:focus,.secrets-textarea:focus,.secrets-select:focus{border-color:var(--vt-color-accent,#4ecca3);box-shadow:var(--vt-focus-ring,0 0 0 2px rgba(78,204,163,.34))}',
+    '.secrets-input:focus,.secrets-textarea:focus,.secrets-select:focus,.secrets-search:focus{border-color:var(--vt-color-accent,#4ecca3);box-shadow:var(--vt-focus-ring,0 0 0 2px rgba(78,204,163,.34))}',
     '.secrets-actions{display:flex;gap:.5rem;flex-wrap:wrap}',
     '.secrets-status{font-size:.78rem;color:var(--vt-color-text-muted,#7f8aa3);min-height:1rem}',
     '.secrets-status.error{color:#ffc6ce}',
@@ -58,7 +60,7 @@
     '.secrets-table th{width:9rem;color:var(--vt-color-text-muted,#7f8aa3);font-weight:500;background:var(--vt-color-surface-muted,#111629)}',
     '.secrets-table td{color:var(--vt-color-text-primary,#f4f7fb);overflow-wrap:anywhere}',
     '.secrets-table tr:last-child th,.secrets-table tr:last-child td{border-bottom:0}',
-    '@media(max-width:780px){.secrets-root{grid-template-columns:1fr}.secrets-panel{border-right:0;border-bottom:1px solid #252b36;max-height:45vh}.secrets-row{grid-template-columns:1fr}}'
+    '@media(max-width:780px){.secrets-root{grid-template-columns:1fr}.secrets-panel{border-right:0;border-bottom:1px solid #252b36;max-height:45vh}.secrets-row,.secrets-filters{grid-template-columns:1fr}}'
   ].join('\n');
 
   function el(tag, attrs, children) {
@@ -97,7 +99,7 @@
 
   function scopeLabel(record) {
     var scope = record && record.scope || {};
-    if (scope.kind === ScopeWorkspace) return cleanWorkspace(scope.workspaceRootPath) || 'Workspace';
+    if (scope.kind === ScopeWorkspace) return cleanWorkspace(scope.workspaceRootPath) || 'Deal';
     return 'Global';
   }
 
@@ -145,6 +147,9 @@
       var workspaceRoot = workspaceFromProps(props || {});
       var selectedID = selectedIDFromProps(props || {});
       var records = [];
+      var workspaceOptions = [];
+      var scopeFilter = 'all';
+      var searchQuery = '';
       var selectedRecord = null;
       var selectedValue = '';
       var initialized = false;
@@ -160,6 +165,59 @@
         statusText = message || '';
         statusError = !!isError;
         render();
+      }
+
+      function recordWorkspaceRoot(record) {
+        var scope = record && record.scope || {};
+        return scope.kind === ScopeWorkspace ? cleanWorkspace(scope.workspaceRootPath) : '';
+      }
+
+      function workspaceRoots() {
+        var seen = {};
+        var values = [];
+        workspaceOptions.concat(records.map(recordWorkspaceRoot)).forEach(function (value) {
+          value = cleanWorkspace(value);
+          if (!value || seen[value]) return;
+          seen[value] = true;
+          values.push(value);
+        });
+        return values.sort(function (a, b) { return a.localeCompare(b); });
+      }
+
+      function filteredRecords() {
+        var query = text(searchQuery).trim().toLowerCase();
+        return records.filter(function (record) {
+          var recordWorkspace = recordWorkspaceRoot(record);
+          if (scopeFilter === ScopeGlobal && recordWorkspace) return false;
+          if (scopeFilter.indexOf(ScopeWorkspace + ':') === 0 && recordWorkspace !== scopeFilter.slice((ScopeWorkspace + ':').length)) return false;
+          if (!query) return true;
+          return [record.title, record.id, record.username, recordWorkspace].some(function (value) {
+            return text(value).toLowerCase().indexOf(query) !== -1;
+          });
+        });
+      }
+
+      function clearHiddenSelection() {
+        if (!selectedRecord) return;
+        var visible = filteredRecords();
+        if (visible.some(function (record) { return record.id === selectedRecord.id; })) return;
+        selectedRecord = null;
+        selectedValue = '';
+      }
+
+      function loadWorkspaceOptions() {
+        if (!api || !api.files || typeof api.files.list !== 'function') return Promise.resolve();
+        return api.files.list('').then(function (items) {
+          workspaceOptions = (Array.isArray(items) ? items : []).filter(function (item) {
+            return text(item && item.type).toLowerCase() === 'folder';
+          }).map(function (item) {
+            return cleanWorkspace(item.relativePath || item.name);
+          }).filter(function (value) {
+            return value && value.indexOf('/') === -1;
+          });
+        }).catch(function () {
+          workspaceOptions = [];
+        });
       }
 
       function renderLocked() {
@@ -227,19 +285,48 @@
       }
 
       function renderList() {
+        var visibleRecords = filteredRecords();
+        var scopeSelect = el('select', {
+          className: 'secrets-select',
+          'data-secret-scope-filter': '',
+          onChange: function (event) {
+            scopeFilter = text(event.target.value) || 'all';
+            clearHiddenSelection();
+            render();
+          }
+        }, [
+          el('option', { value: 'all' }, [tr('ui.scopeAll', null, 'All scopes')]),
+          el('option', { value: ScopeGlobal }, [tr('ui.global', null, 'Global')])
+        ].concat(workspaceRoots().map(function (workspace) {
+          return el('option', { value: ScopeWorkspace + ':' + workspace }, [workspace]);
+        })));
+        scopeSelect.value = scopeFilter;
+        var searchInput = el('input', {
+          className: 'secrets-search',
+          type: 'search',
+          'data-secret-search': '',
+          placeholder: tr('ui.search', null, 'Search secrets'),
+          value: searchQuery,
+          onInput: function (event) {
+            searchQuery = text(event.target.value);
+            clearHiddenSelection();
+            render();
+          }
+        });
         var children = [
           el('div', { className: 'secrets-toolbar' }, [
             el('span', { className: 'secrets-title' }, [tr('ui.title', null, 'Secrets')]),
-            el('span', { className: 'secrets-count' }, [String(records.length)]),
+            el('span', { className: 'secrets-count' }, [String(visibleRecords.length)]),
             el('span', { className: 'secrets-spacer' }),
             el('button', { className: 'secrets-btn', type: 'button', onClick: showNewSecret }, [tr('ui.new', null, 'New')])
-          ])
+          ]),
+          el('div', { className: 'secrets-filters' }, [searchInput, scopeSelect])
         ];
-        if (!records.length) {
+        if (!visibleRecords.length) {
           children.push(el('div', { className: 'secrets-empty' }, [tr('ui.empty', null, 'No secrets')]));
           return children;
         }
-        groupRecords(records).forEach(function (group) {
+        groupRecords(visibleRecords).forEach(function (group) {
           children.push(el('div', { className: 'secrets-group' }, [group.label]));
           children.push(el('div', { className: 'secrets-list' }, group.records.map(function (record) {
             var active = selectedRecord && selectedRecord.id === record.id;
@@ -318,9 +405,26 @@
         value.value = isEdit ? selectedValue : '';
         var scope = el('select', { className: 'secrets-select' }, [
           el('option', { value: ScopeGlobal }, [tr('ui.global', null, 'Global')]),
-          el('option', { value: ScopeWorkspace }, [workspaceRoot || tr('ui.workspace', null, 'Workspace')])
+          el('option', { value: ScopeWorkspace }, [tr('ui.deal', null, 'Deal')])
         ]);
+        scope.setAttribute('data-secret-scope', '');
+        var existingWorkspace = existing ? recordWorkspaceRoot(existing) : '';
+        var defaultWorkspace = existingWorkspace || workspaceRoot || workspaceRoots()[0] || '';
+        var workspace = el('select', { className: 'secrets-select', 'data-secret-workspace': '' }, [
+          el('option', { value: '' }, [tr('ui.chooseWorkspace', null, 'Choose a Deal')])
+        ].concat(workspaceRoots().map(function (item) {
+          return el('option', { value: item }, [item]);
+        })));
+        workspace.value = defaultWorkspace;
+        var workspaceRow = el('div', { className: 'secrets-row' }, [
+          el('label', { className: 'secrets-label' }, [tr('ui.deal', null, 'Deal')]), workspace
+        ]);
+        function updateWorkspaceVisibility() {
+          workspaceRow.hidden = scope.value !== ScopeWorkspace;
+        }
+        scope.addEventListener('change', updateWorkspaceVisibility);
         scope.value = existing && existing.scope && existing.scope.kind ? existing.scope.kind : (workspaceRoot ? ScopeWorkspace : ScopeGlobal);
+        updateWorkspaceVisibility();
         return el('div', { className: 'secrets-card' }, [
           el('h2', {}, [isEdit ? tr('ui.editSecret', null, 'Edit secret') : tr('ui.newSecret', null, 'New secret')]),
           el('div', { className: 'secrets-form' }, [
@@ -328,6 +432,7 @@
             el('div', { className: 'secrets-row' }, [el('label', { className: 'secrets-label' }, ['ID']), id]),
             el('div', { className: 'secrets-row' }, [el('label', { className: 'secrets-label' }, [tr('ui.username', null, 'Username')]), username]),
             el('div', { className: 'secrets-row' }, [el('label', { className: 'secrets-label' }, [tr('ui.scope', null, 'Scope')]), scope]),
+            workspaceRow,
             el('div', { className: 'secrets-row' }, [el('label', { className: 'secrets-label' }, [tr('ui.value', null, 'Value')]), value]),
             el('div', { className: 'secrets-actions' }, [
               el('button', {
@@ -336,12 +441,17 @@
                 'data-secret-save': '',
                 onClick: function () {
                   var nextID = text(id.value).trim() || text(title.value).trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '.').replace(/^\.+|\.+$/g, '');
+                  var targetWorkspace = cleanWorkspace(workspace.value);
+                  if (scope.value === ScopeWorkspace && !targetWorkspace) {
+                    setStatus(tr('ui.workspaceRequired', null, 'Choose a Deal for this secret.'), true);
+                    return;
+                  }
                   api.secrets.write({
                     id: nextID,
                     title: text(title.value).trim() || nextID,
                     username: text(username.value).trim(),
                     value: text(value.value),
-                    scope: scope.value === ScopeWorkspace ? { kind: ScopeWorkspace, workspaceRootPath: workspaceRoot } : { kind: ScopeGlobal }
+                    scope: scope.value === ScopeWorkspace ? { kind: ScopeWorkspace, workspaceRootPath: targetWorkspace } : { kind: ScopeGlobal }
                   }).then(function (record) {
                     selectedID = record.id;
                     selectedRecord = record;
@@ -456,7 +566,7 @@
       api.secrets.status().then(function (status) {
         initialized = !!(status && status.initialized);
         unlocked = !!(status && status.unlocked);
-        if (unlocked) return loadRecords();
+        if (unlocked) return loadWorkspaceOptions().then(loadRecords);
         render();
       }).catch(function (err) {
         statusText = (err && err.message) ? err.message : String(err);
