@@ -78,7 +78,7 @@
     var workspaceRoot = workspaceFromProps(props || {});
     return workspaceRoot
       ? { mode: 'workspace', workspaceRoot: workspaceRoot, label: workspaceRoot }
-      : { mode: 'global', workspaceRoot: '', label: 'All workspaces' };
+      : { mode: 'global', workspaceRoot: '', label: 'All Deals' };
   }
 
   function now() {
@@ -360,7 +360,7 @@
     function renderWorkspaceFilterOptions() {
       if (scope.mode !== 'global') return;
       workspaceFilterEl.innerHTML = '';
-      workspaceFilterEl.appendChild(option('', tr('ui.allWorkspaces', null, 'All workspaces')));
+      workspaceFilterEl.appendChild(option('', tr('ui.allWorkspaces', null, 'All Deals')));
       workspaceFilterEl.appendChild(option('__unassigned__', tr('ui.unassigned', null, 'Unassigned')));
       workspaceRoots().forEach(function (workspace) {
         workspaceFilterEl.appendChild(option(workspace, workspace));
@@ -540,8 +540,8 @@
         el('label', { className: 'todo-field' }, [tr('ui.field.reminderDate', null, 'Reminder date'), reminderDateInput]),
         el('label', { className: 'todo-field' }, [tr('ui.field.reminderTime', null, 'Reminder time'), reminderTimeInput])
       ];
-      if (workspaceInput) fields.push(el('label', { className: 'todo-field' }, [tr('ui.field.workspace', null, 'Workspace'), workspaceInput]));
-      else fields.push(el('div', { className: 'todo-field', textContent: tr('ui.workspaceValue', { workspace: scope.workspaceRoot }, 'Workspace: ' + scope.workspaceRoot) }));
+      if (workspaceInput) fields.push(el('label', { className: 'todo-field' }, [tr('ui.field.workspace', null, 'Deal'), workspaceInput]));
+      else fields.push(el('div', { className: 'todo-field', textContent: tr('ui.workspaceValue', { workspace: scope.workspaceRoot }, 'Deal: ' + scope.workspaceRoot) }));
 
       modalHost.innerHTML = '';
       if (typeof modalHost.removeAttribute === 'function') modalHost.removeAttribute('hidden');
@@ -636,7 +636,7 @@
       visible.forEach(function (todo) {
         var actionButtons = [];
         if (scope.mode === 'global' && todo.workspaceRootPath) {
-          actionButtons.push(el('button', { className: 'todo-btn', type: 'button', 'data-todo-action': 'open-workspace', textContent: tr('ui.openWorkspace', null, 'Open workspace'), onClick: function () { openWorkspace(todo); } }));
+          actionButtons.push(el('button', { className: 'todo-btn', type: 'button', 'data-todo-action': 'open-workspace', textContent: tr('ui.openWorkspace', null, 'Open Deal'), onClick: function () { openWorkspace(todo); } }));
         }
         if (todo.status === 'open') {
           actionButtons.push(el('button', { className: 'todo-btn', type: 'button', 'data-todo-action': 'mark-done', textContent: tr('ui.status.done', null, 'Done'), onClick: function () { setTodoStatus(todo, 'done'); } }));

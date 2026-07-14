@@ -261,6 +261,13 @@ async function mountWithApi(apiState, props, emittedEvents = [], document = make
   if (!container.textContent.includes('Задачи · Project') || !container.textContent.includes('Просрочено')) {
     throw new Error('Todo view did not update to Russian without remounting');
   }
+  byData(container, 'data-todo-action', 'add').click();
+  if (!container.textContent.includes('Дело: Project')) {
+    throw new Error('Todo editor did not use Deal terminology in Russian');
+  }
+  const cancelModal = walk(container, (node) => node.tagName === 'BUTTON' && node.textContent === 'Отмена' && !node.getAttribute('data-todo-action'));
+  if (!cancelModal) throw new Error('Todo editor cancel action was not rendered in Russian');
+  cancelModal.click();
   if ((apiState.settings['todos:global'] || []).length !== 1) throw new Error('locale change lost Todo state');
   apiState.setLocale('en');
 
@@ -321,6 +328,9 @@ async function mountWithApi(apiState, props, emittedEvents = [], document = make
   const globalView = await mountWithApi(apiState, {});
   if (!globalView.container.textContent.includes('Prepare project review updated') || !globalView.container.textContent.includes('Client follow-up')) {
     throw new Error('global Todo view did not aggregate workspace todos');
+  }
+  if (!globalView.container.textContent.includes('All Deals')) {
+    throw new Error('global Todo filter did not use Deal terminology');
   }
   const workspaceFilter = byData(globalView.container, 'data-todo-filter', 'workspace');
   workspaceFilter.value = 'ClientA';
