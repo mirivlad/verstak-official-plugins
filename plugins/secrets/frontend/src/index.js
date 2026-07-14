@@ -103,7 +103,8 @@
 
   function selectedIDFromProps(props) {
     var resource = props && props.resource || {};
-    var path = text(resource.path || props && props.secretId);
+    var request = props && props.request || {};
+    var path = text(resource.path || request.path || props && props.secretId);
     if (path.indexOf('verstak-secret://') === 0) return decodeURIComponent(path.slice('verstak-secret://'.length));
     return decodeURIComponent(path.replace(/^\/+/, ''));
   }
@@ -259,7 +260,8 @@
 
       function renderSelected() {
         if (!selectedRecord) return el('div', { className: 'secrets-card' }, [
-          el('h2', {}, [tr('ui.select', null, 'Select a secret')])
+          el('h2', {}, [tr('ui.select', null, 'Select a secret')]),
+          el('div', { className: statusError ? 'secrets-status error' : 'secrets-status' }, [statusText])
         ]);
         return el('div', { className: 'secrets-card' }, [
           el('h2', {}, [selectedRecord.title || selectedRecord.id]),
@@ -381,6 +383,13 @@
           if (wanted) {
             var found = records.find(function (record) { return record.id === wanted; });
             if (found) return selectRecord(found.id);
+            selectedRecord = null;
+            selectedValue = '';
+            mode = 'selected';
+            statusText = tr('ui.requestedUnavailable', null, 'The requested secret is unavailable.');
+            statusError = true;
+            render();
+            return;
           }
           selectedRecord = records[0] || null;
           selectedValue = '';
