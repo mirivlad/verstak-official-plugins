@@ -280,13 +280,16 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   }
   if (api.storedEvents(globalKey).length !== 0) throw new Error('workspace activity leaked into global storage');
   if (!container.textContent.includes('Example Article')) throw new Error('browser capture title was not rendered');
-  if (!container.textContent.includes('browser.capture.selection')) throw new Error('event type was not rendered');
-  if (!container.textContent.includes('browser.capture.converted')) throw new Error('conversion event type was not rendered');
+  if (!container.textContent.includes('Selection captured')) throw new Error('browser capture label was not rendered');
+  if (!container.textContent.includes('Capture converted')) throw new Error('conversion label was not rendered');
+  if (container.textContent.includes('browser.capture.selection') || container.textContent.includes('browser.capture.converted') || container.textContent.includes('verstak.browser-inbox')) {
+    throw new Error('Activity must not expose technical event or plugin identifiers in its UI');
+  }
   if (!container.textContent.includes('Possible journal entries')) throw new Error('work session candidate section was not rendered');
   if (container.textContent.includes('Project work on 2026-06-27')) throw new Error('candidate must not invent a worklog title');
   const candidateNode = walk(container, (node) => node.getAttribute && node.getAttribute('data-work-session-candidate'));
   if (!candidateNode) throw new Error('work session candidate data attribute was not rendered');
-  if (!candidateNode.textContent.includes('Workspace: Project')) throw new Error('candidate workspace was not rendered');
+  if (!candidateNode.textContent.includes('Deal: Project')) throw new Error('candidate Deal was not rendered');
   if (!candidateNode.textContent.includes('Estimated duration: 20 min')) throw new Error('candidate duration was not rendered');
   if (!candidateNode.textContent.includes('Activities: 3')) throw new Error('candidate activity count was not rendered');
   if (!walk(candidateNode, (node) => node.getAttribute && node.getAttribute('data-work-session-action') === 'review')) throw new Error('candidate review action was not rendered');

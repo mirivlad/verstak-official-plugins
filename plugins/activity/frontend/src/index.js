@@ -37,19 +37,19 @@
     'activity.session.handled'
   ];
   var EVENT_LABELS = {
-    'workspace.selected': 'Workspace selected',
-    'case.selected': 'Workspace selected',
-    'file.opened': 'File opened',
-    'file.changed': 'File changed',
-    'note.saved': 'Note edited',
-    'action.started': 'Work session detected',
-    'browser.capture.received': 'Browser capture received',
-    'browser.capture.page': 'Page captured',
-    'browser.capture.selection': 'Selection captured',
-    'browser.capture.link': 'Link captured',
-    'browser.capture.file': 'File captured',
-    'browser.capture.converted': 'Capture converted',
-    'browser.activity.domain': 'Browser domain activity'
+    'workspace.selected': { key: 'ui.event.workspaceSelected', fallback: 'Deal selected' },
+    'case.selected': { key: 'ui.event.workspaceSelected', fallback: 'Deal selected' },
+    'file.opened': { key: 'ui.event.fileOpened', fallback: 'File opened' },
+    'file.changed': { key: 'ui.event.fileChanged', fallback: 'File changed' },
+    'note.saved': { key: 'ui.event.noteEdited', fallback: 'Note edited' },
+    'action.started': { key: 'ui.event.workSessionDetected', fallback: 'Work session detected' },
+    'browser.capture.received': { key: 'ui.event.browserCaptureReceived', fallback: 'Browser capture received' },
+    'browser.capture.page': { key: 'ui.event.pageCaptured', fallback: 'Page captured' },
+    'browser.capture.selection': { key: 'ui.event.selectionCaptured', fallback: 'Selection captured' },
+    'browser.capture.link': { key: 'ui.event.linkCaptured', fallback: 'Link captured' },
+    'browser.capture.file': { key: 'ui.event.fileCaptured', fallback: 'File captured' },
+    'browser.capture.converted': { key: 'ui.event.captureConverted', fallback: 'Capture converted' },
+    'browser.activity.domain': { key: 'ui.event.browserDomainActivity', fallback: 'Browser domain activity' }
   };
   var LOW_VALUE_EVENT_TYPES = {
     'workspace.selected': true,
@@ -412,25 +412,27 @@
     }).slice(0, MAX_CANDIDATES);
   }
 
-  function humanEventType(type) {
-    return EVENT_LABELS[text(type).toLowerCase()] || '';
+  function humanEventType(type, translate) {
+    var label = EVENT_LABELS[text(type).toLowerCase()];
+    return label ? translate(label.key, null, label.fallback) : '';
   }
 
-  function humanEventTitle(activity) {
+  function humanEventTitle(activity, translate) {
     var explicit = text(activity && activity.title).trim();
     var type = text(activity && activity.type).trim();
-    if (explicit && explicit.toLowerCase() !== type.toLowerCase()) return explicit;
-    return humanEventType(type) || text(activity && (activity.summary || activity.activityId)).trim() || 'Activity event';
+    var label = humanEventType(type, translate);
+    if (explicit && explicit.toLowerCase() !== type.toLowerCase()) return label ? label + ' — ' + explicit : explicit;
+    return label || text(activity && (activity.summary || activity.activityId)).trim() || translate('ui.event.activity', null, 'Activity event');
   }
 
-  function eventKind(activity) {
+  function eventKind(activity, translate) {
     var type = text(activity && activity.type).toLowerCase();
-    if (type.indexOf('browser.capture') === 0) return 'Capture';
-    if (type.indexOf('file.') === 0) return 'File';
-    if (type.indexOf('note.') === 0) return 'Note';
-    if (type.indexOf('workspace') !== -1 || type.indexOf('case.') === 0) return 'Workspace';
-    if (type.indexOf('action.') === 0) return 'Work';
-    return 'Activity';
+    if (type.indexOf('browser.capture') === 0) return translate('ui.kind.capture', null, 'Capture');
+    if (type.indexOf('file.') === 0) return translate('ui.kind.file', null, 'File');
+    if (type.indexOf('note.') === 0) return translate('ui.kind.note', null, 'Note');
+    if (type.indexOf('workspace') !== -1 || type.indexOf('case.') === 0) return translate('ui.kind.deal', null, 'Deal');
+    if (type.indexOf('action.') === 0) return translate('ui.kind.work', null, 'Work');
+    return translate('ui.kind.activity', null, 'Activity');
   }
 
   function globalEventKeys(settings) {
@@ -760,14 +762,10 @@
           el('div', { className: 'activity-time', textContent: formatDate(activity.occurredAt) || '-' }),
           el('div', { className: 'activity-main' }, [
             el('div', { className: 'activity-row-head' }, [
-              el('span', { className: 'activity-type', textContent: eventKind(activity) }),
-              el('span', { className: 'activity-title-text', textContent: humanEventTitle(activity) })
+              el('span', { className: 'activity-type', textContent: eventKind(activity, tr) }),
+              el('span', { className: 'activity-title-text', textContent: humanEventTitle(activity, tr) })
             ]),
-            activity.summary ? el('div', { className: 'activity-summary', textContent: activity.summary }) : null,
-            el('details', { className: 'activity-details' }, [
-              el('summary', {}, [tr('ui.details', null, 'Details')]),
-              el('div', { className: 'activity-source', textContent: tr('ui.eventSource', { event: activity.type, source: activity.sourcePluginId ? ' · ' + activity.sourcePluginId : '' }, 'Event: ' + activity.type + (activity.sourcePluginId ? ' · Source: ' + activity.sourcePluginId : '')) })
-            ])
+            activity.summary ? el('div', { className: 'activity-summary', textContent: activity.summary }) : null
           ])
         ]));
       });
@@ -824,19 +822,19 @@
           el('div', {}, [
             el('div', { className: 'activity-candidate-title', textContent: tr('ui.candidate', null, 'Possible journal entry') }),
             el('div', { className: 'activity-candidate-facts' }, [
-              el('div', { textContent: 'Workspace: ' + candidate.workspaceRootPath }),
-              el('div', { textContent: 'Time: ' + candidateTimeRange(candidate) }),
-              el('div', { textContent: 'Estimated duration: ' + candidate.estimatedMinutes + ' min' }),
-              el('div', { textContent: 'Activities: ' + candidate.activityCount })
+              el('div', { textContent: tr('ui.candidateDeal', { deal: candidate.workspaceRootPath }, 'Deal: ' + candidate.workspaceRootPath) }),
+              el('div', { textContent: tr('ui.candidateTime', { time: candidateTimeRange(candidate) }, 'Time: ' + candidateTimeRange(candidate)) }),
+              el('div', { textContent: tr('ui.candidateDuration', { minutes: candidate.estimatedMinutes }, 'Estimated duration: ' + candidate.estimatedMinutes + ' min') }),
+              el('div', { textContent: tr('ui.candidateActivities', { count: candidate.activityCount }, 'Activities: ' + candidate.activityCount) })
             ]),
             el('details', { className: 'activity-candidate-activities' }, [
-              el('summary', { textContent: 'Included activities (' + candidate.activityCount + ')' })
+              el('summary', { textContent: tr('ui.includedActivities', { count: candidate.activityCount }, 'Included activities (' + candidate.activityCount + ')') })
             ].concat(candidate.activities.map(function (activity) {
-                return el('div', { className: 'activity-candidate-activity', textContent: activity.occurredAt + ' · ' + activity.type + ' · ' + activity.activityId });
+                return el('div', { className: 'activity-candidate-activity', textContent: activity.occurredAt + ' · ' + humanEventTitle(activity, tr) });
             })))
           ]),
           el('div', { className: 'activity-candidate-actions' }, [
-            el('div', { className: 'activity-candidate-duration', textContent: candidate.estimatedMinutes + ' min' }),
+            el('div', { className: 'activity-candidate-duration', textContent: tr('ui.minutes', { count: candidate.estimatedMinutes }, candidate.estimatedMinutes + ' min') }),
             el('button', { className: 'activity-btn', type: 'button', 'data-work-session-action': 'review', textContent: tr('ui.review', null, 'Review'), onClick: function () { reviewCandidate(candidate); } }),
             el('button', { className: 'activity-btn', type: 'button', 'data-work-session-action': 'dismiss', textContent: tr('ui.dismiss', null, 'Dismiss'), onClick: function () { dismissCandidate(candidate); } })
           ])
@@ -845,7 +843,7 @@
     }
 
     function render() {
-      countEl.textContent = events.length + ' event' + (events.length === 1 ? '' : 's');
+      countEl.textContent = tr(events.length === 1 ? 'ui.eventCount.one' : 'ui.eventCount.many', { count: events.length }, events.length + ' event' + (events.length === 1 ? '' : 's'));
       clearBtn.disabled = events.length === 0;
       statusEl.textContent = statusText;
       statusEl.className = 'activity-status' + (statusClass ? ' ' + statusClass : '');
@@ -917,7 +915,9 @@
           if (typeof unsubscribe === 'function') unsubscribers.push(unsubscribe);
         });
       })).then(function () {
-        statusText = scope.mode === 'global' ? 'Listening for all activity' : 'Listening for workspace activity';
+        statusText = scope.mode === 'global'
+          ? tr('ui.listeningGlobal', null, 'Listening for all activity')
+          : tr('ui.listeningDeal', null, 'Listening for Deal activity');
         statusClass = '';
       }).catch(function (err) {
         reportError('ui.subscriptionsUnavailable', 'Activity updates are unavailable. Please try again.', err);
