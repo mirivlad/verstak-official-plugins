@@ -5,6 +5,7 @@
   "contributions.openProviders.verstak.default-editor.markdown.title": "Default Markdown Editor",
   "contributions.openProviders.verstak.default-editor.notes-markdown.title": "Default Notes Markdown Editor",
   "ui.notesContext": "notes context",
+  "ui.note": "Note",
   "ui.edit": "Edit",
   "ui.preview": "Preview",
   "ui.split": "Split",
@@ -18,5 +19,15 @@
   "ui.saved": "Saved",
   "ui.discardConfirm": "Discard unsaved changes and reload from disk?",
   "ui.loading": "Loading...",
-  "ui.loadFailed": "Could not load the file. Please try again."
+  "ui.loadFailed": "Could not load the file. Please try again.",
+  "ui.md.heading": "Heading",
+  "ui.md.bold": "Bold",
+  "ui.md.italic": "Italic",
+  "ui.md.link": "Link",
+  "ui.md.inlineCode": "Inline code",
+  "ui.md.codeBlock": "Code block",
+  "ui.md.bulletList": "Bullet list",
+  "ui.md.numberedList": "Numbered list",
+  "ui.md.quote": "Quote",
+  "ui.md.taskItem": "Task item"
 }

@@ -5,6 +5,7 @@
   "contributions.openProviders.verstak.default-editor.markdown.title": "Стандартный редактор Markdown",
   "contributions.openProviders.verstak.default-editor.notes-markdown.title": "Стандартный редактор Markdown-заметок",
   "ui.notesContext": "контекст заметки",
+  "ui.note": "Заметка",
   "ui.edit": "Редактировать",
   "ui.preview": "Просмотр",
   "ui.split": "Разделить",
@@ -18,5 +19,15 @@
   "ui.saved": "Сохранено",
   "ui.discardConfirm": "Отменить несохранённые изменения и перечитать файл с диска?",
   "ui.loading": "Загрузка...",
-  "ui.loadFailed": "Не удалось загрузить файл. Повторите попытку."
+  "ui.loadFailed": "Не удалось загрузить файл. Повторите попытку.",
+  "ui.md.heading": "Заголовок",
+  "ui.md.bold": "Жирный текст",
+  "ui.md.italic": "Курсив",
+  "ui.md.link": "Ссылка",
+  "ui.md.inlineCode": "Встроенный код",
+  "ui.md.codeBlock": "Блок кода",
+  "ui.md.bulletList": "Маркированный список",
+  "ui.md.numberedList": "Нумерованный список",
+  "ui.md.quote": "Цитата",
+  "ui.md.taskItem": "Пункт задачи"
 }

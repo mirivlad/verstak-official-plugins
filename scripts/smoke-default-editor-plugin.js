@@ -120,7 +120,7 @@ async function flush() {
   }
 }
 
-async function mountEditor(secretProviderEnabled) {
+async function mountEditor(secretProviderEnabled, translations) {
   const document = makeDocument();
   const component = loadComponent(document);
   const opened = [];
@@ -146,6 +146,15 @@ async function mountEditor(secretProviderEnabled) {
         return { status: 'opened', request };
       },
     },
+    i18n: {
+      t: (key, params, fallback) => {
+        let value = translations && translations[key] ? translations[key] : (fallback || key);
+        Object.entries(params || {}).forEach(([name, replacement]) => {
+          value = value.replace(`{${name}}`, String(replacement));
+        });
+        return value;
+      },
+    },
   };
   const container = document.createElement('div');
   component.mount(container, {
@@ -162,6 +171,12 @@ async function mountEditor(secretProviderEnabled) {
   if (disabledPreview.innerHTML.includes('data-secret-id')) throw new Error('secret link rendered without secrets provider');
 
   const enabled = await mountEditor(true);
+  if (enabled.container.textContent.includes('notes-markdown') || enabled.container.textContent.includes('generic-markdown')) {
+    throw new Error('editor must not expose the technical editor mode in its toolbar');
+  }
+  if (enabled.container.textContent.includes('Notes context active')) {
+    throw new Error('editor must not show an implementation roadmap in the notes UI');
+  }
   const preview = walk(enabled.container, (node) => node.className === 'de-preview');
   if (!preview) throw new Error('enabled preview missing');
   if (!preview.innerHTML.includes('data-secret-id="client-a.db"')) throw new Error('secret link did not render with provider');
@@ -180,6 +195,12 @@ async function mountEditor(secretProviderEnabled) {
 
   if (!enabled.opened.some((request) => request.kind === 'secret' && request.path === 'client-a.db')) {
     throw new Error('secret link did not open through workbench');
+  }
+
+  const russian = await mountEditor(true, { 'ui.md.heading': 'Заголовок' });
+  const headingButton = walk(russian.container, (node) => node.getAttribute && node.getAttribute('data-md-action') === 'heading');
+  if (!headingButton || headingButton.getAttribute('title') !== 'Заголовок') {
+    throw new Error('Markdown toolbar titles must use the locale catalog');
   }
 
   console.log('default editor smoke passed');

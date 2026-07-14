@@ -18,7 +18,6 @@
     '.de-root{display:flex;flex-direction:column;height:100%;min-height:0;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:#e0e0e0;background:#0d0d1a}',
     '.de-toolbar,.de-md-toolbar{display:flex;align-items:center;gap:.45rem;padding:.45rem .75rem;border-bottom:1px solid #16213e;flex-shrink:0;background:#12122a;flex-wrap:wrap}',
     '.de-md-toolbar{background:#101028;padding:.38rem .75rem}',
-    '.de-toolbar-mode{font-size:.75rem;color:#4ecca3;padding:.15rem .5rem;border-radius:3px;background:#1a2a3a}',
     '.de-toolbar-context{font-size:.75rem;color:#a0a0bb;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '.de-toolbar-spacer{flex:1}',
     '.de-toolbar-btn,.de-md-btn{font-size:.75rem;padding:.28rem .58rem;border:1px solid #333;border-radius:4px;background:#1a1a2e;color:#ccc;cursor:pointer}',
@@ -45,7 +44,6 @@
     '.de-preview table{border-collapse:collapse;margin:.8rem 0;max-width:100%;display:block;overflow:auto}.de-preview th,.de-preview td{border:1px solid #333;padding:.35rem .6rem;text-align:left}.de-preview th{background:#1a1a2e}',
     '.de-preview img{max-width:100%;height:auto;border-radius:4px}.de-preview .task{margin-right:.4rem}',
     '.de-notes-badge{font-size:.65rem;padding:.1rem .4rem;border-radius:3px;background:#2a1a3a;color:#b388ff}',
-    '.de-notes-info{padding:.45rem .75rem;background:#111126;border-top:1px solid #16213e;font-size:.75rem;color:#8b8ba8;flex-shrink:0}',
     '.de-loading,.de-error{flex:1;display:flex;align-items:center;justify-content:center;color:#777;padding:2rem}.de-error{color:#e74c3c;flex-direction:column;gap:.5rem}.de-error-msg{font-size:.85rem;color:#aaa;max-width:420px;text-align:center}',
     '@media(max-width:780px){.de-editor-wrap{flex-direction:column}.de-pane+.de-pane{border-left:0;border-top:1px solid #16213e}.de-toolbar-context{max-width:100%}}'
   ].join('\n');
@@ -303,9 +301,8 @@
       containerEl.setAttribute('data-resource-path', resourcePath);
       containerEl.setAttribute('data-request-mode', requestedMode);
 
-      var modeLabel = el('span', { className: 'de-toolbar-mode' }, [editorMode]);
       var contextLabel = el('span', { className: 'de-toolbar-context', title: resourcePath }, [resourcePath || fileName(resourcePath)]);
-      var notesBadge = editorMode === 'notes-markdown' ? el('span', { className: 'de-notes-badge', 'data-notes-badge': '' }, [tr('ui.notesContext', null, 'notes context')]) : null;
+      var notesBadge = editorMode === 'notes-markdown' ? el('span', { className: 'de-notes-badge', 'data-notes-badge': '' }, [tr('ui.note', null, 'Note')]) : null;
       var spacer = el('span', { className: 'de-toolbar-spacer' });
       var editBtn = isMarkdown ? el('button', { className: 'de-toolbar-btn', 'data-editor-mode-button': 'edit' }, [tr('ui.edit', null, 'Edit')]) : null;
       var previewBtn = isMarkdown ? el('button', { className: 'de-toolbar-btn', 'data-editor-mode-button': 'preview' }, [tr('ui.preview', null, 'Preview')]) : null;
@@ -313,7 +310,7 @@
       var reloadBtn = el('button', { className: 'de-toolbar-btn', 'data-editor-action': 'reload' }, [tr('ui.reload', null, 'Reload')]);
       var saveBtn = el('button', { className: 'de-toolbar-btn', 'data-editor-action': 'save' }, [tr('ui.save', null, 'Save')]);
       var statusEl = el('span', { className: 'de-status', 'data-save-state': '' });
-      var toolbarChildren = [modeLabel, contextLabel];
+      var toolbarChildren = [contextLabel];
       if (notesBadge) toolbarChildren.push(notesBadge);
       toolbarChildren.push(spacer);
       [editBtn, previewBtn, splitBtn, reloadBtn, saveBtn, statusEl].forEach(function (node) { if (node) toolbarChildren.push(node); });
@@ -323,28 +320,24 @@
       if (isMarkdown) {
         mdToolbar = el('div', { className: 'de-md-toolbar' });
         [
-          ['heading', 'H', 'Heading'],
-          ['bold', 'B', 'Bold'],
-          ['italic', 'I', 'Italic'],
-          ['link', 'Link', 'Link'],
-          ['code', 'Code', 'Inline code'],
-          ['code-block', '```', 'Code block'],
-          ['bullet', '• List', 'Bullet list'],
-          ['numbered', '1. List', 'Numbered list'],
-          ['quote', 'Quote', 'Quote'],
-          ['task', 'Task', 'Task item']
+          ['heading', 'H', 'ui.md.heading', 'Heading'],
+          ['bold', 'B', 'ui.md.bold', 'Bold'],
+          ['italic', 'I', 'ui.md.italic', 'Italic'],
+          ['link', 'Link', 'ui.md.link', 'Link'],
+          ['code', 'Code', 'ui.md.inlineCode', 'Inline code'],
+          ['code-block', '```', 'ui.md.codeBlock', 'Code block'],
+          ['bullet', '• List', 'ui.md.bulletList', 'Bullet list'],
+          ['numbered', '1. List', 'ui.md.numberedList', 'Numbered list'],
+          ['quote', 'Quote', 'ui.md.quote', 'Quote'],
+          ['task', 'Task', 'ui.md.taskItem', 'Task item']
         ].forEach(function (item) {
-          mdToolbar.appendChild(el('button', { className: 'de-md-btn', 'data-md-action': item[0], title: item[2] }, [item[1]]));
+          mdToolbar.appendChild(el('button', { className: 'de-md-btn', type: 'button', 'data-md-action': item[0], title: tr(item[2], null, item[3]), 'aria-label': tr(item[2], null, item[3]) }, [item[1]]));
         });
         containerEl.appendChild(mdToolbar);
       }
 
       var editorWrap = el('div', { className: 'de-editor-wrap' });
       containerEl.appendChild(editorWrap);
-
-      if (editorMode === 'notes-markdown') {
-        containerEl.appendChild(el('div', { className: 'de-notes-info' }, [tr('ui.notesInfo', null, 'Notes context active. Note actions, backlinks, and graph tools are reserved for the future Notes plugin.')]));
-      }
 
       function updateLineNumbers() {
         if (!linesEl || !textarea) return;
@@ -543,12 +536,25 @@
       reloadFromDisk();
       var localeUnsubscribe = api.i18n && typeof api.i18n.onDidChangeLocale === 'function'
         ? api.i18n.onDidChangeLocale(function () {
-          if (notesBadge) notesBadge.textContent = tr('ui.notesContext', null, 'notes context');
+          if (notesBadge) notesBadge.textContent = tr('ui.note', null, 'Note');
           if (editBtn) editBtn.textContent = tr('ui.edit', null, 'Edit');
           if (previewBtn) previewBtn.textContent = tr('ui.preview', null, 'Preview');
           if (splitBtn) splitBtn.textContent = tr('ui.split', null, 'Split');
           reloadBtn.textContent = tr('ui.reload', null, 'Reload');
           saveBtn.textContent = tr('ui.save', null, 'Save');
+          if (mdToolbar) {
+            [
+              ['heading', 'ui.md.heading', 'Heading'], ['bold', 'ui.md.bold', 'Bold'], ['italic', 'ui.md.italic', 'Italic'],
+              ['link', 'ui.md.link', 'Link'], ['code', 'ui.md.inlineCode', 'Inline code'], ['code-block', 'ui.md.codeBlock', 'Code block'],
+              ['bullet', 'ui.md.bulletList', 'Bullet list'], ['numbered', 'ui.md.numberedList', 'Numbered list'], ['quote', 'ui.md.quote', 'Quote'], ['task', 'ui.md.taskItem', 'Task item']
+            ].forEach(function (item) {
+              var button = mdToolbar.querySelector('[data-md-action="' + item[0] + '"]');
+              if (!button) return;
+              var label = tr(item[1], null, item[2]);
+              button.setAttribute('title', label);
+              button.setAttribute('aria-label', label);
+            });
+          }
           updateStatus();
         })
         : null;
