@@ -108,7 +108,7 @@
 
   function scopeFromProps(props) {
     var workspaceRoot = workspaceFromProps(props || {});
-    if (!workspaceRoot) return { mode: 'global', key: '', label: 'All workspaces', workspaceRoot: '' };
+    if (!workspaceRoot) return { mode: 'global', key: '', label: 'All Deals', workspaceRoot: '' };
     return {
       mode: 'workspace',
       key: WORKLOG_PREFIX + encodeKey(workspaceRoot),

@@ -2,12 +2,12 @@
 
 Todos are stored by the official `verstak.todo` plugin under the canonical
 `todos:global` settings key. A todo is global when `workspaceRootPath` is empty;
-otherwise that field identifies the top-level workspace folder that owns it.
+otherwise that field identifies the top-level Deal folder that owns it.
 
-The global Todos view aggregates all records and supports workspace, status, text,
-and due/reminder/updated sorting filters. The workspace Todos view shows only
-records whose `workspaceRootPath` exactly matches the current workspace. This
-keeps unassigned and other-workspace records out of a workspace tab and its
+The global Todos view aggregates all records and supports Deal, status, text,
+and due/reminder/updated sorting filters. The Deal Todos view shows only records
+whose `workspaceRootPath` exactly matches the current Deal. This keeps unassigned
+and other-Deal records out of a Deal tab and its
 Overview signals.
 
 ## Stored fields
@@ -20,15 +20,15 @@ Each record has a stable `id`, `title`, optional `description`, optional
 
 ## Reminders
 
-The plugin stores reminder metadata and renders clear indicators for overdue,
-due-soon, and reminder-due todos. Verstak does not yet have a notification
-scheduler, so a reminder does not create a native desktop notification or run in
-the background.
+The plugin stores reminder metadata, renders clear indicators for overdue,
+due-soon, and reminder-due todos, and schedules native desktop notifications when
+the Desktop notification capability is available. Without that capability, the
+reminder remains visible in Todos but is not treated as an error.
 
 ## Completed Todo to Journal
 
-From a workspace Todo tab, a completed todo exposes **Create Journal Entry**. It
-opens the current workspace Journal with a normal, editable form. The form copies
+From a Deal Todo tab, a completed todo exposes **Create Journal Entry**. It opens
+the current Deal Journal with a normal, editable form. The form copies
 only factual data from the todo: title, description, completion date, and zero
 minutes. It never generates a summary, duration, or billable status.
 
@@ -40,8 +40,6 @@ own record.
 
 ## Visibility
 
-The Plugin Manager can globally enable or disable the Todo plugin. The current
-workspace host has no per-workspace or template-level contribution filter yet, so
-a globally enabled Todo plugin contributes its tab to every workspace. Template
-visibility will be handled with the workspace/template model rather than by a
-Todo-specific exception.
+The Plugin Manager can globally enable or disable the Todo plugin. A Deal template
+controls whether its Todos tab is available; disabling the plugin hides the tab
+without affecting stored todo records.

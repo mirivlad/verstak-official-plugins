@@ -154,7 +154,7 @@
     var workspaceRoot = workspaceFromProps(props);
     var workspaceId = text(props && (props.workspaceId || (props.workspaceNode && props.workspaceNode.workspaceId))).trim();
     if (!workspaceRoot) {
-      return { mode: 'global', key: GLOBAL_KEY, label: 'All workspaces', workspaceRoot: '', workspaceId: '' };
+      return { mode: 'global', key: GLOBAL_KEY, label: 'All Deals', workspaceRoot: '', workspaceId: '' };
     }
     return {
       mode: 'workspace',

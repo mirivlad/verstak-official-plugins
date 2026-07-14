@@ -50,7 +50,7 @@ create a GitHub Release.
   deletion is a separate action.
 - Saving a browser link creates a collision-safe `.url` file. Opening a link is
   handled by Verstak, so it does not depend on a Linux `.url` file association.
-- Activity sessions can be scoped to a durable workspace identity or to an
+- Activity sessions can be scoped to a durable Deal identity or to an
   explicit unassigned scope. Journal creation is always a user action.
 - Todo is optional: Overview uses it only when the Todo capability is present.
 

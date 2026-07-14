@@ -4,7 +4,7 @@
   "name": "Search",
   "version": "0.1.0",
   "apiVersion": "0.1.0",
-  "description": "Workspace-scoped vault text search provider.",
+  "description": "Deal-scoped vault text search provider.",
   "localization": { "defaultLocale": "en", "locales": { "en": "locales/en.json", "ru": "locales/ru.json" } },
   "source": "official",
   "icon": "search",

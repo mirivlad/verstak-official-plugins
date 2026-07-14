@@ -459,7 +459,7 @@
     if (scope.mode === 'global') {
       filtersEl.appendChild(workspaceFilterEl);
     } else {
-      filtersEl.appendChild(el('span', { className: 'browser-inbox-count', textContent: tr('ui.assignedHere', null, 'Assigned to this workspace') }));
+      filtersEl.appendChild(el('span', { className: 'browser-inbox-count', textContent: tr('ui.assignedHere', null, 'Assigned to this Deal') }));
     }
     filtersEl.appendChild(searchInput);
     toolbar.appendChild(filtersEl);
@@ -865,7 +865,7 @@
         el('div', { className: 'browser-inbox-meta-value', textContent: formatDate(capture.capturedAt) || '-' }),
         el('div', { className: 'browser-inbox-meta-label', textContent: tr('ui.browser', null, 'Browser') }),
         el('div', { className: 'browser-inbox-meta-value', textContent: capture.browserName || capture.source || '-' }),
-        el('div', { className: 'browser-inbox-meta-label', textContent: tr('ui.workspace', null, 'Workspace') }),
+        el('div', { className: 'browser-inbox-meta-label', textContent: tr('ui.workspace', null, 'Deal') }),
         el('div', { className: 'browser-inbox-meta-value', textContent: capture.workspaceRootPath || tr('ui.unassigned', null, 'Unassigned') }),
         el('div', { className: 'browser-inbox-meta-label', textContent: tr('ui.status', null, 'Status') }),
         el('div', { className: 'browser-inbox-meta-value', textContent: capture.processed
