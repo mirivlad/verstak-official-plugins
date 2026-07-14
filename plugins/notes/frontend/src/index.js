@@ -43,14 +43,16 @@
     '.notes-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--vt-color-text-muted,#7f8aa3);font-size:.85rem;padding:2rem;gap:.5rem;text-align:center}',
     '.notes-empty-hint{font-size:.75rem;color:var(--vt-color-text-muted,#7f8aa3)}',
     '.notes-error{flex:1;display:flex;align-items:center;justify-content:center;color:var(--vt-color-danger,#e94560);padding:1rem;font-size:.85rem}',
-    '.notes-panel{display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem;border-top:1px solid var(--vt-color-border,#202b46);flex-shrink:0;background:var(--vt-color-surface-muted,#111629)}',
-    '.notes-input{flex:1;font-size:.78rem;padding:.32rem .5rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:#0f1424;color:var(--vt-color-text-primary,#f4f7fb);outline:none;min-width:120px}',
-    '.notes-input:focus{border-color:var(--vt-color-accent,#4ecca3);box-shadow:var(--vt-focus-ring,0 0 0 2px rgba(78,204,163,.34))}',
     '.notes-title-bar{padding:.4rem .75rem;font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3);background:var(--vt-color-surface-muted,#111629);border-bottom:1px solid var(--vt-color-border,#202b46);text-transform:uppercase;letter-spacing:.04em}',
     '.notes-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:center;justify-content:center}',
     '.notes-modal{width:380px;max-width:90vw;padding:20px;background:#1a1a2e;border:1px solid #333;border-radius:10px;color:#e0e0e0;font-family:inherit;box-shadow:0 12px 40px rgba(0,0,0,.5)}',
     '.notes-modal-title{font-size:.9rem;font-weight:600;margin-bottom:12px}',
     '.notes-modal-msg{font-size:.82rem;color:#aaa;margin-bottom:16px;word-wrap:break-word}',
+    '.notes-modal-form{display:grid;gap:.55rem}',
+    '.notes-modal-input{width:100%;font:inherit;font-size:.84rem;padding:.5rem .6rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:#0f1424;color:var(--vt-color-text-primary,#f4f7fb);outline:none}',
+    '.notes-modal-input:focus{border-color:var(--vt-color-accent,#4ecca3);box-shadow:var(--vt-focus-ring,0 0 0 2px rgba(78,204,163,.34))}',
+    '.notes-modal-input[aria-invalid="true"]{border-color:var(--vt-color-danger,#e94560)}',
+    '.notes-modal-error{display:none;font-size:.78rem;line-height:1.35;color:#ffc6ce}',
     '.notes-modal-actions{display:flex;justify-content:flex-end;gap:8px}',
     '.notes-modal-btn{font-size:.8rem;padding:.35rem .9rem;border:1px solid #333;border-radius:5px;cursor:pointer;font-family:inherit}',
     '.notes-modal-btn.cancel{background:#2a2a4e;color:#ccc}',
@@ -171,7 +173,7 @@
 
       var workspaceNode = props && props.workspaceNode;
       var workspaceRoot = (workspaceNode && (workspaceNode.rootPath || workspaceNode.name || workspaceNode.id)) || '';
-      var workspaceName = workspaceRoot || (workspaceNode && (workspaceNode.name || workspaceNode.title)) || 'Workspace';
+      var workspaceName = workspaceRoot || (workspaceNode && (workspaceNode.name || workspaceNode.title)) || '';
 
       var notes = [];
       var selectedPath = '';
@@ -287,23 +289,12 @@
       var listContainer = el('div', { className: 'notes-list', 'data-notes-list': '' });
       containerEl.appendChild(listContainer);
 
-      var createPanel = el('div', { className: 'notes-panel', style: { display: 'none' } });
-      var createInput = el('input', { className: 'notes-input', 'data-notes-create-input': '', placeholder: tr('ui.noteTitle', null, 'Note title') });
-      var createConfirm = el('button', { className: 'notes-btn', textContent: tr('ui.create', null, 'Create') });
-      var createCancel = el('button', { className: 'notes-btn', textContent: tr('ui.cancel', null, 'Cancel') });
-      createPanel.appendChild(createInput);
-      createPanel.appendChild(createConfirm);
-      createPanel.appendChild(createCancel);
-      containerEl.appendChild(createPanel);
-
-      var renamePanel = el('div', { className: 'notes-panel', style: { display: 'none' } });
-      var renameInput = el('input', { className: 'notes-input', 'data-notes-rename-input': '', placeholder: tr('ui.newTitle', null, 'New title') });
-      var renameConfirm = el('button', { className: 'notes-btn', textContent: tr('ui.rename', null, 'Rename') });
-      var renameCancel = el('button', { className: 'notes-btn', textContent: tr('ui.cancel', null, 'Cancel') });
-      renamePanel.appendChild(renameInput);
-      renamePanel.appendChild(renameConfirm);
-      renamePanel.appendChild(renameCancel);
-      containerEl.appendChild(renamePanel);
+      var createModal = null;
+      var createInput = null;
+      var createError = null;
+      var renameModal = null;
+      var renameInput = null;
+      var renameError = null;
 
       // ─── Core Functions ─────────────────────────────────────
 
@@ -495,28 +486,134 @@
         }).catch(function (err) { console.error('[notes] openResource:', err); });
       }
 
+      function conflictMessage(title, existingPath) {
+        return [
+          tr('ui.conflictMessage', { title: title }, 'A note with the title "' + title + '" already exists.'),
+          existingPath ? tr('ui.existingFile', { path: existingPath }, ' Existing file: ' + existingPath + '.') : '',
+          tr('ui.chooseDifferent', null, ' Please choose a different title.')
+        ].join('');
+      }
+
+      function showNoteFormModal(mode, note) {
+        var isRename = mode === 'rename';
+        var modalTitle = isRename
+          ? tr('ui.renameTitle', null, 'Rename note')
+          : tr('ui.createTitle', null, 'Create note');
+        var overlay = el('div', {
+          className: 'notes-modal-overlay',
+          role: 'presentation'
+        });
+        overlay.setAttribute('data-notes-' + mode + '-modal', '');
+        var input = el('input', {
+          className: 'notes-modal-input',
+          type: 'text',
+          value: isRename ? (note.title || fileName(note.path)) : '',
+          placeholder: isRename
+            ? tr('ui.newTitle', null, 'New title')
+            : tr('ui.noteTitle', null, 'Note title'),
+          autocomplete: 'off',
+          'aria-invalid': 'false'
+        });
+        input.setAttribute('data-notes-' + mode + '-input', '');
+        input.value = isRename ? (note.title || fileName(note.path)) : '';
+        var error = el('div', {
+          className: 'notes-modal-error',
+          role: 'alert'
+        });
+        error.setAttribute('data-notes-' + mode + '-error', '');
+        var confirm = el('button', {
+          className: 'notes-modal-btn confirm',
+          type: 'button',
+          textContent: isRename ? tr('ui.rename', null, 'Rename') : tr('ui.create', null, 'Create'),
+          onClick: function () {
+            if (isRename) confirmRename();
+            else confirmCreate();
+          }
+        });
+        var cancel = el('button', {
+          className: 'notes-modal-btn cancel',
+          type: 'button',
+          textContent: tr('ui.cancel', null, 'Cancel'),
+          onClick: function () {
+            if (isRename) hideRename();
+            else hideCreate();
+          }
+        });
+        function handleFormKeydown(event) {
+          if (event.key === 'Enter') {
+            if (event.preventDefault) event.preventDefault();
+            if (isRename) confirmRename();
+            else confirmCreate();
+          }
+          if (event.key === 'Escape') {
+            if (event.preventDefault) event.preventDefault();
+            if (isRename) hideRename();
+            else hideCreate();
+          }
+        }
+        input.addEventListener('keydown', handleFormKeydown);
+        var modal = el('div', {
+          className: 'notes-modal notes-modal-form',
+          role: 'dialog',
+          'aria-modal': 'true',
+          'aria-label': modalTitle
+        }, [
+          el('div', { className: 'notes-modal-title', textContent: modalTitle }),
+          input,
+          error,
+          el('div', { className: 'notes-modal-actions' }, [cancel, confirm])
+        ]);
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+        if (isRename) {
+          renameInput = input;
+          renameError = error;
+        } else {
+          createInput = input;
+          createError = error;
+        }
+        input.focus();
+        if (isRename && input.select) input.select();
+        return overlay;
+      }
+
       // ─── Create ────────────────────────────────────────────
 
       function showCreate() {
-        createInput.value = '';
-        createPanel.style.display = 'flex';
-        createInput.focus();
+        hideCreate();
+        createModal = showNoteFormModal('create');
       }
 
       function hideCreate() {
-        createPanel.style.display = 'none';
+        if (createModal) createModal.remove();
+        createModal = null;
+        createInput = null;
+        createError = null;
+      }
+
+      function setCreateError(message) {
+        if (!createError || !createInput) return;
+        createError.textContent = message || '';
+        createError.style.display = message ? 'block' : 'none';
+        createInput.setAttribute('aria-invalid', message ? 'true' : 'false');
       }
 
       function confirmCreate() {
+        if (!createInput) return;
         var title = createInput.value.trim();
-        if (!title) return;
+        if (!title) {
+          setCreateError(tr('ui.titleRequired', null, 'Enter a note title.'));
+          createInput.focus();
+          return;
+        }
         setStatus(tr('ui.creating', null, 'Creating note...'), 'loading');
         var parent = notesParent();
         createNote(parent, title).then(function (data) {
           if (disposed) return;
           data = data || {};
           if (data.conflict) {
-            showConflictModal(title, data.path, createInput);
+            setCreateError(conflictMessage(title, data.path));
+            createInput.focus();
             return;
           }
           hideCreate();
@@ -539,42 +636,55 @@
             }).catch(function () {});
           }
         }).catch(function (err) {
-          setStatus(userFacingError('ui.createError', 'Could not create the note. Please try again.', err), 'error');
+          setCreateError(userFacingError('ui.createError', 'Could not create the note. Please try again.', err));
         });
       }
 
       // ─── Rename ─────────────────────────────────────────────
 
       function beginRename(note) {
+        hideRename();
         renameTarget = note;
-        renameInput.value = note.title || fileName(note.path);
-        renamePanel.style.display = 'flex';
-        renameInput.focus();
-        renameInput.select();
+        renameModal = showNoteFormModal('rename', note);
       }
 
       function hideRename() {
         renameTarget = null;
-        renamePanel.style.display = 'none';
+        if (renameModal) renameModal.remove();
+        renameModal = null;
+        renameInput = null;
+        renameError = null;
+      }
+
+      function setRenameError(message) {
+        if (!renameError || !renameInput) return;
+        renameError.textContent = message || '';
+        renameError.style.display = message ? 'block' : 'none';
+        renameInput.setAttribute('aria-invalid', message ? 'true' : 'false');
       }
 
       function confirmRename() {
-        if (!renameTarget) return;
+        if (!renameTarget || !renameInput) return;
         var newTitle = renameInput.value.trim();
-        if (!newTitle) return;
+        if (!newTitle) {
+          setRenameError(tr('ui.titleRequired', null, 'Enter a note title.'));
+          renameInput.focus();
+          return;
+        }
         setStatus(tr('ui.renaming', null, 'Renaming...'), 'loading');
         renameNote(renameTarget.path, newTitle).then(function (data) {
           if (disposed) return;
           data = data || {};
           if (data.conflict) {
-            showConflictModal(newTitle, data.path, renameInput);
+            setRenameError(conflictMessage(newTitle, data.path));
+            renameInput.focus();
             return;
           }
           hideRename();
           setStatus(tr('ui.renamed', null, 'Note renamed'), 'success');
           loadNotes();
         }).catch(function (err) {
-          setStatus(userFacingError('ui.renameError', 'Could not rename the note. Please try again.', err), 'error');
+          setRenameError(userFacingError('ui.renameError', 'Could not rename the note. Please try again.', err));
         });
       }
 
@@ -594,25 +704,6 @@
             setStatus(userFacingError('ui.trashError', 'Could not move the note to trash. Please try again.', err), 'error');
           });
         });
-      }
-
-      // ─── Conflict Modal ─────────────────────────────────────
-
-      function showConflictModal(title, existingPath, focusTarget) {
-        var overlay = el('div', { className: 'notes-modal-overlay' });
-        var modal = el('div', { className: 'notes-modal' }, [
-          el('div', { className: 'notes-modal-title' }, [tr('ui.conflictTitle', null, 'Name Conflict')]),
-          el('div', { className: 'notes-modal-msg' }, [
-            tr('ui.conflictMessage', { title: title }, 'A note with the title "' + title + '" already exists.'),
-            existingPath ? tr('ui.existingFile', { path: existingPath }, ' Existing file: ' + existingPath + '.') : '',
-            tr('ui.chooseDifferent', null, ' Please choose a different title.')
-          ].join('')),
-          el('div', { className: 'notes-modal-actions' }, [
-            el('button', { className: 'notes-modal-btn confirm', textContent: 'OK', onClick: function () { overlay.remove(); (focusTarget || createInput).focus(); } })
-          ])
-        ]);
-        overlay.appendChild(modal);
-        document.body.appendChild(overlay);
       }
 
       function showTrashModal(note) {
@@ -648,18 +739,6 @@
         sortMode = sortSelect.value || 'title-asc';
         renderList();
       });
-      createConfirm.addEventListener('click', confirmCreate);
-      createCancel.addEventListener('click', hideCreate);
-      renameConfirm.addEventListener('click', confirmRename);
-      renameCancel.addEventListener('click', hideRename);
-      createInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') confirmCreate();
-        if (e.key === 'Escape') hideCreate();
-      });
-      renameInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') confirmRename();
-        if (e.key === 'Escape') hideRename();
-      });
 
       // ─── Init ───────────────────────────────────────────────
 
@@ -672,12 +751,6 @@
           createBtn.innerHTML = iconSvg('add') + ' ' + tr('ui.newNote', null, 'New Note');
           filterInput.setAttribute('placeholder', tr('ui.filter', null, 'Filter notes'));
           titleBar.textContent = tr('ui.title', { workspace: workspaceName }, 'Notes in ' + workspaceName);
-          createInput.setAttribute('placeholder', tr('ui.noteTitle', null, 'Note title'));
-          renameInput.setAttribute('placeholder', tr('ui.newTitle', null, 'New title'));
-          createConfirm.textContent = tr('ui.create', null, 'Create');
-          createCancel.textContent = tr('ui.cancel', null, 'Cancel');
-          renameConfirm.textContent = tr('ui.rename', null, 'Rename');
-          renameCancel.textContent = tr('ui.cancel', null, 'Cancel');
           renderList();
         });
       }
@@ -696,6 +769,8 @@
 
       containerEl.__notesCleanup = function () {
         disposed = true;
+        hideCreate();
+        hideRename();
         if (typeof localeUnsubscribe === 'function') localeUnsubscribe();
         if (typeof fileChangedUnsubscribe === 'function') fileChangedUnsubscribe();
       };

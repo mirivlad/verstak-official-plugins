@@ -264,12 +264,19 @@ async function mountNotes(api) {
   const createButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-action') === 'create');
   if (!createButton) throw new Error('create button not found');
   createButton.click();
-  const input = walk(container, (node) => node.getAttribute && node.getAttribute('data-notes-create-input') !== undefined);
+  const createModal = walk(document.body, (node) => node.getAttribute && node.getAttribute('data-notes-create-modal') !== undefined);
+  if (!createModal) throw new Error('create modal not found');
+  const input = walk(createModal, (node) => node.getAttribute && node.getAttribute('data-notes-create-input') !== undefined);
   if (!input) throw new Error('create input not found');
-  input.value = 'First Note';
-  const confirm = walk(container, (node) => node.tagName === 'BUTTON' && node.textContent === 'Create');
+  const confirm = walk(createModal, (node) => node.tagName === 'BUTTON' && node.textContent === 'Create');
   if (!confirm) throw new Error('create confirm button not found');
   confirm.click();
+  const createError = walk(createModal, (node) => node.getAttribute && node.getAttribute('data-notes-create-error') !== undefined);
+  if (!createError || !createError.textContent.includes('Enter a note title') || input.getAttribute('aria-invalid') !== 'true') {
+    throw new Error('create modal does not show a validation error for an empty title');
+  }
+  input.value = 'First Note';
+  input.dispatchEvent('keydown', { key: 'Enter' });
   await flush();
 
   const created = createApi.entries.get('Project/Notes/First_Note.md');
@@ -319,21 +326,25 @@ async function mountNotes(api) {
   const renameButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-note-action') === 'rename');
   if (!renameButton) throw new Error('rename note button not found');
   renameButton.click();
-  const renameInput = walk(container, (node) => node.getAttribute && node.getAttribute('data-notes-rename-input') !== undefined);
+  const renameModal = walk(document.body, (node) => node.getAttribute && node.getAttribute('data-notes-rename-modal') !== undefined);
+  if (!renameModal) throw new Error('rename modal not found');
+  const renameInput = walk(renameModal, (node) => node.getAttribute && node.getAttribute('data-notes-rename-input') !== undefined);
   if (!renameInput) throw new Error('rename input not found');
   renameInput.value = 'Second Note';
-  const renameConfirm = walk(container, (node) => node.tagName === 'BUTTON' && node.textContent === 'Rename');
-  if (!renameConfirm) throw new Error('rename confirm button not found');
-  renameConfirm.click();
+  renameInput.dispatchEvent('keydown', { key: 'Enter' });
   await flush();
-  const conflictModal = walk(document.body, (node) => node.className === 'notes-modal-msg');
-  if (!conflictModal || !conflictModal.textContent.includes('Project/Notes/Second_Note.md')) {
-    throw new Error(`rename conflict modal should include existing path, got ${conflictModal && conflictModal.textContent}`);
+  const renameError = walk(renameModal, (node) => node.getAttribute && node.getAttribute('data-notes-rename-error') !== undefined);
+  if (!renameError || !renameError.textContent.includes('Project/Notes/Second_Note.md')) {
+    throw new Error(`rename conflict should stay in the form modal, got ${renameError && renameError.textContent}`);
   }
-  const conflictOk = walk(document.body, (node) => node.tagName === 'BUTTON' && node.textContent === 'OK');
-  if (!conflictOk) throw new Error('rename conflict OK button not found');
-  conflictOk.click();
+  if (walk(document.body, (node) => node.className === 'notes-modal-msg')) {
+    throw new Error('rename conflict opened a second modal instead of reporting in the form');
+  }
+  renameInput.dispatchEvent('keydown', { key: 'Escape' });
   await flush();
+  if (walk(document.body, (node) => node.getAttribute && node.getAttribute('data-notes-rename-modal') !== undefined)) {
+    throw new Error('Escape did not close the rename modal');
+  }
 
   const providerAction = walk(container, (node) => node.getAttribute && node.getAttribute('data-note-contribution-action') === 'provider.note.action');
   if (!providerAction) throw new Error('provider note action button not found');
