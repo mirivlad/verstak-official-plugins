@@ -96,10 +96,15 @@ function makeDocument() {
   };
 }
 
-function loadComponent(document) {
+function loadComponent(document, errorLog) {
   const registry = {};
   vm.runInNewContext(source, {
-    console,
+    console: {
+      ...console,
+      error(...args) {
+        errorLog.push(args.map((value) => String(value)).join(' '));
+      },
+    },
     document,
     window: {
       VerstakPluginRegister(pluginId, bundle) {
@@ -138,13 +143,15 @@ async function flush() {
   if (!(manifest.contributes.settingsPanels || []).some((item) => item.component === 'SecretsView')) throw new Error('secrets settings panel missing');
 
   const document = makeDocument();
-  const component = loadComponent(document);
+  const errorLog = [];
+  const component = loadComponent(document, errorLog);
   const records = [
     { id: 'global.server', title: 'Global Server', username: 'root', scope: { kind: 'global' }, updatedAt: '2026-06-29T00:00:00Z' },
     { id: 'client-a.db', title: 'Client A DB', username: 'app', scope: { kind: 'workspace', workspaceRootPath: 'ClientA' }, updatedAt: '2026-06-29T00:00:00Z' },
   ];
   let initialized = false;
   let unlocked = false;
+  let unlockError = '';
   const readCalls = [];
   const copied = [];
   const deleted = [];
@@ -152,6 +159,7 @@ async function flush() {
     secrets: {
       status: async () => ({ initialized, unlocked }),
       unlock: async (password) => {
+        if (unlockError) throw new Error(unlockError);
         if (password !== 'master-password') throw new Error('bad password');
         initialized = true;
         unlocked = true;
@@ -197,6 +205,21 @@ async function flush() {
   const confirmInput = walk(container, (node) => node.getAttribute && node.getAttribute('data-secret-master-password-confirm') === '');
   const unlockButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-secret-unlock') === '');
   if (!passwordInput || !confirmInput || !unlockButton) throw new Error('setup controls missing');
+  unlockError = '[plugin:verstak.secrets] secrets.unlock failed: master password must be at least 8 characters';
+  passwordInput.value = 'short';
+  confirmInput.value = 'short';
+  unlockButton.click();
+  await flush();
+  if (!container.textContent.includes('Master password must be at least 8 characters')) {
+    throw new Error('weak master password error was not explained clearly');
+  }
+  if (container.textContent.includes('[plugin:') || container.textContent.includes('secrets.unlock')) {
+    throw new Error('technical unlock details leaked into the Secrets UI');
+  }
+  if (!errorLog.some((entry) => entry.includes('[plugin:verstak.secrets] secrets.unlock failed'))) {
+    throw new Error('technical unlock details were not retained in the console log');
+  }
+  unlockError = '';
   passwordInput.value = 'master-password';
   confirmInput.value = 'master-password';
   unlockButton.click();

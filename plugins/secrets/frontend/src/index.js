@@ -167,6 +167,38 @@
         render();
       }
 
+      function userFacingError(action, err) {
+        var raw = (err && err.message) ? err.message : String(err || '');
+        if (typeof console !== 'undefined' && typeof console.error === 'function') {
+          console.error('[verstak.secrets] ' + action + ' failed', err);
+        }
+        if (action === 'unlock') {
+          var minimumLength = raw.match(/master password must be at least (\d+) characters/i);
+          if (minimumLength) {
+            return tr('ui.masterPasswordMinLength', { count: minimumLength[1] }, 'Master password must be at least ' + minimumLength[1] + ' characters.');
+          }
+          if (/master password is empty/i.test(raw)) {
+            return tr('ui.masterPasswordRequired', null, 'Enter a master password.');
+          }
+          if (/invalid master password/i.test(raw)) {
+            return tr('ui.masterPasswordInvalid', null, 'The master password is incorrect.');
+          }
+        }
+        return tr('ui.' + action + 'Error', null, {
+          status: 'Could not check the secret storage. Please try again.',
+          load: 'Could not load secrets. Please try again.',
+          read: 'Could not open this secret. Please try again.',
+          save: 'Could not save the secret. Please try again.',
+          delete: 'Could not delete the secret. Please try again.',
+          copyLink: 'Could not copy the secret link. Please try again.',
+          unlock: 'Could not unlock secrets. Check the master password and try again.'
+        }[action] || 'Could not complete this action. Please try again.');
+      }
+
+      function setUserFacingError(action, err) {
+        setStatus(userFacingError(action, err), true);
+      }
+
       function recordWorkspaceRoot(record) {
         var scope = record && record.scope || {};
         return scope.kind === ScopeWorkspace ? cleanWorkspace(scope.workspaceRootPath) : '';
@@ -249,7 +281,7 @@
               return loadRecords();
             }).catch(function (err) {
               unlockBtn.disabled = false;
-              setStatus((err && err.message) ? err.message : String(err), true);
+              setUserFacingError('unlock', err);
             });
           }
         }, [tr('ui.unlock', null, 'Unlock')]);
@@ -458,7 +490,7 @@
                     selectedValue = '';
                     return loadRecords();
                   }).catch(function (err) {
-                    setStatus((err && err.message) ? err.message : String(err), true);
+                    setUserFacingError('save', err);
                   });
                 }
               }, [tr('ui.save', null, 'Save')]),
@@ -505,6 +537,8 @@
           selectedValue = '';
           mode = 'selected';
           render();
+        }).catch(function (err) {
+          setUserFacingError('load', err);
         });
       }
 
@@ -522,7 +556,7 @@
           render();
         }).catch(function (err) {
           if (disposed) return;
-          setStatus((err && err.message) ? err.message : String(err), true);
+          setUserFacingError('read', err);
         });
       }
 
@@ -549,7 +583,7 @@
           selectedValue = '';
           return loadRecords();
         }).catch(function (err) {
-          setStatus((err && err.message) ? err.message : String(err), true);
+          setUserFacingError('delete', err);
         });
       }
 
@@ -559,7 +593,7 @@
             setStatus(tr('ui.linkCopied', null, 'Secret link copied'), false);
           });
         }).catch(function (err) {
-          setStatus((err && err.message) ? err.message : String(err), true);
+          setUserFacingError('copyLink', err);
         });
       }
 
@@ -569,7 +603,7 @@
         if (unlocked) return loadWorkspaceOptions().then(loadRecords);
         render();
       }).catch(function (err) {
-        statusText = (err && err.message) ? err.message : String(err);
+        statusText = userFacingError('status', err);
         statusError = true;
         renderLocked();
       });
