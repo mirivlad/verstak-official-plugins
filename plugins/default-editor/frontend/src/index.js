@@ -259,11 +259,14 @@
     var start = textarea.selectionStart;
     var end = textarea.selectionEnd;
     var value = textarea.value;
-    var selected = value.slice(start, end) || placeholder || '';
+    var lineStart = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+    var lineEnd = value.indexOf('\n', end);
+    if (lineEnd === -1) lineEnd = value.length;
+    var selected = value.slice(lineStart, lineEnd) || placeholder || '';
     var replacement = selected.split('\n').map(function (line) { return prefix + line; }).join('\n');
-    textarea.value = value.slice(0, start) + replacement + value.slice(end);
-    textarea.selectionStart = start;
-    textarea.selectionEnd = start + replacement.length;
+    textarea.value = value.slice(0, lineStart) + replacement + value.slice(lineEnd);
+    textarea.selectionStart = lineStart;
+    textarea.selectionEnd = lineStart + replacement.length;
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
     textarea.focus();
   }
