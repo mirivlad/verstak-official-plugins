@@ -18,7 +18,7 @@
     '.todo-title{font-size:.86rem;font-weight:600}.todo-count,.todo-status,.todo-scope{font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3)}.todo-spacer{flex:1}',
     '.todo-filters{display:flex;align-items:center;gap:.35rem;min-width:0;flex:1;flex-wrap:wrap}',
     '.todo-input,.todo-select{box-sizing:border-box;min-height:1.9rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-surface,#15152c);color:var(--vt-color-text-primary,#f4f7fb);color-scheme:dark;font:inherit;font-size:.78rem;padding:.32rem .45rem}',
-    '.todo-input.search{width:min(15rem,100%)}.todo-input.textarea{min-height:6.5rem;resize:vertical;line-height:1.4}.todo-select{max-width:12rem;appearance:none;background-color:var(--vt-color-surface,#15152c);background-image:linear-gradient(45deg,transparent 50%,var(--vt-color-text-muted,#7f8aa3) 50%),linear-gradient(135deg,var(--vt-color-text-muted,#7f8aa3) 50%,transparent 50%);background-position:calc(100% - 14px) 50%,calc(100% - 9px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:1.7rem}.todo-select option{background:var(--vt-color-surface,#15152c);color:var(--vt-color-text-primary,#f4f7fb)}.todo-time-picker{display:grid;grid-template-columns:1fr 1fr;gap:.4rem}.todo-time-select{width:100%;max-width:none}',
+    '.todo-input.search{width:min(15rem,100%)}.todo-input.textarea{min-height:6.5rem;resize:vertical;line-height:1.4}.todo-input.todo-time-input{width:100%;font-variant-numeric:tabular-nums}.todo-select{max-width:12rem;appearance:none;background-color:var(--vt-color-surface,#15152c);background-image:linear-gradient(45deg,transparent 50%,var(--vt-color-text-muted,#7f8aa3) 50%),linear-gradient(135deg,var(--vt-color-text-muted,#7f8aa3) 50%,transparent 50%);background-position:calc(100% - 14px) 50%,calc(100% - 9px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:1.7rem}.todo-select option{background:var(--vt-color-surface,#15152c);color:var(--vt-color-text-primary,#f4f7fb)}',
     '.todo-btn{min-height:1.9rem;padding:.32rem .62rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-md,6px);background:var(--vt-color-surface-hover,#1b2440);color:var(--vt-color-text-secondary,#b7c0d4);font-size:.78rem;cursor:pointer}.todo-btn:hover{border-color:var(--vt-color-accent,#4ecca3);color:var(--vt-color-text-primary,#f4f7fb)}.todo-btn.primary{background:var(--vt-color-accent,#4ecca3);border-color:var(--vt-color-accent,#4ecca3);color:#101827}.todo-btn.danger{border-color:rgba(233,69,96,.5);color:#ff9a9a}.todo-btn:disabled{opacity:.45;cursor:default}',
     '.todo-list{flex:1;min-height:0;overflow:auto;padding:.5rem .75rem .85rem}.todo-empty{height:100%;display:flex;align-items:center;justify-content:center;padding:2rem;text-align:center;color:var(--vt-color-text-muted,#7f8aa3);font-size:.86rem}',
     '.todo-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.75rem;align-items:start;margin-top:.5rem;padding:.75rem .85rem;border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface,#15152c)}.todo-row:hover{background:var(--vt-color-surface-hover,#1b2440)}.todo-row.done .todo-row-title{text-decoration:line-through;color:var(--vt-color-text-muted,#7f8aa3)}',
@@ -132,12 +132,20 @@
     return match ? { date: match[1], time: match[2] } : { date: '', time: '' };
   }
 
-  function joinReminderDateTime(date, hour, minute) {
+  function cleanReminderTime(value) {
+    var match = /^(\d{1,2}):(\d{2})$/.exec(text(value).trim());
+    if (!match) return '';
+    var hour = Number(match[1]);
+    var minute = Number(match[2]);
+    if (hour > 23 || minute > 59) return '';
+    return String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0');
+  }
+
+  function joinReminderDateTime(date, time) {
     date = cleanDate(date);
-    hour = text(hour).trim();
-    minute = text(minute).trim();
-    if (!date || !/^\d{2}$/.test(hour) || !/^\d{2}$/.test(minute)) return '';
-    return cleanDateTime(date + 'T' + hour + ':' + minute);
+    time = cleanReminderTime(time);
+    if (!date || !time) return '';
+    return cleanDateTime(date + 'T' + time);
   }
 
   function todoId(workspaceRoot, title) {
@@ -147,6 +155,8 @@
   function normalizeTodo(value) {
     value = value || {};
     var status = cleanStatus(value.status);
+    var reminderAt = cleanDateTime(value.reminderAt || value.reminderDateTime);
+    var reminder = splitReminderDateTime(reminderAt);
     var createdAt = text(value.createdAt).trim() || now();
     var completedAt = status === 'done' ? (text(value.completedAt).trim() || createdAt) : '';
     return {
@@ -158,7 +168,8 @@
       status: status,
       priority: cleanPriority(value.priority),
       dueAt: cleanDate(value.dueAt || value.dueDate),
-      reminderAt: cleanDateTime(value.reminderAt || value.reminderDateTime),
+      reminderDate: cleanDate(value.reminderDate) || reminder.date,
+      reminderAt: reminderAt,
       createdAt: createdAt,
       updatedAt: text(value.updatedAt).trim() || createdAt,
       completedAt: completedAt,
@@ -187,6 +198,7 @@
         status: todo.status,
         priority: todo.priority,
         dueAt: todo.dueAt,
+        reminderDate: todo.reminderDate,
         reminderAt: todo.reminderAt,
         createdAt: todo.createdAt,
         updatedAt: todo.updatedAt,
@@ -330,15 +342,6 @@
       return el('option', { value: value, textContent: label });
     }
 
-    function timeOptions(limit, emptyLabel) {
-      var options = [option('', emptyLabel)];
-      for (var value = 0; value < limit; value += 1) {
-        var formatted = String(value).padStart(2, '0');
-        options.push(option(formatted, formatted));
-      }
-      return options;
-    }
-
     function cleanStatusFilter(value) {
       value = text(value).trim().toLowerCase();
       return value === 'all' || STATUS_VALUES.indexOf(value) !== -1 ? value : 'all';
@@ -457,12 +460,8 @@
       priorityInput.value = editing ? existingTodo.priority : 'normal';
       var dueInput = el('input', { className: 'todo-input', type: 'date', value: editing ? existingTodo.dueAt : '', 'data-todo-input': 'dueAt' });
       var reminder = splitReminderDateTime(editing ? existingTodo.reminderAt : '');
-      var reminderDateInput = el('input', { className: 'todo-input', type: 'date', value: reminder.date, 'data-todo-input': 'reminderDate' });
-      var reminderTime = reminder.time.split(':');
-      var reminderHourInput = el('select', { className: 'todo-select todo-time-select', 'data-todo-input': 'reminderHour', 'aria-label': tr('ui.field.reminderHour', null, 'Hour') }, timeOptions(24, tr('ui.time.hourPlaceholder', null, 'Hour')));
-      var reminderMinuteInput = el('select', { className: 'todo-select todo-time-select', 'data-todo-input': 'reminderMinute', 'aria-label': tr('ui.field.reminderMinute', null, 'Minute') }, timeOptions(60, tr('ui.time.minutePlaceholder', null, 'Minute')));
-      reminderHourInput.value = reminderTime[0] || '';
-      reminderMinuteInput.value = reminderTime[1] || '';
+      var reminderDateInput = el('input', { className: 'todo-input', type: 'date', value: editing ? existingTodo.reminderDate || reminder.date : '', 'data-todo-input': 'reminderDate' });
+      var reminderTimeInput = el('input', { className: 'todo-input todo-time-input', type: 'text', inputmode: 'numeric', maxlength: '5', placeholder: tr('ui.reminderTimePlaceholder', null, '14:30'), value: reminder.time, 'data-todo-input': 'reminderTime', 'aria-label': tr('ui.field.reminderTime', null, 'Reminder time') });
       var workspaceInput = null;
       var workspace = editing ? existingTodo.workspaceRootPath : scope.workspaceRoot;
       if (scope.mode === 'global') {
@@ -483,6 +482,20 @@
           return;
         }
         var workspaceRoot = scope.mode === 'workspace' ? scope.workspaceRoot : cleanWorkspace(workspaceInput && workspaceInput.value);
+        var reminderDate = cleanDate(reminderDateInput.value);
+        var reminderTime = cleanReminderTime(reminderTimeInput.value);
+        if (text(reminderTimeInput.value).trim() && !reminderTime) {
+          statusText = tr('ui.reminderTimeInvalid', null, 'Enter a valid reminder time (HH:MM)');
+          statusClass = 'error';
+          render();
+          return;
+        }
+        if (reminderTime && !reminderDate) {
+          statusText = tr('ui.reminderDateRequired', null, 'Choose a reminder date before setting its time');
+          statusClass = 'error';
+          render();
+          return;
+        }
         var timestamp = now();
         var next = normalizeTodo({
           id: editing ? existingTodo.id : todoId(workspaceRoot, title),
@@ -493,7 +506,8 @@
           status: editing ? existingTodo.status : 'open',
           priority: priorityInput.value,
           dueAt: dueInput.value,
-          reminderAt: joinReminderDateTime(reminderDateInput.value, reminderHourInput.value, reminderMinuteInput.value),
+          reminderDate: reminderDate,
+          reminderAt: joinReminderDateTime(reminderDate, reminderTime),
           createdAt: editing ? existingTodo.createdAt : timestamp,
           updatedAt: timestamp,
           completedAt: editing ? existingTodo.completedAt : '',
@@ -519,7 +533,7 @@
         el('label', { className: 'todo-field' }, [tr('ui.field.priority', null, 'Priority'), priorityInput]),
         el('label', { className: 'todo-field' }, [tr('ui.field.due', null, 'Due date'), dueInput]),
         el('label', { className: 'todo-field' }, [tr('ui.field.reminderDate', null, 'Reminder date'), reminderDateInput]),
-        el('div', { className: 'todo-field' }, [tr('ui.field.reminderTime', null, 'Reminder time'), el('div', { className: 'todo-time-picker' }, [reminderHourInput, reminderMinuteInput])])
+        el('label', { className: 'todo-field' }, [tr('ui.field.reminderTime', null, 'Reminder time'), reminderTimeInput])
       ];
       if (workspaceInput) fields.push(el('label', { className: 'todo-field' }, [tr('ui.field.workspace', null, 'Workspace'), workspaceInput]));
       else fields.push(el('div', { className: 'todo-field', textContent: tr('ui.workspaceValue', { workspace: scope.workspaceRoot }, 'Workspace: ' + scope.workspaceRoot) }));
@@ -600,6 +614,7 @@
       meta.push(el('span', { className: 'todo-badge', textContent: tr('ui.status.' + todo.status, null, todo.status) }));
       if (todo.dueAt) meta.push(el('span', { className: 'todo-badge ' + due, textContent: tr('ui.dueValue', { prefix: due === 'overdue' ? tr('ui.overduePrefix', null, 'Overdue · ') : (due === 'due-soon' ? tr('ui.dueSoonPrefix', null, 'Due soon · ') : ''), date: formatDate(todo.dueAt) }, (due === 'overdue' ? 'Overdue · ' : (due === 'due-soon' ? 'Due soon · ' : '')) + 'Due ' + formatDate(todo.dueAt)) }));
       if (todo.reminderAt) meta.push(el('span', { className: 'todo-badge ' + (reminderDue ? 'reminder-due' : ''), textContent: tr(reminderDue ? 'ui.reminderDueValue' : 'ui.reminderValue', { date: formatDate(todo.reminderAt) }, (reminderDue ? 'Reminder due ' : 'Reminder ') + formatDate(todo.reminderAt)) }));
+      else if (todo.reminderDate) meta.push(el('span', { className: 'todo-badge', textContent: tr('ui.reminderDateValue', { date: formatDate(todo.reminderDate) }, 'Reminder date ' + formatDate(todo.reminderDate)) }));
       return el('div', { className: 'todo-row-meta' }, meta);
     }
 

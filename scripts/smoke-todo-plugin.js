@@ -233,14 +233,11 @@ async function mountWithApi(apiState, props, emittedEvents = [], document = make
   byData(container, 'data-todo-input', 'priority').value = 'high';
   byData(container, 'data-todo-input', 'dueAt').value = '01/02/2000';
   const reminderDate = byData(container, 'data-todo-input', 'reminderDate');
-  const reminderHour = byData(container, 'data-todo-input', 'reminderHour');
-  const reminderMinute = byData(container, 'data-todo-input', 'reminderMinute');
+  const reminderTime = byData(container, 'data-todo-input', 'reminderTime');
   if (!reminderDate || reminderDate.getAttribute('type') !== 'date') throw new Error('Todo reminder date input was not rendered');
-  if (!reminderHour || reminderHour.tagName !== 'SELECT') throw new Error('Todo reminder hour selector was not rendered');
-  if (!reminderMinute || reminderMinute.tagName !== 'SELECT') throw new Error('Todo reminder minute selector was not rendered');
+  if (!reminderTime || reminderTime.getAttribute('type') !== 'text') throw new Error('Todo reminder time must be a keyboard-editable text input');
   reminderDate.value = '01/02/2000';
-  reminderHour.value = '09';
-  reminderMinute.value = '30';
+  reminderTime.value = '09:30';
   byData(container, 'data-todo-action', 'save').click();
   await flush();
 
@@ -249,7 +246,7 @@ async function mountWithApi(apiState, props, emittedEvents = [], document = make
   const createdTodo = storedAfterCreate[0];
   if (createdTodo.workspaceRootPath !== 'Project') throw new Error('workspace Todo did not keep the Project root path');
   if (createdTodo.status !== 'open' || createdTodo.priority !== 'high') throw new Error('Todo status or priority was not stored');
-  if (createdTodo.dueAt !== '2000-01-02' || createdTodo.reminderAt !== '2000-01-02T09:30') throw new Error('Todo due/reminder metadata was not stored');
+  if (createdTodo.dueAt !== '2000-01-02' || createdTodo.reminderDate !== '2000-01-02' || createdTodo.reminderAt !== '2000-01-02T09:30') throw new Error('Todo due/reminder metadata was not stored');
   if (!container.textContent.includes('Overdue') || !container.textContent.includes('Reminder due')) throw new Error('due/reminder indicators were not rendered');
   const scheduledAfterCreate = apiState.notificationCalls.at(-1) || [];
   if (scheduledAfterCreate.length !== 1
@@ -269,9 +266,20 @@ async function mountWithApi(apiState, props, emittedEvents = [], document = make
 
   byData(container, 'data-todo-action', 'edit').click();
   byData(container, 'data-todo-input', 'title').value = 'Prepare project review updated';
+  byData(container, 'data-todo-input', 'reminderTime').value = '29:30';
+  byData(container, 'data-todo-action', 'save').click();
+  await flush();
+  if (apiState.settings['todos:global'][0].title !== 'Prepare project review' || !container.textContent.includes('Enter a valid reminder time')) {
+    throw new Error('invalid reminder time was saved instead of showing a human-readable error');
+  }
+  byData(container, 'data-todo-input', 'reminderTime').value = '';
   byData(container, 'data-todo-action', 'save').click();
   await flush();
   if (apiState.settings['todos:global'][0].title !== 'Prepare project review updated') throw new Error('Todo edit was not persisted');
+  if (apiState.settings['todos:global'][0].reminderDate !== '2000-01-02' || apiState.settings['todos:global'][0].reminderAt !== '') {
+    throw new Error('clearing reminder time did not preserve its date while cancelling the reminder');
+  }
+  if ((apiState.notificationCalls.at(-1) || []).length !== 0) throw new Error('clearing reminder time did not remove the native notification');
 
   byData(container, 'data-todo-action', 'mark-done').click();
   await flush();
