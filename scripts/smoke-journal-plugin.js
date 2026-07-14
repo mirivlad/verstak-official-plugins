@@ -148,6 +148,12 @@ function makeApi(initialSettings = {}) {
         publishedEvents.push({ name, payload });
       },
     },
+    files: {
+      list: async () => [
+        { type: 'folder', relativePath: 'Project', name: 'Project' },
+        { type: 'folder', relativePath: 'Client', name: 'Client' },
+      ],
+    },
     storedEntries(key) {
       return settings[key] || [];
     },
@@ -325,6 +331,22 @@ function byData(container, attr, value) {
   if (!globalView.container.textContent.includes('Review research capture') && !globalView.container.textContent.includes('Draft brief updated')) {
     throw new Error('global journal did not aggregate remaining entries');
   }
+  const globalAdd = byData(globalView.container, 'data-journal-action', 'add');
+  if (globalAdd.disabled) throw new Error('global Journal Add must be available');
+  globalAdd.click();
+  await flush();
+  const globalWorkspace = byData(globalView.container, 'data-journal-input', 'workspaceRootPath');
+  if (!globalWorkspace || globalWorkspace.tagName !== 'SELECT') throw new Error('global Journal form did not render the Deal selector');
+  globalWorkspace.value = 'Client';
+  byData(globalView.container, 'data-journal-input', 'title').value = 'Prepare client summary';
+  byData(globalView.container, 'data-journal-input', 'minutes').value = '30';
+  byData(globalView.container, 'data-journal-action', 'save-entry').click();
+  await flush();
+  const clientKey = 'worklog:workspace:Client';
+  if (api.storedEntries(clientKey).length !== 1 || api.storedEntries(clientKey)[0].title !== 'Prepare client summary') {
+    throw new Error('global Journal entry was not stored under the selected Deal');
+  }
+  if (!globalView.container.textContent.includes('Prepare client summary')) throw new Error('global Journal did not render the created entry');
 
   component.unmount && component.unmount(container);
   component.unmount && component.unmount(candidateView.container);

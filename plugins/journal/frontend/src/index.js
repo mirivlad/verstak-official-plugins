@@ -31,6 +31,7 @@
     '.journal-status.error{display:inline-flex;border:1px solid rgba(233,69,96,.45);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-danger-muted,rgba(233,69,96,.14));color:#ffc6ce;padding:.18rem .4rem}',
     '.journal-input{font-size:.8rem;padding:.38rem .5rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:#0f1424;color:var(--vt-color-text-primary,#f4f7fb);min-width:0;font-family:inherit}',
     '.journal-input.textarea{min-height:7rem;resize:vertical;line-height:1.4}',
+    '.journal-input.journal-select{appearance:none;background-color:#0f1424;background-image:linear-gradient(45deg,transparent 50%,var(--vt-color-text-muted,#7f8aa3) 50%),linear-gradient(135deg,var(--vt-color-text-muted,#7f8aa3) 50%,transparent 50%);background-position:calc(100% - 14px) 50%,calc(100% - 9px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:1.7rem}.journal-input.journal-select option{background:#0f1424;color:var(--vt-color-text-primary,#f4f7fb)}',
     '.journal-input:focus{outline:none;border-color:var(--vt-color-accent,#4ecca3);box-shadow:var(--vt-focus-ring,0 0 0 2px rgba(78,204,163,.34))}',
     '.journal-billable{display:flex;align-items:center;gap:.25rem;font-size:.74rem;color:var(--vt-color-text-secondary,#b7c0d4);white-space:nowrap}',
     '.journal-list{flex:1;min-height:0;overflow:auto;background:var(--vt-color-background,#101020)}',
@@ -275,6 +276,7 @@
 
     var scope = scopeFromProps(props || {});
     var entries = [];
+    var workspaceOptions = [];
     function tr(key, params, fallback) {
       if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
       return fallback || key;
@@ -304,12 +306,24 @@
     containerEl.appendChild(listEl);
     containerEl.appendChild(modalHost);
 
-    function persist() {
-      if (scope.mode !== 'workspace') return Promise.resolve();
+    function persist(workspaceRoot, values) {
       if (!api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve();
-      return api.settings.write(scope.key, storageEntries(entries)).catch(function (err) {
+      var target = cleanWorkspace(workspaceRoot || scope.workspaceRoot);
+      if (!target) return Promise.resolve();
+      return api.settings.write(WORKLOG_PREFIX + encodeKey(target), storageEntries(values || entries)).catch(function (err) {
         statusText = tr('ui.saveError', { error: err && err.message ? err.message : String(err) }, 'Could not save journal: ' + (err && err.message ? err.message : String(err)));
         statusClass = 'error';
+      });
+    }
+
+    function loadWorkspaceOptions() {
+      if (!api || !api.files || typeof api.files.list !== 'function') return Promise.resolve();
+      return api.files.list('').then(function (items) {
+        workspaceOptions = (Array.isArray(items) ? items : []).filter(function (item) {
+          return text(item && item.type).toLowerCase() === 'folder';
+        }).map(function (item) { return cleanWorkspace(item.relativePath || item.name); }).filter(function (value) {
+          return value && value.indexOf('/') === -1;
+        });
       });
     }
 
@@ -345,7 +359,6 @@
     }
 
     function showEntryModal(existingEntry, candidate, completedTodo) {
-      if (scope.mode !== 'workspace') return;
       var editing = !!existingEntry;
       var reviewingCandidate = !editing && !!candidate;
       var reviewingTodo = !editing && !!completedTodo;
@@ -356,6 +369,13 @@
       var minutesInput = el('input', { className: 'journal-input', type: 'number', min: '0', step: '1', value: editing ? existingEntry.minutes : (reviewingCandidate ? candidate.estimatedMinutes : (reviewingTodo ? '0' : '30')), 'data-journal-input': 'minutes' });
       var billableInput = el('input', { type: 'checkbox', 'data-journal-input': 'billable' });
       billableInput.checked = editing ? existingEntry.billable === true : false;
+      var workspaceInput = null;
+      if (scope.mode === 'global') {
+        workspaceInput = el('select', { className: 'journal-input journal-select', 'data-journal-input': 'workspaceRootPath' });
+        workspaceOptions.forEach(function (workspace) {
+          workspaceInput.appendChild(el('option', { value: workspace, textContent: workspace }));
+        });
+      }
       var activityInputs = reviewingCandidate ? candidate.activities.map(function (activity) {
         var input = el('input', { type: 'checkbox', value: activity.activityId, checked: 'checked', 'data-journal-candidate-activity': activity.activityId });
         input.checked = true;
@@ -369,6 +389,7 @@
           summary: summaryInput.value,
           minutes: minutesInput.value,
           billable: billableInput.checked === true,
+          workspaceRootPath: workspaceInput ? workspaceInput.value : scope.workspaceRoot,
           sourceCandidateId: reviewingCandidate ? candidate.candidateId : (existingEntry ? existingEntry.sourceCandidateId : ''),
           sessionId: reviewingCandidate ? candidate.sessionId : '',
           handledThrough: reviewingCandidate ? candidate.handledThrough : '',
@@ -411,6 +432,7 @@
           el('div', { className: 'journal-modal-grid' }, [
             el('label', { className: 'journal-field' }, [tr('ui.date', null, 'Date'), dateInput]),
             el('label', { className: 'journal-field' }, [tr('ui.minutes', null, 'Minutes'), minutesInput]),
+            workspaceInput ? el('label', { className: 'journal-field wide' }, [tr('ui.workspace', null, 'Deal'), workspaceInput]) : null,
             el('label', { className: 'journal-field wide' }, [tr('ui.fieldTitle', null, 'Title'), titleInput]),
             el('label', { className: 'journal-field wide' }, [tr('ui.body', null, 'Body'), summaryInput]),
             el('label', { className: 'journal-billable' }, [billableInput, tr('ui.billable', null, 'Billable')])
@@ -426,7 +448,6 @@
     }
 
     function addOrUpdateEntry(existingEntry, formValue) {
-      if (scope.mode !== 'workspace') return;
       var title = text(formValue && formValue.title).trim();
       if (!title) {
         statusText = tr('ui.titleRequired', null, 'Title is required');
@@ -434,6 +455,8 @@
         render();
         return;
       }
+      var workspaceRoot = cleanWorkspace(formValue && formValue.workspaceRootPath || scope.workspaceRoot);
+      if (!workspaceRoot) return;
       var sourceCandidateId = text(formValue && formValue.sourceCandidateId || (existingEntry && existingEntry.sourceCandidateId)).trim();
       var sessionID = text(formValue && formValue.sessionId).trim();
       var handledThrough = text(formValue && formValue.handledThrough).trim();
@@ -451,8 +474,8 @@
         return;
       }
       var entry = normalizeEntry({
-        entryId: existingEntry ? existingEntry.entryId : entryId(scope.workspaceRoot, formValue.date || today(), title),
-        workspaceRootPath: scope.workspaceRoot,
+        entryId: existingEntry ? existingEntry.entryId : entryId(workspaceRoot, formValue.date || today(), title),
+        workspaceRootPath: workspaceRoot,
         date: formValue.date || today(),
         title: title,
         summary: formValue.summary,
@@ -470,10 +493,11 @@
         entries = [entry].concat(entries);
       }
       entries = sortEntries(entries);
+      var targetEntries = entries.filter(function (item) { return item.workspaceRootPath === workspaceRoot; });
       closeEntryModal();
       statusText = existingEntry ? 'Entry updated' : 'Entry added';
       statusClass = '';
-      persist().then(function () {
+      persist(workspaceRoot, targetEntries).then(function () {
         if (!sessionID || !handledThrough || !api || !api.events || typeof api.events.publish !== 'function') return undefined;
         return api.events.publish('activity.session.handled', {
           sessionId: sessionID,
@@ -525,12 +549,12 @@
       );
       statusEl.textContent = statusText;
       statusEl.className = 'journal-status' + (statusClass ? ' ' + statusClass : '');
-      addBtn.disabled = scope.mode !== 'workspace';
+      addBtn.disabled = false;
       renderList();
     }
 
     render();
-    loadStored().then(function () {
+    Promise.all([loadStored(), loadWorkspaceOptions()]).then(function () {
       render();
       var candidate = candidateFromRequest(props && props.toolRequest, scope.workspaceRoot);
       var completedTodo = completedTodoFromRequest(props && props.toolRequest, scope.workspaceRoot);

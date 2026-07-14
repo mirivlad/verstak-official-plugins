@@ -15,6 +15,7 @@
   ],
   "permissions": [
     "events.publish",
+    "files.read",
     "storage.namespace",
     "ui.register"
   ],

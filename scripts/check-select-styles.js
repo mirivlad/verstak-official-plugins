@@ -8,6 +8,7 @@ const checks = [
   ['plugins/files/frontend/src/index.js', '.files-sort'],
   ['plugins/notes/frontend/src/index.js', '.notes-sort'],
   ['plugins/browser-inbox/frontend/src/index.js', '.browser-inbox-select'],
+  ['plugins/journal/frontend/src/index.js', '.journal-input.journal-select'],
   ['plugins/trash/frontend/src/index.js', '.trash-select'],
   ['plugins/secrets/frontend/src/index.js', '.secrets-select'],
 ];
