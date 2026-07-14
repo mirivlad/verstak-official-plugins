@@ -35,6 +35,8 @@
   "ui.field.priority": "Priority",
   "ui.field.due": "Due date",
   "ui.field.reminder": "Reminder",
+  "ui.field.reminderDate": "Reminder date",
+  "ui.field.reminderTime": "Reminder time",
   "ui.field.workspace": "Workspace",
   "ui.workspaceValue": "Workspace: {workspace}",
   "ui.edit": "Edit Todo",

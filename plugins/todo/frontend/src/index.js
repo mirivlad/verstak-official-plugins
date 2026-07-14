@@ -17,8 +17,8 @@
     '.todo-toolbar{display:flex;align-items:center;gap:.5rem;min-height:2.75rem;padding:.5rem .75rem;border-bottom:1px solid var(--vt-color-border,#202b46);background:var(--vt-color-surface-muted,#111629);flex-wrap:wrap;flex-shrink:0}',
     '.todo-title{font-size:.86rem;font-weight:600}.todo-count,.todo-status,.todo-scope{font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3)}.todo-spacer{flex:1}',
     '.todo-filters{display:flex;align-items:center;gap:.35rem;min-width:0;flex:1;flex-wrap:wrap}',
-    '.todo-input,.todo-select{box-sizing:border-box;min-height:1.9rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-surface,#15152c);color:var(--vt-color-text-primary,#f4f7fb);font:inherit;font-size:.78rem;padding:.32rem .45rem}',
-    '.todo-input.search{width:min(15rem,100%)}.todo-input.textarea{min-height:6.5rem;resize:vertical;line-height:1.4}.todo-select{max-width:12rem}',
+    '.todo-input,.todo-select{box-sizing:border-box;min-height:1.9rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-surface,#15152c);color:var(--vt-color-text-primary,#f4f7fb);color-scheme:dark;font:inherit;font-size:.78rem;padding:.32rem .45rem}',
+    '.todo-input.search{width:min(15rem,100%)}.todo-input.textarea{min-height:6.5rem;resize:vertical;line-height:1.4}.todo-select{max-width:12rem;appearance:none;background-color:var(--vt-color-surface,#15152c);background-image:linear-gradient(45deg,transparent 50%,var(--vt-color-text-muted,#7f8aa3) 50%),linear-gradient(135deg,var(--vt-color-text-muted,#7f8aa3) 50%,transparent 50%);background-position:calc(100% - 14px) 50%,calc(100% - 9px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:1.7rem}.todo-select option{background:var(--vt-color-surface,#15152c);color:var(--vt-color-text-primary,#f4f7fb)}',
     '.todo-btn{min-height:1.9rem;padding:.32rem .62rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-md,6px);background:var(--vt-color-surface-hover,#1b2440);color:var(--vt-color-text-secondary,#b7c0d4);font-size:.78rem;cursor:pointer}.todo-btn:hover{border-color:var(--vt-color-accent,#4ecca3);color:var(--vt-color-text-primary,#f4f7fb)}.todo-btn.primary{background:var(--vt-color-accent,#4ecca3);border-color:var(--vt-color-accent,#4ecca3);color:#101827}.todo-btn.danger{border-color:rgba(233,69,96,.5);color:#ff9a9a}.todo-btn:disabled{opacity:.45;cursor:default}',
     '.todo-list{flex:1;min-height:0;overflow:auto;padding:.5rem .75rem .85rem}.todo-empty{height:100%;display:flex;align-items:center;justify-content:center;padding:2rem;text-align:center;color:var(--vt-color-text-muted,#7f8aa3);font-size:.86rem}',
     '.todo-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.75rem;align-items:start;margin-top:.5rem;padding:.75rem .85rem;border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface,#15152c)}.todo-row:hover{background:var(--vt-color-surface-hover,#1b2440)}.todo-row.done .todo-row-title{text-decoration:line-through;color:var(--vt-color-text-muted,#7f8aa3)}',
@@ -96,7 +96,28 @@
   }
 
   function cleanDate(value) {
-    return /^\d{4}-\d{2}-\d{2}$/.test(text(value).trim()) ? text(value).trim() : '';
+    value = text(value).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+
+    var match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(value);
+    var day;
+    var month;
+    var year;
+    if (match) {
+      month = Number(match[1]);
+      day = Number(match[2]);
+      year = Number(match[3]);
+    } else {
+      match = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(value);
+      if (!match) return '';
+      day = Number(match[1]);
+      month = Number(match[2]);
+      year = Number(match[3]);
+    }
+
+    var date = new Date(Date.UTC(year, month - 1, day));
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return '';
+    return String(year).padStart(4, '0') + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
   }
 
   function cleanDateTime(value) {
@@ -104,6 +125,18 @@
     if (!value) return '';
     var date = new Date(value);
     return isNaN(date.getTime()) ? '' : value;
+  }
+
+  function splitReminderDateTime(value) {
+    var match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(cleanDateTime(value));
+    return match ? { date: match[1], time: match[2] } : { date: '', time: '' };
+  }
+
+  function joinReminderDateTime(date, time) {
+    date = cleanDate(date);
+    time = text(time).trim();
+    if (!date || !/^\d{2}:\d{2}$/.test(time)) return '';
+    return cleanDateTime(date + 'T' + time);
   }
 
   function todoId(workspaceRoot, title) {
@@ -413,7 +446,9 @@
       var priorityInput = el('select', { className: 'todo-select', 'data-todo-input': 'priority' }, [option('low', tr('ui.priority.low', null, 'Low')), option('normal', tr('ui.priority.normal', null, 'Normal')), option('high', tr('ui.priority.high', null, 'High'))]);
       priorityInput.value = editing ? existingTodo.priority : 'normal';
       var dueInput = el('input', { className: 'todo-input', type: 'date', value: editing ? existingTodo.dueAt : '', 'data-todo-input': 'dueAt' });
-      var reminderInput = el('input', { className: 'todo-input', type: 'datetime-local', value: editing ? existingTodo.reminderAt : '', 'data-todo-input': 'reminderAt' });
+      var reminder = splitReminderDateTime(editing ? existingTodo.reminderAt : '');
+      var reminderDateInput = el('input', { className: 'todo-input', type: 'date', value: reminder.date, 'data-todo-input': 'reminderDate' });
+      var reminderTimeInput = el('input', { className: 'todo-input', type: 'time', value: reminder.time, 'data-todo-input': 'reminderTime' });
       var workspaceInput = null;
       var workspace = editing ? existingTodo.workspaceRootPath : scope.workspaceRoot;
       if (scope.mode === 'global') {
@@ -444,7 +479,7 @@
           status: editing ? existingTodo.status : 'open',
           priority: priorityInput.value,
           dueAt: dueInput.value,
-          reminderAt: reminderInput.value,
+          reminderAt: joinReminderDateTime(reminderDateInput.value, reminderTimeInput.value),
           createdAt: editing ? existingTodo.createdAt : timestamp,
           updatedAt: timestamp,
           completedAt: editing ? existingTodo.completedAt : '',
@@ -469,7 +504,8 @@
         el('label', { className: 'todo-field wide' }, [tr('ui.field.description', null, 'Description'), descriptionInput]),
         el('label', { className: 'todo-field' }, [tr('ui.field.priority', null, 'Priority'), priorityInput]),
         el('label', { className: 'todo-field' }, [tr('ui.field.due', null, 'Due date'), dueInput]),
-        el('label', { className: 'todo-field' }, [tr('ui.field.reminder', null, 'Reminder'), reminderInput])
+        el('label', { className: 'todo-field' }, [tr('ui.field.reminderDate', null, 'Reminder date'), reminderDateInput]),
+        el('label', { className: 'todo-field' }, [tr('ui.field.reminderTime', null, 'Reminder time'), reminderTimeInput])
       ];
       if (workspaceInput) fields.push(el('label', { className: 'todo-field' }, [tr('ui.field.workspace', null, 'Workspace'), workspaceInput]));
       else fields.push(el('div', { className: 'todo-field', textContent: tr('ui.workspaceValue', { workspace: scope.workspaceRoot }, 'Workspace: ' + scope.workspaceRoot) }));

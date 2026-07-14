@@ -35,6 +35,8 @@
   "ui.field.priority": "Приоритет",
   "ui.field.due": "Срок",
   "ui.field.reminder": "Напоминание",
+  "ui.field.reminderDate": "Дата напоминания",
+  "ui.field.reminderTime": "Время напоминания",
   "ui.field.workspace": "Рабочее пространство",
   "ui.workspaceValue": "Рабочее пространство: {workspace}",
   "ui.edit": "Изменить задачу",

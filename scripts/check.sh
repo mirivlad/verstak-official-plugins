@@ -90,6 +90,18 @@ else
 fi
 
 echo ""
+echo "[select styles]"
+if command -v node &>/dev/null; then
+  set +e
+  node "$ROOT/scripts/check-select-styles.js"
+  STATUS=$?
+  set -e
+  report "selects use application styles" "$STATUS"
+else
+  echo "  ⚠️  node not available — skipping select style validation"
+fi
+
+echo ""
 # Guard official plugins against bypassing the v2 plugin API for note features.
 echo "[frontend API boundary]"
 if [ "$HAS_PYTHON" -eq 1 ]; then
