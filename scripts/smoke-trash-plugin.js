@@ -5,8 +5,10 @@ const vm = require('vm');
 const root = path.resolve(__dirname, '..');
 const sourcePath = path.join(root, 'plugins', 'trash', 'frontend', 'src', 'index.js');
 const manifestPath = path.join(root, 'plugins', 'trash', 'plugin.json');
+const russianLocalePath = path.join(root, 'plugins', 'trash', 'locales', 'ru.json');
 const source = fs.readFileSync(sourcePath, 'utf8');
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+const russianLocale = JSON.parse(fs.readFileSync(russianLocalePath, 'utf8'));
 
 class FakeClassList {
   constructor(node) {
@@ -159,7 +161,7 @@ function loadTrashComponent(document) {
   return component;
 }
 
-function makeApi() {
+function makeApi(locale = null) {
   let entries = [
     {
       trashId: 'old-project-file',
@@ -194,6 +196,11 @@ function makeApi() {
   return {
     restoreCalls,
     deleteCalls,
+    i18n: locale ? {
+      t(key, params, fallback) {
+        return String(locale[key] || fallback || key).replace(/\{(\w+)\}/g, (_match, name) => String((params || {})[name] ?? ''));
+      },
+    } : null,
     files: {
       listTrash: async () => entries.slice(),
       restoreTrash: async (trashId, options) => {
@@ -236,6 +243,10 @@ function findByData(rootNode, name, value) {
   const api = makeApi();
   component.mount(container, {}, api);
   await flush();
+
+  if (!container.textContent.includes('All Deals') || !container.textContent.includes('Deal')) {
+    throw new Error('global Trash did not use Deal terminology');
+  }
 
   const latestRow = findByData(container, 'data-trash-row', 'latest-client-report');
   if (!latestRow || !latestRow.textContent.includes('ClientA') || !latestRow.textContent.includes('ClientA/Archive/report.pdf')) {
@@ -298,6 +309,14 @@ function findByData(rootNode, name, value) {
   }
 
   component.unmount(container);
+
+  const russianContainer = new FakeNode('div');
+  component.mount(russianContainer, {}, makeApi(russianLocale));
+  await flush();
+  if (!russianContainer.textContent.includes('Все Дела') || !russianContainer.textContent.includes('Дело')) {
+    throw new Error('global Trash did not localize Deal terminology');
+  }
+  component.unmount(russianContainer);
   console.log('trash frontend smoke passed');
 })().catch((err) => {
   console.error(err);

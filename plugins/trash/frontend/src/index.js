@@ -217,7 +217,7 @@
           value: state.workspace,
           'data-trash-filter-workspace': '',
           onChange: function (event) { state.workspace = event.target.value; render(); }
-        }, [el('option', { value: '' }, [tr('ui.allWorkspaces', null, 'All workspaces')])]);
+        }, [el('option', { value: '' }, [tr('ui.allWorkspaces', null, 'All Deals')])]);
         workspaceOptions().forEach(function (workspace) {
           workspaceSelect.appendChild(el('option', { value: workspace }, [workspace]));
         });
@@ -270,7 +270,7 @@
         var list = el('div', { className: 'trash-list', 'data-trash-list': '' });
         list.appendChild(el('div', { className: 'trash-header' }, [
           el('span', {}, [tr('ui.name', null, 'Name')]),
-          el('span', {}, [tr('ui.workspace', null, 'Workspace')]),
+          el('span', {}, [tr('ui.workspace', null, 'Deal')]),
           el('span', {}, [tr('ui.originalPath', null, 'Original path')]),
           el('span', {}, [tr('ui.deleted', null, 'Deleted')]),
           el('span', {}, [tr('ui.typeSize', null, 'Type / size')]),
