@@ -6,12 +6,14 @@ const vm = require('vm');
 const root = path.resolve(__dirname, '..');
 const manifestPath = path.join(root, 'plugins', 'journal', 'plugin.json');
 const sourcePath = path.join(root, 'plugins', 'journal', 'frontend', 'src', 'index.js');
+const russianLocalePath = path.join(root, 'plugins', 'journal', 'locales', 'ru.json');
 
 if (!fs.existsSync(manifestPath)) throw new Error('journal plugin manifest missing');
 if (!fs.existsSync(sourcePath)) throw new Error('journal frontend entry missing');
 
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 const source = fs.readFileSync(sourcePath, 'utf8');
+const russianLocale = JSON.parse(fs.readFileSync(russianLocalePath, 'utf8'));
 
 class FakeNode {
   constructor(tagName) {
@@ -131,7 +133,7 @@ function loadComponent(document) {
   return component;
 }
 
-function makeApi(initialSettings = {}) {
+function makeApi(initialSettings = {}, locale = null) {
   const settings = { ...initialSettings };
   const publishedEvents = [];
   return {
@@ -154,6 +156,11 @@ function makeApi(initialSettings = {}) {
         { type: 'folder', relativePath: 'Client', name: 'Client' },
       ],
     },
+    i18n: locale ? {
+      t(key, params, fallback) {
+        return String(locale[key] || fallback || key).replace(/\{(\w+)\}/g, (_match, name) => String((params || {})[name] ?? ''));
+      },
+    } : null,
     storedEntries(key) {
       return settings[key] || [];
     },
@@ -245,8 +252,11 @@ function byData(container, attr, value) {
     toolRequest: { type: 'work-session-candidate', candidate },
   });
   if (!candidateView.container.textContent.includes('Review possible journal entry')) throw new Error('candidate review modal was not opened');
-  if (!candidateView.container.textContent.includes('Workspace: Project')) throw new Error('candidate workspace was not shown for review');
+  if (!candidateView.container.textContent.includes('Deal: Project')) throw new Error('candidate Deal was not shown for review');
   if (!candidateView.container.textContent.includes('Estimated duration: 51 min')) throw new Error('candidate duration was not shown for review');
+  if (candidateView.container.textContent.includes('browser.capture.selection') || candidateView.container.textContent.includes('verstak.browser-inbox') || candidateView.container.textContent.includes('capture-1')) {
+    throw new Error('candidate review exposed technical Activity identifiers');
+  }
   if (byData(candidateView.container, 'data-journal-input', 'title').value !== '') throw new Error('candidate review must start with an empty title');
   if (byData(candidateView.container, 'data-journal-input', 'summary').value !== '') throw new Error('candidate review must start with an empty body');
   if (byData(candidateView.container, 'data-journal-input', 'minutes').value !== '51') throw new Error('candidate review must prefill the factual duration');
@@ -271,6 +281,15 @@ function byData(container, attr, value) {
   }
   if (walk(candidateView.container, (node) => node.getAttribute && node.getAttribute('data-journal-action') === 'view-activity')) {
     throw new Error('journal rows must not navigate to Activity by default');
+  }
+
+  const russianCandidateView = await mountWithApi(makeApi({}, russianLocale), {
+    workspaceNode: { name: 'Project' },
+    workspaceRootPath: 'Project',
+    toolRequest: { type: 'work-session-candidate', candidate },
+  });
+  if (!russianCandidateView.container.textContent.includes('Дело: Project') || !russianCandidateView.container.textContent.includes('Захвачено выделение')) {
+    throw new Error('candidate review was not localized');
   }
 
   byData(candidateView.container, 'data-journal-action', 'delete').click();
@@ -350,6 +369,7 @@ function byData(container, attr, value) {
 
   component.unmount && component.unmount(container);
   component.unmount && component.unmount(candidateView.container);
+  component.unmount && component.unmount(russianCandidateView.container);
   component.unmount && component.unmount(todoView.container);
   component.unmount && component.unmount(duplicateTodoView.container);
   component.unmount && component.unmount(globalView.container);

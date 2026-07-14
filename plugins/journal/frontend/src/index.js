@@ -363,6 +363,32 @@
       modalHost.setAttribute('hidden', 'hidden');
     }
 
+    function activityLabel(activity) {
+      var type = text(activity && activity.type);
+      var labels = {
+        'browser.capture.link': ['ui.activity.captureLink', 'Link captured'],
+        'browser.capture.selection': ['ui.activity.captureSelection', 'Selection captured'],
+        'browser.capture.page': ['ui.activity.capturePage', 'Page captured'],
+        'file.created': ['ui.activity.fileCreated', 'File created'],
+        'file.updated': ['ui.activity.fileUpdated', 'File updated'],
+        'file.deleted': ['ui.activity.fileDeleted', 'File deleted'],
+        'note.saved': ['ui.activity.noteSaved', 'Note saved'],
+        'workspace.created': ['ui.activity.dealCreated', 'Deal created'],
+        'workspace.renamed': ['ui.activity.dealRenamed', 'Deal renamed']
+      };
+      var label = labels[type] || ['ui.activity.generic', 'Activity'];
+      return tr(label[0], null, label[1]);
+    }
+
+    function entryMeta(entry) {
+      var facts = [entry.workspaceRootPath, entry.billable ? tr('ui.meta.billable', null, 'billable') : tr('ui.meta.nonBillable', null, 'non-billable')];
+      if (entry.activityIds.length) {
+        facts.push(tr(entry.activityIds.length === 1 ? 'ui.meta.activities.one' : 'ui.meta.activities.many', { count: entry.activityIds.length }, entry.activityIds.length + ' linked activities'));
+      }
+      if (entry.sourceTodoId) facts.push(tr('ui.meta.todo', null, 'linked todo'));
+      return facts.join(' · ');
+    }
+
     function showEntryModal(existingEntry, candidate, completedTodo) {
       var editing = !!existingEntry;
       var reviewingCandidate = !editing && !!candidate;
@@ -406,22 +432,22 @@
       }
 
       var candidateContext = reviewingCandidate ? el('div', { className: 'journal-candidate-context', 'data-journal-candidate': candidate.candidateId }, [
-        el('strong', { textContent: 'Possible journal entry' }),
-        el('div', { textContent: 'Workspace: ' + candidate.workspaceRootPath }),
-        el('div', { textContent: 'Time: ' + candidateTime(candidate.startedAt) + ' - ' + candidateTime(candidate.endedAt) }),
-        el('div', { textContent: 'Estimated duration: ' + candidate.estimatedMinutes + ' min' }),
-        el('div', { textContent: 'Activities: ' + candidate.activityCount })
+        el('strong', { textContent: tr('ui.candidate.title', null, 'Possible journal entry') }),
+        el('div', { textContent: tr('ui.candidate.deal', { deal: candidate.workspaceRootPath }, 'Deal: ' + candidate.workspaceRootPath) }),
+        el('div', { textContent: tr('ui.candidate.time', { start: candidateTime(candidate.startedAt), end: candidateTime(candidate.endedAt) }, 'Time: ' + candidateTime(candidate.startedAt) + ' – ' + candidateTime(candidate.endedAt)) }),
+        el('div', { textContent: tr('ui.candidate.duration', { minutes: candidate.estimatedMinutes }, 'Estimated duration: ' + candidate.estimatedMinutes + ' min') }),
+        el('div', { textContent: tr('ui.candidate.activities', { count: candidate.activityCount }, 'Activities: ' + candidate.activityCount) })
       ]) : null;
       var candidateActivities = reviewingCandidate ? el('fieldset', { className: 'journal-candidate-activities' }, [
-        el('legend', { textContent: 'Linked activities' })
+        el('legend', { textContent: tr('ui.candidate.linkedActivities', null, 'Linked activities') })
       ].concat(activityInputs.map(function (item) {
-        var detail = (item.activity.occurredAt ? candidateTime(item.activity.occurredAt) + ' · ' : '') + item.activity.type + ' · ' + item.activity.activityId;
+        var detail = (item.activity.occurredAt ? candidateTime(item.activity.occurredAt) + ' · ' : '') + activityLabel(item.activity);
         return el('label', { className: 'journal-candidate-activity' }, [item.input, detail]);
       }))) : null;
       var todoContext = reviewingTodo ? el('div', { className: 'journal-candidate-context', 'data-journal-todo': completedTodo.id }, [
-        el('strong', { textContent: 'Completed todo' }),
-        el('div', { textContent: 'Workspace: ' + completedTodo.workspaceRootPath }),
-        completedTodo.completedAt ? el('div', { textContent: 'Completed: ' + candidateTime(completedTodo.completedAt) }) : null
+        el('strong', { textContent: tr('ui.todo.title', null, 'Completed todo') }),
+        el('div', { textContent: tr('ui.candidate.deal', { deal: completedTodo.workspaceRootPath }, 'Deal: ' + completedTodo.workspaceRootPath) }),
+        completedTodo.completedAt ? el('div', { textContent: tr('ui.todo.completed', { time: candidateTime(completedTodo.completedAt) }, 'Completed: ' + candidateTime(completedTodo.completedAt)) }) : null
       ]) : null;
 
       modalHost.innerHTML = '';
@@ -467,13 +493,13 @@
       var handledThrough = text(formValue && formValue.handledThrough).trim();
       var sourceTodoId = text(formValue && formValue.sourceTodoId || (existingEntry && existingEntry.sourceTodoId)).trim();
       if (!existingEntry && sourceCandidateId && entries.some(function (entry) { return entry.sourceCandidateId === sourceCandidateId; })) {
-        statusText = 'A journal entry already references this candidate';
+        statusText = tr('ui.candidate.duplicate', null, 'A journal entry already references this candidate');
         statusClass = 'error';
         render();
         return;
       }
       if (!existingEntry && sourceTodoId && entries.some(function (entry) { return entry.sourceTodoId === sourceTodoId; })) {
-        statusText = 'A journal entry already references this todo';
+        statusText = tr('ui.todo.duplicate', null, 'A journal entry already references this todo');
         statusClass = 'error';
         render();
         return;
@@ -500,7 +526,7 @@
       entries = sortEntries(entries);
       var targetEntries = entries.filter(function (item) { return item.workspaceRootPath === workspaceRoot; });
       closeEntryModal();
-      statusText = existingEntry ? 'Entry updated' : 'Entry added';
+      statusText = existingEntry ? tr('ui.updated', null, 'Entry updated') : tr('ui.added', null, 'Entry added');
       statusClass = '';
       persist(workspaceRoot, targetEntries).then(function () {
         if (!sessionID || !handledThrough || !api || !api.events || typeof api.events.publish !== 'function') return undefined;
@@ -535,9 +561,9 @@
           el('div', { className: 'journal-main' }, [
             el('div', { className: 'journal-entry-title', textContent: entry.title }),
             entry.summary ? el('div', { className: 'journal-summary', textContent: entry.summary }) : null,
-            el('div', { className: 'journal-meta', textContent: entry.workspaceRootPath + (entry.billable ? ' · billable' : ' · non-billable') + (entry.activityIds.length ? ' · ' + entry.activityIds.length + ' linked activities' : '') + (entry.sourceTodoId ? ' · linked todo' : '') })
+            el('div', { className: 'journal-meta', textContent: entryMeta(entry) })
           ]),
-          el('div', { className: 'journal-minutes', textContent: entry.minutes + ' min' }),
+          el('div', { className: 'journal-minutes', textContent: tr('ui.minutesValue', { minutes: entry.minutes }, entry.minutes + ' min') }),
           scope.mode === 'workspace' ? el('div', { className: 'journal-row-actions' }, [
             el('button', { className: 'journal-icon-btn', type: 'button', title: tr('ui.edit', null, 'Edit'), 'aria-label': tr('ui.edit', null, 'Edit'), 'data-journal-action': 'edit', innerHTML: iconSvg('edit'), onClick: function () { showEntryModal(entry); } }),
             el('button', { className: 'journal-icon-btn danger', type: 'button', title: tr('ui.delete', null, 'Delete'), 'aria-label': tr('ui.delete', null, 'Delete'), 'data-journal-action': 'delete', innerHTML: iconSvg('trash'), onClick: function () { deleteEntry(entry); } })
