@@ -102,6 +102,18 @@ else
 fi
 
 echo ""
+echo "[user-facing errors]"
+if command -v node &>/dev/null; then
+  set +e
+  node "$ROOT/scripts/check-user-facing-errors.js"
+  STATUS=$?
+  set -e
+  report "user-facing errors" "$STATUS"
+else
+  echo "  ⚠️  node not available — skipping user-facing error validation"
+fi
+
+echo ""
 # Guard official plugins against bypassing the v2 plugin API for note features.
 echo "[frontend API boundary]"
 if [ "$HAS_PYTHON" -eq 1 ]; then

@@ -277,7 +277,8 @@
     try {
       providers = await api.contributions.list('searchProviders');
     } catch (err) {
-      output.errors.push(err && err.message ? err.message : String(err));
+      console.warn('[verstak.search] list search providers:', err);
+      output.errors.push(true);
       return output;
     }
     providers = Array.isArray(providers) ? providers : [];
@@ -294,7 +295,8 @@
         var normalized = normalizeProviderResults(provider, response && response.result);
         output.results = output.results.concat(normalized.slice(0, remaining - output.results.length));
       } catch (err) {
-        output.errors.push(err && err.message ? err.message : String(err));
+        console.warn('[verstak.search] provider search:', err);
+        output.errors.push(true);
       }
     }
     return output;
@@ -371,7 +373,9 @@
           if (typeof alertEl.removeAttribute === 'function') alertEl.removeAttribute('hidden');
           alertEl.appendChild(el('details', {}, [
             el('summary', {}, [tr('ui.providersFailed', null, 'Some plugin search providers did not respond')]),
-            el('div', {}, [state.providerErrors.join('; ')])
+            el('div', {}, [state.providerErrors.map(function () {
+              return tr('ui.providerUnavailable', null, 'A search provider is unavailable.');
+            }).join(' ')])
           ]));
         } else if (typeof alertEl.setAttribute === 'function') {
           alertEl.setAttribute('hidden', 'hidden');
@@ -460,8 +464,9 @@
           state.providerErrors = external.errors;
         } catch (err) {
           if (seq !== searchSeq) return;
+          console.warn('[verstak.search] search:', err);
           state.results = [];
-          state.error = err && err.message ? err.message : String(err);
+          state.error = tr('ui.searchError', null, 'Could not search the vault. Please try again.');
           state.providerErrors = [];
         } finally {
           if (seq !== searchSeq) return;

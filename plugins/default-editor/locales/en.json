@@ -18,5 +18,5 @@
   "ui.saved": "Saved",
   "ui.discardConfirm": "Discard unsaved changes and reload from disk?",
   "ui.loading": "Loading...",
-  "ui.loadFailed": "Failed to load file"
+  "ui.loadFailed": "Could not load the file. Please try again."
 }

@@ -320,14 +320,14 @@
     return Promise.reject(new Error('clipboard unavailable'));
   }
 
-  function showExternalFallback(entry, mode, reason) {
+  function showExternalFallback(entry, mode) {
     if (!entry) return;
     var pathToShow = entry.relativePath;
     if (mode === 'explorer' && entry.type !== 'folder') {
       pathToShow = parentPath(entry.relativePath) || entry.relativePath;
     }
     var title = mode === 'explorer' ? 'Show in Explorer' : 'Open External';
-    var message = title + ' failed.\n' + (reason ? String(reason) + '\n' : '') + 'Vault-relative path:\n' + pathToShow;
+    var message = title + ' failed.\nVault-relative path:\n' + pathToShow;
     confirmModal(message, { confirmText: 'Copy Path', cancelText: 'Close' }).then(function (copy) {
       if (!copy) return;
       copyTextToClipboard(pathToShow).catch(function (err) {
@@ -372,6 +372,13 @@
       function tr(key, params, fallback) {
         if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
         return fallback || key;
+      }
+
+      function reportError(key, fallback, err) {
+        if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+          console.warn('[verstak.files] ' + key, err);
+        }
+        return tr(key, null, fallback);
       }
 
       function scopedPath(local) {
@@ -714,10 +721,10 @@
           renderList();
         }).catch(function (err) {
           if (disposed) return;
+          console.warn('[verstak.files] load error:', err);
           listContainer.innerHTML = '';
           listContainer.appendChild(el('div', { className: 'files-error' }, [
-            el('div', {}, [tr('ui.loadFailed', null, 'Failed to load files')]),
-            el('div', { className: 'files-error-msg' }, [(err && err.message) ? err.message : String(err)])
+            el('div', {}, [tr('ui.loadFailed', null, 'Could not load files. Please try again.')])
           ]));
         });
       }
@@ -863,7 +870,7 @@
             api.workbench.openResource({ kind: 'vault-file', path: full, mode: 'edit', extension: ext ? '.' + ext : '', context: { sourcePluginId: 'verstak.files', sourceView: 'files' } }).catch(function () {});
           }
         }).catch(function (err) {
-          setCreateError('Error: ' + ((err && err.message) ? err.message : String(err)));
+          setCreateError(reportError('ui.createError', 'Could not create this item. Please try again.', err));
         });
       }
 
@@ -923,7 +930,7 @@
               setRenameError('A file with that name already exists');
               return;
             }
-            setRenameError('Error: ' + ((err && err.message) ? err.message : String(err)));
+            setRenameError(reportError('ui.renameError', 'Could not rename this item. Please try again.', err));
           });
         });
       }
@@ -935,7 +942,9 @@
             if (!ok) return;
             api.files.trash(entry.relativePath).then(function () {
               loadEntries();
-            }).catch(function (err) { window.alert((err && err.message) ? err.message : String(err)); });
+            }).catch(function (err) {
+              window.alert(reportError('ui.trashError', 'Could not move this item to trash. Please try again.', err));
+            });
           });
         } else if (count > 1) {
           confirmModal('Move ' + count + ' items to trash?', { danger: true }).then(function (ok) {
@@ -994,11 +1003,12 @@
         var filesApi = api && api.files;
         var action = mode === 'explorer' ? filesApi && filesApi.showInFolder : filesApi && filesApi.openExternal;
         if (typeof action !== 'function') {
-          showExternalFallback(entry, mode, 'files external-open API is unavailable.');
+          showExternalFallback(entry, mode);
           return;
         }
         action(entry.relativePath).catch(function (err) {
-          showExternalFallback(entry, mode, err && err.message ? err.message : err);
+          console.warn('[verstak.files] external open error:', err);
+          showExternalFallback(entry, mode);
         });
       }
 

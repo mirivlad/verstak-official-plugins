@@ -285,6 +285,14 @@
     var statusClass = '';
     var modalHost = el('div', { className: 'journal-modal-host', hidden: 'hidden' });
 
+    function reportError(key, fallback, err) {
+      if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+        console.warn('[verstak.journal] ' + key, err);
+      }
+      statusText = tr(key, null, fallback);
+      statusClass = 'error';
+    }
+
     var toolbar = el('div', { className: 'journal-toolbar' });
     var titleEl = el('span', { className: 'journal-title', textContent: scope.mode === 'global' ? tr('ui.title', null, 'Journal') : tr('ui.workspaceTitle', { workspace: scope.label }, 'Journal · ' + scope.label) });
     var countEl = el('span', { className: 'journal-count' });
@@ -311,8 +319,7 @@
       var target = cleanWorkspace(workspaceRoot || scope.workspaceRoot);
       if (!target) return Promise.resolve();
       return api.settings.write(WORKLOG_PREFIX + encodeKey(target), storageEntries(values || entries)).catch(function (err) {
-        statusText = tr('ui.saveError', { error: err && err.message ? err.message : String(err) }, 'Could not save journal: ' + (err && err.message ? err.message : String(err)));
-        statusClass = 'error';
+        reportError('ui.saveError', 'Could not save journal. Please try again.', err);
       });
     }
 
@@ -339,8 +346,7 @@
           statusText = tr('ui.aggregating', null, 'Aggregating worklogs');
           statusClass = '';
         }).catch(function (err) {
-          statusText = tr('ui.loadError', { error: err && err.message ? err.message : String(err) }, 'Could not load journal: ' + (err && err.message ? err.message : String(err)));
-          statusClass = 'error';
+          reportError('ui.loadError', 'Could not load journal. Please try again.', err);
         });
       }
       return api.settings.read(scope.key).then(function (stored) {
@@ -348,8 +354,7 @@
         statusText = tr('ui.ready', null, 'Ready');
         statusClass = '';
       }).catch(function (err) {
-        statusText = tr('ui.loadError', { error: err && err.message ? err.message : String(err) }, 'Could not load journal: ' + (err && err.message ? err.message : String(err)));
-        statusClass = 'error';
+        reportError('ui.loadError', 'Could not load journal. Please try again.', err);
       });
     }
 

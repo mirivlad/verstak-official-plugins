@@ -563,6 +563,14 @@
     var disposed = false;
     var unsubscribers = [];
 
+    function reportError(key, fallback, err) {
+      if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+        console.warn('[verstak.activity] ' + key, err);
+      }
+      statusText = tr(key, null, fallback);
+      statusClass = 'error';
+    }
+
     var toolbar = el('div', { className: 'activity-toolbar' });
     var titleEl = el('span', { className: 'activity-title', textContent: scope.mode === 'global' ? tr('ui.title', null, 'Activity') : tr('ui.workspaceTitle', { workspace: scope.label }, 'Activity · ' + scope.label) });
     var countEl = el('span', { className: 'activity-count' });
@@ -634,8 +642,7 @@
         ? events.filter(function (item) { return !item._storageKey || item._storageKey === GLOBAL_KEY; })
         : events;
       return api.settings.write(scope.key, storageEvents(toStore)).then(persistSessionRegistry).then(persistCandidateCaches).catch(function (err) {
-        statusText = tr('ui.saveError', { error: err && err.message ? err.message : String(err) }, 'Could not save activity: ' + (err && err.message ? err.message : String(err)));
-        statusClass = 'error';
+        reportError('ui.saveError', 'Could not save activity. Please try again.', err);
       });
     }
 
@@ -668,8 +675,7 @@
         statusText = tr('ui.cleared', null, 'Activity cleared');
         statusClass = '';
       }).catch(function (err) {
-        statusText = tr('ui.clearError', { error: err && err.message ? err.message : String(err) }, 'Could not clear activity: ' + (err && err.message ? err.message : String(err)));
-        statusClass = 'error';
+        reportError('ui.clearError', 'Could not clear activity. Please try again.', err);
       });
     }
 
@@ -797,8 +803,7 @@
         statusText = tr('ui.dismissed', null, 'Candidate dismissed');
         statusClass = '';
       }).catch(function (err) {
-        statusText = 'Could not dismiss candidate: ' + (err && err.message ? err.message : String(err));
-        statusClass = 'error';
+        reportError('ui.dismissError', 'Could not dismiss the suggestion. Please try again.', err);
       }).then(render);
     }
 
@@ -870,8 +875,7 @@
         updateCandidates();
         return persistSessionRegistry().then(persistCandidateCaches);
       }).catch(function (err) {
-        statusText = 'Could not load activity: ' + (err && err.message ? err.message : String(err));
-        statusClass = 'error';
+        reportError('ui.loadError', 'Could not load activity. Please try again.', err);
       });
     }
 
@@ -898,8 +902,7 @@
       return api.commands.register(WORKLOG_COMMAND_ID, listWorkSessionCandidates).then(function (unregister) {
         if (typeof unregister === 'function') unsubscribers.push(unregister);
       }).catch(function (err) {
-        statusText = 'Activity commands unavailable: ' + (err && err.message ? err.message : String(err));
-        statusClass = 'error';
+        reportError('ui.commandsUnavailable', 'Activity actions are unavailable. Please try again.', err);
       });
     }
 
@@ -917,8 +920,7 @@
         statusText = scope.mode === 'global' ? 'Listening for all activity' : 'Listening for workspace activity';
         statusClass = '';
       }).catch(function (err) {
-        statusText = 'Activity subscriptions unavailable: ' + (err && err.message ? err.message : String(err));
-        statusClass = 'error';
+        reportError('ui.subscriptionsUnavailable', 'Activity updates are unavailable. Please try again.', err);
       });
     }
 

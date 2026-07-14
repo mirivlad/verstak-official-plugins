@@ -101,6 +101,9 @@ function loadComponent(document, errorLog) {
   vm.runInNewContext(source, {
     console: {
       ...console,
+      warn(...args) {
+        errorLog.push(args.map((value) => String(value)).join(' '));
+      },
       error(...args) {
         errorLog.push(args.map((value) => String(value)).join(' '));
       },

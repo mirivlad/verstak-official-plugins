@@ -35,5 +35,15 @@
   "ui.copied": "{label} copied",
   "ui.rotateConfirm": "Rotate pairing token?",
   "ui.rotating": "Rotating...",
-  "ui.tokenRotated": "Token rotated"
+  "ui.tokenRotated": "Token rotated",
+  "ui.saveError": "Could not update the browser inbox. Please try again.",
+  "ui.createNoteError": "Could not create the note. Please try again.",
+  "ui.createLinkError": "Could not create the link. Please try again.",
+  "ui.openLinkError": "Could not open the link. Please try again.",
+  "ui.createFileError": "Could not create the file. Please try again.",
+  "ui.loadError": "Could not load the browser inbox. Please try again.",
+  "ui.receiverError": "The browser receiver is unavailable. Please try again.",
+  "ui.pairingLoadError": "Could not load browser connection settings. Please try again.",
+  "ui.clipboardError": "Could not copy to the clipboard. Please try again.",
+  "ui.tokenRotateError": "Could not rotate the pairing token. Please try again."
 }

@@ -495,10 +495,10 @@
           rebuildEditorArea();
         }).catch(function (err) {
           if (disposed) return;
+          console.warn('[default-editor] load error:', err);
           editorWrap.innerHTML = '';
           editorWrap.appendChild(el('div', { className: 'de-error' }, [
-            el('div', {}, [tr('ui.loadFailed', null, 'Failed to load file')]),
-            el('div', { className: 'de-error-msg' }, [(err && err.message) ? err.message : String(err)])
+            el('div', {}, [tr('ui.loadFailed', null, 'Could not load the file. Please try again.')])
           ]));
         });
       }

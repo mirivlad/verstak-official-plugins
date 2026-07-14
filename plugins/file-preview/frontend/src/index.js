@@ -143,8 +143,9 @@
           return null;
         });
       }).catch(function (err) {
+        console.warn('[file-preview] preview error:', err);
         body.className = 'fp-error';
-        body.textContent = tr('ui.error', { error: err && err.message ? err.message : String(err) }, 'Preview error: ' + (err && err.message ? err.message : String(err)));
+        body.textContent = tr('ui.error', null, 'Could not preview this file. Please try again.');
       });
       if (api.i18n && typeof api.i18n.onDidChangeLocale === 'function') {
         api.i18n.onDidChangeLocale(function () {

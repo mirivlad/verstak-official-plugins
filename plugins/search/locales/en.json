@@ -10,6 +10,8 @@
   "ui.searching": "Searching...",
   "ui.search": "Search",
   "ui.providersFailed": "Some plugin search providers did not respond",
+  "ui.providerUnavailable": "A search provider is unavailable.",
+  "ui.searchError": "Could not search the vault. Please try again.",
   "ui.noResults": "No results",
   "ui.open": "Open",
   "ui.count": "{count} result(s)"

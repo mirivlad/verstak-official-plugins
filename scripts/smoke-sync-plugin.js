@@ -9,14 +9,17 @@ const source = fs.readFileSync(sourcePath, 'utf8');
 if (!source.includes('settings.lastError')) {
   throw new Error('SyncSettings must render persisted settings.lastError');
 }
-if (!source.includes('sanitizeError(settings.lastError)')) {
-  throw new Error('SyncSettings must sanitize persisted sync errors before rendering');
+if (!source.includes('function reportError')) {
+  throw new Error('SyncSettings must map technical failures to localized action-specific errors');
 }
-if (!source.includes('Last sync error')) {
+if (/sanitizeError\(/.test(source) || /\{ error: sanitizeError/.test(source)) {
+  throw new Error('SyncSettings must not interpolate raw technical errors into user-facing messages');
+}
+if (!source.includes("tr('ui.lastSyncError'")) {
   throw new Error('SyncSettings must label the persisted sync error');
 }
-if (!source.includes('function formatSyncConflict')) {
-  throw new Error('SyncSettings must format individual sync conflicts');
+if (!source.includes("tr('ui.syncConflictItem'")) {
+  throw new Error('SyncSettings must hide technical conflict identifiers behind a user-facing summary');
 }
 if (!source.includes('conflictDetails')) {
   throw new Error('SyncSettings must store sync conflict details after Sync Now');

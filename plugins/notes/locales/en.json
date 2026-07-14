@@ -28,5 +28,10 @@
   "ui.existingFile": " Existing file: {path}.",
   "ui.chooseDifferent": " Please choose a different title.",
   "ui.trashTitle": "Move Note to Trash",
-  "ui.trashConfirm": "Move \"{title}\" to trash?"
+  "ui.trashConfirm": "Move \"{title}\" to trash?",
+  "ui.loadError": "Could not load notes. Please try again.",
+  "ui.actionError": "Could not complete this note action. Please try again.",
+  "ui.createError": "Could not create the note. Please try again.",
+  "ui.renameError": "Could not rename the note. Please try again.",
+  "ui.trashError": "Could not move the note to trash. Please try again."
 }

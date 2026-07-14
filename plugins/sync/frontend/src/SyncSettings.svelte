@@ -28,11 +28,9 @@
   const INPUT_STYLE = 'width:100%;background:#0f3460;border:1px solid #1a3a5c;color:#e0e0f0;padding:8px 10px;border-radius:4px;font-size:0.85rem;box-sizing:border-box;height:36px;'
   const INPUT_FOCUS_STYLE = INPUT_STYLE + 'outline:none;border-color:#4ecca3;'
 
-  function sanitizeError(msg) {
-    if (!msg) return tr('ui.unknownError', null, 'Unknown error')
-    let s = String(msg).replace(/<[^>]+>/g, '')
-    if (s.length > 200) s = s.substring(0, 200) + '...'
-    return s
+  function reportError(key, fallback, error) {
+    console.warn('[verstak.sync] operation failed:', error)
+    return tr(key, null, fallback)
   }
 
   function syncAPI() {
@@ -51,15 +49,21 @@
           syncInterval = saved.syncInterval || 5
         }
       }
-    } catch (_) {}
+    } catch (error) {
+      console.warn('[verstak.sync] settings load failed:', error)
+    }
     try {
       settings = await syncAPI().status()
       if (settings) {
         if (settings.serverUrl) serverUrl = settings.serverUrl
         if (settings.syncInterval != null) syncInterval = settings.syncInterval
         if (settings.syncInterval > 0) autoSync = true
+        if (settings.lastError) console.warn('[verstak.sync] last sync failed:', settings.lastError)
       }
-    } catch (_) { settings = null }
+    } catch (error) {
+      console.warn('[verstak.sync] status load failed:', error)
+      settings = null
+    }
   }
 
   load()
@@ -80,7 +84,7 @@
       resultMsg = tr('ui.settingsSaved', null, 'Settings saved.')
       resultKind = ''
     } catch (e) {
-      errorMsg = sanitizeError(e.message || e)
+      errorMsg = reportError('ui.saveFailed', 'Could not save sync settings. Please try again.', e)
     }
     loading = false
   }
@@ -97,7 +101,7 @@
       connectionResult = tr('ui.connectionSuccessful', null, 'Connection successful.')
     } catch (e) {
       connectionOk = false
-      connectionResult = tr('ui.connectionFailed', { error: sanitizeError(e.message || e) }, 'Connection failed: {error}')
+      connectionResult = reportError('ui.connectionFailed', 'Could not connect. Check the server address and credentials.', e)
     }
     loading = false
   }
@@ -115,7 +119,7 @@
       password = ''
       await load()
     } catch (e) {
-      errorMsg = sanitizeError(e.message || e)
+      errorMsg = reportError('ui.connectFailed', 'Could not connect this device. Please try again.', e)
     }
     loading = false
   }
@@ -129,23 +133,8 @@
     return parts.join(' · ')
   }
 
-  function conflictField(conflict, keys) {
-    for (const key of keys) {
-      const value = conflict && conflict[key]
-      if (value != null && String(value).trim()) return String(value)
-    }
-    return ''
-  }
-
-  function formatSyncConflict(conflict) {
-    const entityType = conflictField(conflict, ['entity_type', 'entityType']) || 'item'
-    const entityId = conflictField(conflict, ['entity_id', 'entityId', 'path']) || 'unknown'
-    const opId = conflictField(conflict, ['op_id', 'opId'])
-    const reason = conflictField(conflict, ['reason', 'message'])
-    const parts = [entityType + ': ' + entityId]
-    if (opId) parts.push('op ' + opId)
-    if (reason) parts.push(reason)
-    return parts.join(' · ')
+  function formatSyncConflict() {
+    return tr('ui.syncConflictItem', null, 'A synchronization conflict needs attention.')
   }
 
   async function runSyncNow() {
@@ -163,7 +152,7 @@
       resultKind = warning ? 'warning' : ''
       await load()
     } catch (e) {
-      errorMsg = sanitizeError(e.message || e)
+      errorMsg = reportError('ui.syncFailed', 'Could not synchronize. Please try again.', e)
     }
     loading = false
   }
@@ -194,7 +183,7 @@
       settings = null
       await load()
     } catch (e) {
-      errorMsg = sanitizeError(e.message || e)
+      errorMsg = reportError('ui.disconnectFailed', 'Could not disconnect from the server. Please try again.', e)
     }
     loading = false
   }
@@ -209,7 +198,7 @@
       resultKind = ''
       await load()
     } catch (e) {
-      errorMsg = sanitizeError(e.message || e)
+      errorMsg = reportError('ui.resetKeyFailed', 'Could not reset the sync key. Please try again.', e)
     }
     loading = false
   }
@@ -243,7 +232,7 @@
   {/if}
   {#if settings && settings.lastError && !errorMsg}
     <div style="padding:0.5rem 0.75rem;margin-bottom:0.75rem;background:rgba(255,107,107,0.1);border:1px solid rgba(255,107,107,0.3);border-radius:6px;color:#ff6b6b;font-size:0.85rem;">
-      {tr('ui.lastSyncError', { error: sanitizeError(settings.lastError) }, 'Last sync error: {error}')}
+      {tr('ui.lastSyncError', null, 'The last synchronization did not finish. Try again.')}
     </div>
   {/if}
 

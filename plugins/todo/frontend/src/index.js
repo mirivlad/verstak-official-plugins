@@ -402,11 +402,18 @@
       }).filter(function (item) { return item !== null; });
     }
 
+    function reportError(key, fallback, err) {
+      if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+        console.warn('[verstak.todo] ' + key, err);
+      }
+      statusText = tr(key, null, fallback);
+      statusClass = 'error';
+    }
+
     function syncNotifications() {
       if (!api || !api.notifications || typeof api.notifications.replace !== 'function') return Promise.resolve();
       return api.notifications.replace(notificationRequests()).catch(function (err) {
-        statusText = tr('ui.notificationError', { error: err && err.message ? err.message : String(err) }, 'Could not schedule reminders: ' + (err && err.message ? err.message : String(err)));
-        statusClass = 'error';
+        reportError('ui.notificationError', 'Could not schedule reminders. Please try again.', err);
       });
     }
 
@@ -415,8 +422,7 @@
       return api.settings.write(GLOBAL_KEY, storageTodos(sortTodos(todos))).then(function () {
         return syncNotifications();
       }).catch(function (err) {
-        statusText = tr('ui.saveError', { error: err && err.message ? err.message : String(err) }, 'Could not save todos: ' + (err && err.message ? err.message : String(err)));
-        statusClass = 'error';
+        reportError('ui.saveError', 'Could not save tasks. Please try again.', err);
       });
     }
 
@@ -426,8 +432,7 @@
         todos = sortTodos(normalizeTodos((settings || {})[GLOBAL_KEY]));
         return syncNotifications();
       }).catch(function (err) {
-        statusText = tr('ui.loadError', { error: err && err.message ? err.message : String(err) }, 'Could not load todos: ' + (err && err.message ? err.message : String(err)));
-        statusClass = 'error';
+        reportError('ui.loadError', 'Could not load tasks. Please try again.', err);
       });
     }
 

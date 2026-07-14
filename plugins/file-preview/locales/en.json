@@ -5,5 +5,5 @@
   "ui.openExternal": "Open External",
   "ui.preview": "Preview",
   "ui.loading": "Loading...",
-  "ui.error": "Preview error: {error}"
+  "ui.error": "Could not preview this file. Please try again."
 }

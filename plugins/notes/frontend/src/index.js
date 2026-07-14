@@ -324,6 +324,13 @@
         }
       }
 
+      function userFacingError(key, fallback, err) {
+        if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+          console.warn('[verstak.notes] ' + key, err);
+        }
+        return tr(key, null, fallback);
+      }
+
       function loadNotes() {
         listContainer.innerHTML = '';
         listContainer.appendChild(el('div', { className: 'notes-empty' }, [tr('ui.loading', null, 'Loading...')]));
@@ -335,7 +342,7 @@
           renderList();
         }).catch(function (err) {
           if (disposed) return;
-          renderEmpty('Error: ' + (err.message || err));
+          renderEmpty(userFacingError('ui.loadError', 'Could not load notes. Please try again.', err));
         });
       }
 
@@ -379,8 +386,7 @@
         }).then(function () {
           if (!disposed) setStatus(action.label + ' complete', 'success');
         }).catch(function (err) {
-          console.error('[notes] contribution action failed:', err);
-          if (!disposed) setStatus('Error: ' + (err && err.message ? err.message : err), 'error');
+          if (!disposed) setStatus(userFacingError('ui.actionError', 'Could not complete this note action. Please try again.', err), 'error');
         });
       }
 
@@ -533,7 +539,7 @@
             }).catch(function () {});
           }
         }).catch(function (err) {
-          setStatus('Error: ' + (err.message || err), 'error');
+          setStatus(userFacingError('ui.createError', 'Could not create the note. Please try again.', err), 'error');
         });
       }
 
@@ -568,7 +574,7 @@
           setStatus(tr('ui.renamed', null, 'Note renamed'), 'success');
           loadNotes();
         }).catch(function (err) {
-          setStatus('Error: ' + (err.message || err), 'error');
+          setStatus(userFacingError('ui.renameError', 'Could not rename the note. Please try again.', err), 'error');
         });
       }
 
@@ -585,7 +591,7 @@
             setStatus(tr('ui.trashed', null, 'Note moved to trash'), 'success');
             loadNotes();
           }).catch(function (err) {
-            setStatus('Error: ' + (err.message || err), 'error');
+            setStatus(userFacingError('ui.trashError', 'Could not move the note to trash. Please try again.', err), 'error');
           });
         });
       }

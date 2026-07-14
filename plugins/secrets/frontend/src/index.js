@@ -169,8 +169,8 @@
 
       function userFacingError(action, err) {
         var raw = (err && err.message) ? err.message : String(err || '');
-        if (typeof console !== 'undefined' && typeof console.error === 'function') {
-          console.error('[verstak.secrets] ' + action + ' failed', err);
+        if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+          console.warn('[verstak.secrets] ' + action + ' failed', err);
         }
         if (action === 'unlock') {
           var minimumLength = raw.match(/master password must be at least (\d+) characters/i);

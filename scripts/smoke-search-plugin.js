@@ -8,6 +8,7 @@ const sourcePath = path.join(root, 'plugins', 'search', 'frontend', 'src', 'inde
 const manifestPath = path.join(root, 'plugins', 'search', 'plugin.json');
 const source = fs.readFileSync(sourcePath, 'utf8');
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+const technicalErrors = [];
 
 class FakeNode {
   constructor(tagName) {
@@ -100,7 +101,15 @@ function makeDocument() {
 function loadComponent(document) {
   const registry = {};
   vm.runInNewContext(source, {
-    console,
+    console: {
+      ...console,
+      warn(...args) {
+        technicalErrors.push(args.map((value) => String(value)).join(' '));
+      },
+      error(...args) {
+        technicalErrors.push(args.map((value) => String(value)).join(' '));
+      },
+    },
     document,
     window: {
       VerstakPluginRegister(pluginId, bundle) {
@@ -253,11 +262,13 @@ async function wait(ms) {
   if (!container.textContent.includes('Project/Target Assets')) throw new Error('typing should search folder paths');
   if (!container.textContent.includes('Project/External/target.note')) throw new Error('external provider result should be rendered');
   if (!container.textContent.includes('External Notes')) throw new Error('external provider label should be rendered');
-  if (!container.textContent.includes('provider unavailable')) throw new Error('provider failure should be reported without failing search');
+  if (!container.textContent.includes('A search provider is unavailable.')) throw new Error('provider failure should be reported without failing search');
+  if (container.textContent.includes('provider unavailable')) throw new Error('provider failure leaked a raw backend error');
   if (!container.textContent.includes('Content match')) throw new Error('content result type was not rendered');
   if (!container.textContent.includes('Folder name')) throw new Error('folder result type was not rendered');
   if (!pluginData['search-index'] || !Array.isArray(pluginData['search-index'].files)) throw new Error('search index was not written to plugin data storage');
   if (providerCalls.some((call) => call.pluginId === 'verstak.search')) throw new Error('search must not call itself as an external provider');
+  if (!technicalErrors.some((entry) => entry.includes('provider unavailable'))) throw new Error('provider failure was not retained in the console log');
 
   input = queryInput();
   input.value = 'image';

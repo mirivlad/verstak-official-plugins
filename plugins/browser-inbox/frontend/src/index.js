@@ -376,6 +376,16 @@
       if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
       return fallback || key;
     }
+
+    function reportError(key, fallback, err) {
+      if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+        console.warn('[verstak.browser-inbox] ' + key, err);
+      }
+      statusText = tr(key, null, fallback);
+      statusClass = 'error';
+      render();
+    }
+
     statusText = tr('ui.connecting', null, 'Connecting to receiver events...');
 
     var toolbar = el('div', { className: 'browser-inbox-toolbar' });
@@ -496,9 +506,7 @@
 
     function publishMutation(action, payload, verify, verifySettings) {
       if (!api || !api.events || typeof api.events.publish !== 'function') {
-        statusText = 'Could not save inbox: events API unavailable';
-        statusClass = 'error';
-        render();
+        reportError('ui.saveError', 'Could not update the browser inbox. Please try again.');
         return Promise.resolve(false);
       }
       return api.events.publish(MUTATION_EVENT, Object.assign({ action: action }, payload || {})).then(function () {
@@ -516,9 +524,7 @@
         }
         return true;
       }).catch(function (err) {
-        statusText = 'Could not save inbox: ' + (err && err.message ? err.message : String(err));
-        statusClass = 'error';
-        render();
+        reportError('ui.saveError', 'Could not update the browser inbox. Please try again.', err);
         return false;
       });
     }
@@ -646,9 +652,7 @@
     function createNoteFromCapture(capture) {
       if (!capture || !capture.workspaceRootPath) return Promise.resolve();
       if (!api || !api.files || typeof api.files.writeText !== 'function') {
-        statusText = 'Could not create note: files API unavailable';
-        statusClass = 'error';
-        render();
+        reportError('ui.createNoteError', 'Could not create the note. Please try again.');
         return Promise.resolve();
       }
       var title = noteTitle(capture);
@@ -677,18 +681,14 @@
         statusClass = '';
         return archiveCapture(capture.captureId);
       }).catch(function (err) {
-        statusText = 'Could not create note: ' + (err && err.message ? err.message : String(err));
-        statusClass = 'error';
-        render();
+        reportError('ui.createNoteError', 'Could not create the note. Please try again.', err);
       });
     }
 
     function createLinkFromCapture(capture) {
       if (!capture || !capture.workspaceRootPath || !capture.url) return Promise.resolve();
       if (!api || !api.files || typeof api.files.writeText !== 'function') {
-        statusText = 'Could not create link: files API unavailable';
-        statusClass = 'error';
-        render();
+        reportError('ui.createLinkError', 'Could not create the link. Please try again.');
         return Promise.resolve();
       }
       var title = noteTitle(capture);
@@ -729,27 +729,21 @@
         statusClass = '';
         return archiveCapture(capture.captureId);
       }).catch(function (err) {
-        statusText = 'Could not create link: ' + (err && err.message ? err.message : String(err));
-        statusClass = 'error';
-        render();
+        reportError('ui.createLinkError', 'Could not create the link. Please try again.', err);
       });
     }
 
     function openCaptureURL(capture) {
       if (!capture || !capture.url || !api || !api.files || typeof api.files.openURL !== 'function') return Promise.resolve();
       return api.files.openURL(capture.url).catch(function (err) {
-        statusText = 'Could not open link: ' + (err && err.message ? err.message : String(err));
-        statusClass = 'error';
-        render();
+        reportError('ui.openLinkError', 'Could not open the link. Please try again.', err);
       });
     }
 
     function createFileFromCapture(capture) {
       if (!capture || !capture.workspaceRootPath || capture.kind !== 'file' || !capture.fileName || (!capture.fileText && !capture.fileDataBase64)) return Promise.resolve();
       if (!api || !api.files || (capture.fileDataBase64 ? typeof api.files.writeBytes !== 'function' : typeof api.files.writeText !== 'function')) {
-        statusText = 'Could not create file: files API unavailable';
-        statusClass = 'error';
-        render();
+        reportError('ui.createFileError', 'Could not create the file. Please try again.');
         return Promise.resolve();
       }
       var fileName = safeFileFilename(capture.fileName);
@@ -785,9 +779,7 @@
         statusClass = '';
         return archiveCapture(capture.captureId);
       }).catch(function (err) {
-        statusText = 'Could not create file: ' + (err && err.message ? err.message : String(err));
-        statusClass = 'error';
-        render();
+        reportError('ui.createFileError', 'Could not create the file. Please try again.', err);
       });
     }
 
@@ -1034,8 +1026,7 @@
           });
         });
       }).catch(function (err) {
-        statusText = 'Could not load inbox: ' + (err && err.message ? err.message : String(err));
-        statusClass = 'error';
+        reportError('ui.loadError', 'Could not load the browser inbox. Please try again.', err);
       });
     }
 
@@ -1093,8 +1084,7 @@
         statusText = scope.mode === 'global' ? 'Receiver ready for all workspaces' : 'Receiver ready for workspace';
         statusClass = '';
       }).catch(function (err) {
-        statusText = 'Receiver unavailable: ' + (err && err.message ? err.message : String(err));
-        statusClass = 'error';
+        reportError('ui.receiverError', 'The browser receiver is unavailable. Please try again.', err);
       });
     }
 
@@ -1201,6 +1191,13 @@
         statusEl.className = 'browser-inbox-settings-status' + (isError ? ' error' : '');
       }
 
+      function reportError(key, fallback, err) {
+        if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+          console.warn('[verstak.browser-inbox.settings] ' + key, err);
+        }
+        setStatus(tr(key, null, fallback), true);
+      }
+
       function setBusy(busy) {
         copyURLButton.disabled = busy;
         copyTokenButton.disabled = busy;
@@ -1226,7 +1223,7 @@
           applyPairing(pairing);
           setStatus('', false);
         }).catch(function (err) {
-          setStatus(text(err && err.message ? err.message : err), true);
+          reportError('ui.pairingLoadError', 'Could not load browser connection settings. Please try again.', err);
         }).then(function () {
           setBusy(false);
         });
@@ -1241,7 +1238,7 @@
         navigator.clipboard.writeText(value).then(function () {
           setStatus(tr('ui.copied', { label: label }, '{label} copied'), false);
         }).catch(function (err) {
-          setStatus(text(err && err.message ? err.message : err), true);
+          reportError('ui.clipboardError', 'Could not copy to the clipboard. Please try again.', err);
         });
       }
 
@@ -1261,7 +1258,7 @@
           applyPairing(pairing);
           setStatus(tr('ui.tokenRotated', null, 'Token rotated'), false);
         }).catch(function (err) {
-          setStatus(text(err && err.message ? err.message : err), true);
+          reportError('ui.tokenRotateError', 'Could not rotate the pairing token. Please try again.', err);
         }).then(function () {
           setBusy(false);
         });

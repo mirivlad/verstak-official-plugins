@@ -6,6 +6,7 @@ const vm = require('vm');
 const root = path.resolve(__dirname, '..');
 const sourcePath = path.join(root, 'plugins', 'browser-inbox', 'frontend', 'src', 'index.js');
 const source = fs.readFileSync(sourcePath, 'utf8');
+const technicalErrors = [];
 
 class FakeNode {
   constructor(tagName) {
@@ -113,7 +114,15 @@ function makeDocument() {
 function loadComponents(document) {
   const registry = {};
   const sandbox = {
-    console,
+    console: {
+      ...console,
+      warn(...args) {
+        technicalErrors.push(args.map((value) => String(value)).join(' '));
+      },
+      error(...args) {
+        technicalErrors.push(args.map((value) => String(value)).join(' '));
+      },
+    },
     Date,
     document,
     window: {
@@ -738,8 +747,11 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   if (!failedConversionApi.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'convert-conflict')) {
     throw new Error('failed conversion removed capture from queue');
   }
-  if (!failedConversionView.container.textContent.includes('Could not create note')) {
+  if (!failedConversionView.container.textContent.includes('Could not create the note. Please try again.')) {
     throw new Error('failed conversion did not render an error status');
+  }
+  if (failedConversionView.container.textContent.includes('file already exists')) {
+    throw new Error('failed conversion exposed a raw backend error');
   }
   if (failedConversionApi.publishedEvents.some((event) => event.name === 'browser.capture.converted')) {
     throw new Error('failed conversion published converted event');
@@ -827,7 +839,7 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   if (!failedLinkApi.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'convert-link-conflict')) {
     throw new Error('failed link conversion removed capture from queue');
   }
-  if (!failedLinkView.container.textContent.includes('Could not create link')) {
+  if (!failedLinkView.container.textContent.includes('Could not create the link. Please try again.')) {
     throw new Error('failed link conversion did not render an error status');
   }
   if (failedLinkApi.publishedEvents.some((event) => event.name === 'browser.capture.converted')) {
@@ -934,13 +946,17 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   if (!failedFileApi.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'convert-file-conflict')) {
     throw new Error('failed file conversion removed capture from queue');
   }
-  if (!failedFileView.container.textContent.includes('Could not create file')) {
+  if (!failedFileView.container.textContent.includes('Could not create the file. Please try again.')) {
     throw new Error('failed file conversion did not render an error status');
   }
   if (failedFileApi.publishedEvents.some((event) => event.name === 'browser.capture.converted')) {
     throw new Error('failed file conversion published converted event');
   }
   component.unmount && component.unmount(failedFileView.container);
+
+  if (!technicalErrors.some((entry) => entry.includes('file already exists'))) {
+    throw new Error('failed conversion did not retain its technical details in the console log');
+  }
 
   console.log('browser inbox plugin smoke passed');
 })().catch((err) => {

@@ -28,5 +28,8 @@
   "ui.noMatches": "No matches",
   "ui.clearFilter": "Clear filter",
   "ui.loading": "Loading...",
-  "ui.loadFailed": "Failed to load files"
+  "ui.loadFailed": "Could not load files. Please try again.",
+  "ui.createError": "Could not create this item. Please try again.",
+  "ui.renameError": "Could not rename this item. Please try again.",
+  "ui.trashError": "Could not move this item to trash. Please try again."
 }
