@@ -60,6 +60,11 @@
     '.secrets-table th{width:9rem;color:var(--vt-color-text-muted,#7f8aa3);font-weight:500;background:var(--vt-color-surface-muted,#111629)}',
     '.secrets-table td{color:var(--vt-color-text-primary,#f4f7fb);overflow-wrap:anywhere}',
     '.secrets-table tr:last-child th,.secrets-table tr:last-child td{border-bottom:0}',
+    '.secrets-modal-overlay{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6)}',
+    '.secrets-modal{width:24rem;max-width:90vw;display:grid;gap:.8rem;padding:1rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface,#15152c);box-shadow:var(--vt-elevation-menu,0 14px 32px rgba(0,0,0,.42))}',
+    '.secrets-modal-title{margin:0;font-size:.96rem}',
+    '.secrets-modal-message{margin:0;color:var(--vt-color-text-secondary,#b7c0d4);font-size:.84rem;line-height:1.45}',
+    '.secrets-modal-actions{display:flex;justify-content:flex-end;gap:.5rem}',
     '@media(max-width:780px){.secrets-root{grid-template-columns:1fr}.secrets-panel{border-right:0;border-bottom:1px solid #252b36;max-height:45vh}.secrets-row,.secrets-filters{grid-template-columns:1fr}}'
   ].join('\n');
 
@@ -97,10 +102,10 @@
       || (node && (node.rootPath || node.name || node.id)));
   }
 
-  function scopeLabel(record) {
+  function scopeLabel(record, translate) {
     var scope = record && record.scope || {};
-    if (scope.kind === ScopeWorkspace) return cleanWorkspace(scope.workspaceRootPath) || 'Deal';
-    return 'Global';
+    if (scope.kind === ScopeWorkspace) return cleanWorkspace(scope.workspaceRootPath) || translate('ui.deal', null, 'Deal');
+    return translate('ui.global', null, 'Global');
   }
 
   function selectedIDFromProps(props) {
@@ -111,16 +116,16 @@
     return decodeURIComponent(path.replace(/^\/+/, ''));
   }
 
-  function groupRecords(records) {
+  function groupRecords(records, translate) {
     var groups = {};
     records.forEach(function (record) {
-      var label = scopeLabel(record);
+      var label = scopeLabel(record, translate);
       groups[label] = groups[label] || [];
       groups[label].push(record);
     });
     return Object.keys(groups).sort(function (a, b) {
-      if (a === 'Global') return -1;
-      if (b === 'Global') return 1;
+      if (a === translate('ui.global', null, 'Global')) return -1;
+      if (b === translate('ui.global', null, 'Global')) return 1;
       return a.localeCompare(b);
     }).map(function (label) {
       groups[label].sort(function (a, b) {
@@ -152,6 +157,8 @@
       var searchQuery = '';
       var selectedRecord = null;
       var selectedValue = '';
+      var isValueVisible = false;
+      var deleteModal = null;
       var initialized = false;
       var unlocked = false;
       var statusText = '';
@@ -190,6 +197,7 @@
           read: 'Could not open this secret. Please try again.',
           save: 'Could not save the secret. Please try again.',
           delete: 'Could not delete the secret. Please try again.',
+          copyValue: 'Could not copy the secret value. Please try again.',
           copyLink: 'Could not copy the secret link. Please try again.',
           unlock: 'Could not unlock secrets. Check the master password and try again.'
         }[action] || 'Could not complete this action. Please try again.');
@@ -358,7 +366,7 @@
           children.push(el('div', { className: 'secrets-empty' }, [tr('ui.empty', null, 'No secrets')]));
           return children;
         }
-        groupRecords(visibleRecords).forEach(function (group) {
+        groupRecords(visibleRecords, tr).forEach(function (group) {
           children.push(el('div', { className: 'secrets-group' }, [group.label]));
           children.push(el('div', { className: 'secrets-list' }, group.records.map(function (record) {
             var active = selectedRecord && selectedRecord.id === record.id;
@@ -382,14 +390,16 @@
           el('h2', {}, [tr('ui.select', null, 'Select a secret')]),
           el('div', { className: statusError ? 'secrets-status error' : 'secrets-status' }, [statusText])
         ]);
+        var valueIsAvailable = !!selectedValue;
+        var valueDisplay = valueIsAvailable && isValueVisible ? selectedValue : '••••••••••••';
         return el('div', { className: 'secrets-card' }, [
           el('h2', {}, [selectedRecord.title || selectedRecord.id]),
           el('table', { className: 'secrets-table' }, [
             el('tbody', {}, [
-              fieldRow(tr('ui.group', null, 'Group'), scopeLabel(selectedRecord)),
+              fieldRow(tr('ui.group', null, 'Group'), scopeLabel(selectedRecord, tr)),
               fieldRow('ID', selectedRecord.id),
               fieldRow(tr('ui.username', null, 'Username'), selectedRecord.username || ''),
-              fieldRow(tr('ui.password', null, 'Password'), selectedValue ? selectedValue : '••••••••••••', selectedValue ? '' : 'secrets-hidden-value'),
+              fieldRow(tr('ui.password', null, 'Password'), valueDisplay, isValueVisible && valueIsAvailable ? 'secrets-secret-value' : 'secrets-hidden-value'),
               fieldRow(tr('ui.updated', null, 'Updated'), selectedRecord.updatedAt || '')
             ])
           ]),
@@ -400,6 +410,24 @@
               'data-secret-copy-link': selectedRecord.id,
               onClick: function () { copySecretLink(selectedRecord.id); }
             }, [tr('ui.copyLink', null, 'Copy secret link')]),
+            el('button', {
+              className: 'secrets-btn',
+              type: 'button',
+              disabled: !valueIsAvailable,
+              'data-secret-copy-value': selectedRecord.id,
+              onClick: function () { copySecretValue(selectedValue); }
+            }, [tr('ui.copyValue', null, 'Copy value')]),
+            el('button', {
+              className: 'secrets-btn',
+              type: 'button',
+              disabled: !valueIsAvailable,
+              'data-secret-toggle-value': selectedRecord.id,
+              onClick: function () {
+                if (!selectedValue) return;
+                isValueVisible = !isValueVisible;
+                render();
+              }
+            }, [isValueVisible ? tr('ui.hideValue', null, 'Hide value') : tr('ui.showValue', null, 'Show value')]),
             el('button', {
               className: 'secrets-btn',
               type: 'button',
@@ -547,6 +575,7 @@
         selectedID = id;
         selectedRecord = records.find(function (record) { return record.id === id; }) || null;
         selectedValue = '';
+        isValueVisible = false;
         render();
         if (!id) return Promise.resolve();
         return api.secrets.read(id).then(function (record) {
@@ -576,14 +605,68 @@
       }
 
       function deleteSecret(id) {
-        if (!id || !window.confirm(tr('ui.deleteConfirm', null, 'Delete this secret?'))) return;
+        if (!id) return;
+        removeDeleteModal();
+        var title = selectedRecord && selectedRecord.id === id ? selectedRecord.title || selectedRecord.id : id;
+        var overlay = el('div', {
+          className: 'secrets-modal-overlay',
+          'data-secret-delete-modal': '',
+          role: 'presentation'
+        });
+        var cancel = el('button', {
+          className: 'secrets-btn',
+          type: 'button',
+          'data-secret-delete-cancel': '',
+          onClick: removeDeleteModal
+        }, [tr('ui.cancel', null, 'Cancel')]);
+        var confirm = el('button', {
+          className: 'secrets-btn danger',
+          type: 'button',
+          'data-secret-delete-confirm': '',
+          onClick: function () {
+            removeDeleteModal();
+            confirmDeleteSecret(id);
+          }
+        }, [tr('ui.delete', null, 'Delete')]);
+        overlay.appendChild(el('div', {
+          className: 'secrets-modal',
+          role: 'dialog',
+          'aria-modal': 'true',
+          'aria-label': tr('ui.deleteSecretTitle', null, 'Delete secret')
+        }, [
+          el('h2', { className: 'secrets-modal-title' }, [tr('ui.deleteSecretTitle', null, 'Delete secret')]),
+          el('p', { className: 'secrets-modal-message' }, [tr('ui.deleteConfirm', { title: title }, 'Delete "' + title + '"?')]),
+          el('div', { className: 'secrets-modal-actions' }, [cancel, confirm])
+        ]));
+        document.body.appendChild(overlay);
+        deleteModal = overlay;
+        if (cancel.focus) cancel.focus();
+      }
+
+      function removeDeleteModal() {
+        if (deleteModal && typeof deleteModal.remove === 'function') deleteModal.remove();
+        else if (deleteModal && deleteModal.parentNode) deleteModal.parentNode.removeChild(deleteModal);
+        deleteModal = null;
+      }
+
+      function confirmDeleteSecret(id) {
         api.secrets.delete(id).then(function () {
           selectedID = '';
           selectedRecord = null;
           selectedValue = '';
+          isValueVisible = false;
           return loadRecords();
         }).catch(function (err) {
           setUserFacingError('delete', err);
+        });
+      }
+
+      function copySecretValue(value) {
+        if (!value) return;
+        writeClipboard(api, value).then(function () {
+          setStatus(tr('ui.valueCopied', null, 'Secret value copied'), false);
+        }).catch(function (err) {
+          setUserFacingError('copyValue', err);
         });
       }
 
@@ -614,6 +697,7 @@
 
       containerEl.__secretsCleanup = function () {
         disposed = true;
+        removeDeleteModal();
         if (typeof localeUnsubscribe === 'function') localeUnsubscribe();
       };
     },

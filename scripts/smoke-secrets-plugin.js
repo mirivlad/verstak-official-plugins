@@ -28,6 +28,16 @@ class FakeNode {
     return node;
   }
 
+  removeChild(node) {
+    this.children = this.children.filter((child) => child !== node);
+    node.parentNode = null;
+    return node;
+  }
+
+  remove() {
+    if (this.parentNode) this.parentNode.removeChild(this);
+  }
+
   setAttribute(name, value) {
     this.attributes[name] = String(value);
   }
@@ -235,7 +245,17 @@ async function flush() {
   if (!container.textContent.includes('Group')) throw new Error('secret field table missing Group row');
   if (!container.textContent.includes('Username')) throw new Error('secret field table missing Username row');
   if (!container.textContent.includes('Password')) throw new Error('secret field table missing Password row');
-  if (!container.textContent.includes('secret-value')) throw new Error('secret value was not shown in the field table');
+  if (container.textContent.includes('secret-value')) throw new Error('secret value must stay hidden until the user explicitly reveals it');
+  const copyValueButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-secret-copy-value') === 'client-a.db');
+  if (!copyValueButton) throw new Error('copy value button missing');
+  copyValueButton.click();
+  await flush();
+  if (!copied.includes('secret-value')) throw new Error('secret value was not copied');
+  const showValueButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-secret-toggle-value') === 'client-a.db');
+  if (!showValueButton) throw new Error('show value button missing');
+  showValueButton.click();
+  await flush();
+  if (!container.textContent.includes('secret-value')) throw new Error('secret value was not revealed after explicit request');
 
   const copyButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-secret-copy-link') === 'client-a.db');
   if (!copyButton) throw new Error('copy link button missing');
@@ -260,6 +280,20 @@ async function flush() {
   const deleteButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-secret-delete') === 'client-a.db');
   if (!deleteButton) throw new Error('delete button missing');
   deleteButton.click();
+  await flush();
+  if (deleted.includes('client-a.db')) throw new Error('secret delete must wait for confirmation');
+  const deleteConfirmModal = walk(document.body, (node) => node.getAttribute && node.getAttribute('data-secret-delete-modal') === '');
+  if (!deleteConfirmModal) throw new Error('secret delete confirmation modal missing');
+  const deleteCancelButton = walk(deleteConfirmModal, (node) => node.getAttribute && node.getAttribute('data-secret-delete-cancel') === '');
+  if (!deleteCancelButton) throw new Error('secret delete cancel button missing');
+  deleteCancelButton.click();
+  await flush();
+  if (deleted.includes('client-a.db')) throw new Error('secret delete ran after cancelling the confirmation');
+  deleteButton.click();
+  await flush();
+  const deleteConfirmButton = walk(document.body, (node) => node.getAttribute && node.getAttribute('data-secret-delete-confirm') === '');
+  if (!deleteConfirmButton) throw new Error('secret delete confirm button missing');
+  deleteConfirmButton.click();
   await flush();
   if (!deleted.includes('client-a.db')) throw new Error('secret delete was not called');
 
