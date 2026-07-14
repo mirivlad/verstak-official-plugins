@@ -224,7 +224,7 @@
     return EXT_MAP[ext] || 'generic';
   }
 
-  function fileIconLabel(category) {
+  function fileIconLabel(category, translate) {
     var labels = {
       folder: 'Folder',
       markdown: 'Markdown file',
@@ -244,7 +244,8 @@
       json: 'JSON file',
       generic: 'File'
     };
-    return labels[category] || labels.generic;
+    var label = labels[category] || labels.generic;
+    return typeof translate === 'function' ? translate('ui.icon.' + (labels[category] ? category : 'generic'), null, label) : label;
   }
 
   function fileIcon(entry) {
@@ -267,8 +268,8 @@
     return date.toLocaleString(undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
   }
 
-  function typeLabel(entry) {
-    if (entry.type === 'folder') return 'folder';
+  function typeLabel(entry, folderLabel) {
+    if (entry.type === 'folder') return folderLabel || 'Folder';
     return (entry.extension || extension(entry.name) || 'file').toLowerCase();
   }
 
@@ -381,6 +382,10 @@
       function tr(key, params, fallback) {
         if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
         return fallback || key;
+      }
+
+      function displayType(entry) {
+        return typeLabel(entry, tr('ui.folderType', null, 'Folder'));
       }
 
       function reportError(key, fallback, err) {
@@ -523,7 +528,7 @@
             if (a.type !== 'folder' && b.type === 'folder') return 1;
           }
           if (sortMode === 'type') {
-            var typeCmp = typeLabel(a).localeCompare(typeLabel(b));
+            var typeCmp = displayType(a).localeCompare(displayType(b));
             if (typeCmp) return typeCmp;
           }
           if (sortMode === 'modified-desc') {
@@ -645,7 +650,7 @@
 
         shown.forEach(function (entry) {
           var iconCategory = fileIconCategory(entry);
-          var iconLabel = fileIconLabel(iconCategory);
+          var iconLabel = fileIconLabel(iconCategory, tr);
           var row = el('div', {
             className: 'files-item' + (selectedPaths[entry.relativePath] ? ' selected' : ''),
             'data-file-name': entry.name,
@@ -678,7 +683,7 @@
               el('span', { className: 'files-item-icon', 'data-file-icon': iconCategory, title: iconLabel, 'aria-label': iconLabel, innerHTML: fileIcon(entry) }),
               el('span', { className: 'files-item-name', textContent: entry.name, title: entry.name })
             ]),
-            el('span', { className: 'files-item-meta' }, [typeLabel(entry)]),
+            el('span', { className: 'files-item-meta' }, [displayType(entry)]),
             el('span', { className: 'files-item-meta hide-narrow' }, [entry.type === 'folder' ? '' : formatSize(entry.size)]),
             el('span', { className: 'files-item-meta hide-narrow' }, [formatDate(entry.modifiedAt)]),
             el('div', { className: 'files-row-actions' }, [

@@ -233,6 +233,15 @@ function makeApi(options = {}) {
           size: 12,
           modifiedAt: '2026-06-27T00:00:00Z',
         }];
+        if (options.includeFolder) {
+          entries.push({
+            name: 'Archive',
+            relativePath: 'Docs/Archive',
+            type: 'folder',
+            size: 0,
+            modifiedAt: '2026-06-27T00:00:00Z',
+          });
+        }
         if (restored) {
           entries.push({
             name: 'deleted.md',
@@ -456,6 +465,7 @@ async function flush() {
   const russianDocument = makeDocument();
   const { component: russianComponent } = loadFilesComponent(russianDocument);
   const russianApi = makeApi({
+    includeFolder: true,
     translations: {
       'ui.open': 'Открыть',
       'ui.openExternal': 'Открыть во внешнем приложении',
@@ -465,13 +475,22 @@ async function flush() {
       'ui.cut': 'Вырезать',
       'ui.copy': 'Копировать',
       'ui.trash': 'Переместить в корзину',
+      'ui.folderType': 'Папка',
+      'ui.icon.markdown': 'Файл Markdown',
     },
   });
   const russianContainer = new FakeNode('div');
   russianComponent.mount(russianContainer, {}, russianApi);
   await flush();
+  if (!russianContainer.textContent.includes('Папка') || russianContainer.textContent.includes('folder')) {
+    throw new Error(`folder type was not localized: ${russianContainer.textContent}`);
+  }
   const russianList = walk(russianContainer, (node) => node.getAttribute && node.getAttribute('data-files-list') !== undefined);
   const russianRow = walk(russianContainer, (node) => node.getAttribute && node.getAttribute('data-file-path') === 'Docs/readme.md');
+  const russianIcon = walk(russianRow, (node) => node.getAttribute && node.getAttribute('data-file-icon') === 'markdown');
+  if (!russianIcon || russianIcon.getAttribute('title') !== 'Файл Markdown' || russianIcon.getAttribute('aria-label') !== 'Файл Markdown') {
+    throw new Error(`file icon label was not localized: ${russianIcon && russianIcon.getAttribute('title')}`);
+  }
   russianList.dispatchEvent('contextmenu', { target: russianRow, clientX: 20, clientY: 20 });
   const russianMenuText = russianDocument.body.textContent;
   ['Открыть во внешнем приложении', 'Показать в папке', 'Переименовать', 'Создать копию', 'Вырезать', 'Копировать', 'Переместить в корзину'].forEach((label) => {
