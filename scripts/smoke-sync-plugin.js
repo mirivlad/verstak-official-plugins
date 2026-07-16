@@ -27,5 +27,14 @@ if (!source.includes('conflictDetails')) {
 if (!source.includes('Sync conflicts')) {
   throw new Error('SyncSettings must label the conflict details section');
 }
+if (!source.includes('syncAPI().configure(serverUrl, username, password, vaultId)')) {
+  throw new Error('SyncSettings must pass the optional remote vault ID during pairing');
+}
+if (!source.includes('settings.lastWarning')) {
+  throw new Error('SyncSettings must render unresolved scanner warnings');
+}
+if (!source.includes("tr('ui.remoteVaultHint'")) {
+  throw new Error('SyncSettings must explain remote vault restoration');
+}
 
 console.log('sync plugin smoke passed');

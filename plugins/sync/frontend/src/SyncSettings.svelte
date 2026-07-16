@@ -13,6 +13,7 @@
   let connectionOk = null
 
   let serverUrl = ''
+  let vaultId = ''
   let username = ''
   let password = ''
   let syncInterval = 5
@@ -44,6 +45,7 @@
         const saved = await api.settings.read()
         if (saved) {
           serverUrl = saved.serverUrl || ''
+          vaultId = saved.vaultId || ''
           username = saved.username || ''
           autoSync = !!saved.autoSync
           syncInterval = saved.syncInterval || 5
@@ -56,6 +58,7 @@
       settings = await syncAPI().status()
       if (settings) {
         if (settings.serverUrl) serverUrl = settings.serverUrl
+        if (settings.vaultId) vaultId = settings.vaultId
         if (settings.syncInterval != null) syncInterval = settings.syncInterval
         if (settings.syncInterval > 0) autoSync = true
         if (settings.lastError) console.warn('[verstak.sync] last sync failed:', settings.lastError)
@@ -78,7 +81,7 @@
     resultMsg = ''
     try {
       if (api?.settings?.writeAll) {
-        await api.settings.writeAll({ serverUrl, username, autoSync, syncInterval })
+        await api.settings.writeAll({ serverUrl, vaultId, username, autoSync, syncInterval })
       }
       await syncAPI().setInterval(autoSync ? syncInterval : 0)
       resultMsg = tr('ui.settingsSaved', null, 'Settings saved.')
@@ -112,7 +115,7 @@
     errorMsg = ''
     connectionResult = ''
     try {
-      await syncAPI().configure(serverUrl, username, password)
+      await syncAPI().configure(serverUrl, username, password, vaultId)
       connectionResult = tr('ui.connectedSuccessfully', null, 'Connected successfully.')
       connectionOk = true
       username = ''
@@ -235,6 +238,11 @@
       {tr('ui.lastSyncError', null, 'The last synchronization did not finish. Try again.')}
     </div>
   {/if}
+  {#if settings && settings.lastWarning && !errorMsg}
+    <div style="padding:0.5rem 0.75rem;margin-bottom:0.75rem;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:6px;color:#f59e0b;font-size:0.85rem;">
+      {tr('ui.unresolvedFilesWarning', null, 'Some files are not synchronized yet. Resolve the file warning and run sync again.')}
+    </div>
+  {/if}
 
   <div style="background:#16213e;border:1px solid #0f3460;border-radius:8px;padding:1rem 1.25rem;margin-bottom:1rem;">
     <h3 style="margin:0 0 0.75rem;color:#e0e0f0;font-size:0.95rem;">{tr('ui.server', null, 'Server')}</h3>
@@ -242,6 +250,12 @@
     <div style="margin-bottom:0.75rem;">
       <label for="sync-server-url" style="display:block;color:#a0a0b8;font-size:0.85rem;margin-bottom:0.35rem;">{tr('ui.serverUrl', null, 'Server URL')}</label>
       <input id="sync-server-url" type="text" style={INPUT_STYLE} on:focus={e => e.target.style.cssText = INPUT_FOCUS_STYLE} on:blur={e => e.target.style.cssText = INPUT_STYLE} bind:value={serverUrl} placeholder="https://example.com" />
+    </div>
+
+    <div style="margin-bottom:0.75rem;">
+      <label for="sync-vault-id" style="display:block;color:#a0a0b8;font-size:0.85rem;margin-bottom:0.35rem;">{tr('ui.remoteVaultId', null, 'Remote vault ID (optional)')}</label>
+      <input id="sync-vault-id" type="text" style={INPUT_STYLE} on:focus={e => e.target.style.cssText = INPUT_FOCUS_STYLE} on:blur={e => e.target.style.cssText = INPUT_STYLE} bind:value={vaultId} />
+      <div style="color:#a0a0b8;font-size:0.78rem;margin-top:0.3rem;">{tr('ui.remoteVaultHint', null, 'Leave empty for this vault. Enter an existing remote vault ID to restore it on this device.')}</div>
     </div>
 
     <div style="margin-bottom:0.75rem;">
