@@ -31,6 +31,9 @@
 
   function reportError(key, fallback, error) {
     console.warn('[verstak.sync] operation failed:', error)
+    const code = String(error?.message || error || '').match(/sync-server:([a-z_]+)/)?.[1]
+    const localized = code ? tr(`ui.serverError.${code}`, null, '') : ''
+    if (localized && localized !== `ui.serverError.${code}`) return localized
     return tr(key, null, fallback)
   }
 

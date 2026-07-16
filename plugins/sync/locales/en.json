@@ -48,4 +48,14 @@
   "ui.status.disabled": "Not configured",
   "ui.status.error": "Error",
   "ui.status.revoked": "Revoked"
+  ,"ui.serverError.rate_limited": "Too many attempts. Wait a little and try again."
+  ,"ui.serverError.request_too_large": "The synchronization request is too large."
+  ,"ui.serverError.payload_too_large": "A file operation is too large to send inline."
+  ,"ui.serverError.too_many_operations": "Too many pending changes were sent at once. Try synchronization again."
+  ,"ui.serverError.blob_too_large": "This file exceeds the server blob size limit."
+  ,"ui.serverError.quota_exceeded": "The server storage quota for this vault has been reached."
+  ,"ui.serverError.blob_not_owned": "The file data must be uploaded before it can be synchronized."
+  ,"ui.serverError.blob_not_found": "The required file data is unavailable on the server."
+  ,"ui.serverError.unauthorized": "This device is no longer authorized. Connect it again."
+  ,"ui.serverError.forbidden": "The server denied this synchronization request."
 }

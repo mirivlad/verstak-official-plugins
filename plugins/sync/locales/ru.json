@@ -48,4 +48,14 @@
   "ui.status.disabled": "Не настроено",
   "ui.status.error": "Ошибка",
   "ui.status.revoked": "Доступ отозван"
+  ,"ui.serverError.rate_limited": "Слишком много попыток. Подождите и повторите попытку."
+  ,"ui.serverError.request_too_large": "Запрос синхронизации слишком велик."
+  ,"ui.serverError.payload_too_large": "Операция с файлом слишком велика для отправки в этом виде."
+  ,"ui.serverError.too_many_operations": "Одновременно отправлено слишком много изменений. Повторите синхронизацию."
+  ,"ui.serverError.blob_too_large": "Размер файла превышает разрешённый сервером лимит."
+  ,"ui.serverError.quota_exceeded": "Достигнута квота серверного хранилища для этого vault."
+  ,"ui.serverError.blob_not_owned": "Данные файла должны быть загружены до синхронизации операции."
+  ,"ui.serverError.blob_not_found": "Необходимые данные файла недоступны на сервере."
+  ,"ui.serverError.unauthorized": "Устройство больше не авторизовано. Подключите его заново."
+  ,"ui.serverError.forbidden": "Сервер отклонил этот запрос синхронизации."
 }
