@@ -6,6 +6,7 @@
   "common.save": "Сохранить",
   "common.create": "Создать",
   "common.select": "Выбрать",
+  "common.delete": "Удалить",
   "workspaceTree.title": "Дела",
   "workspaceTree.new": "Новое дело",
   "workspaceTree.nameRequired": "Имя обязательно",

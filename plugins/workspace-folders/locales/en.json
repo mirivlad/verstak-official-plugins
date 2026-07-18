@@ -6,6 +6,7 @@
   "common.save": "Save",
   "common.create": "Create",
   "common.select": "Select",
+  "common.delete": "Delete",
   "workspaceTree.title": "Deals",
   "workspaceTree.new": "New Deal",
   "workspaceTree.nameRequired": "Name is required",
