@@ -331,11 +331,9 @@
 
     row.addEventListener('click', function() {
       expandedFolders[node.id] = !isExpanded;
-      var containerEl = row.closest('.wf-tree-container');
-      if (containerEl) {
-        var treeContainer = containerEl.closest('div');
-        if (treeContainer) loadAndRender(treeContainer);
-      }
+      expandedFolders = expandedFolders;
+      var tc = row.closest('.wf-tree-container');
+      if (tc) renderTree(tc);
     });
 
     setupDragDrop(row, node, function(dragged, target) {
@@ -504,12 +502,18 @@
           errorEl.textContent = typeof result === 'string' ? result : result[1];
           return;
         }
-        var treeContainer = document.querySelector('.wf-tree-container');
-        if (treeContainer) loadAndRender(treeContainer);
-        // Auto-select the new workspace
-        if (api) {
-          setTimeout(function() { api.SetCurrentWorkspace(path).catch(function(){}); }, 300);
+        overlay.remove();
+        var tc = document.querySelector('.wf-tree-container');
+        if (tc) {
+          loadAndRender(tc);
+          setTimeout(function() {
+            api.SetCurrentWorkspace(path).then(function() {
+              loadAndRender(document.querySelector('.wf-tree-container'));
+            }).catch(function(){});
+          }, 300);
         }
+      }).catch(function(e) {
+        errorEl.textContent = String(e && e.message ? e.message : e);
       });
     } }, t('workspaceTree.create', 'Create Deal')));
     actions.appendChild(h('button', { className: 'wf-btn', onClick: function() { overlay.remove(); } }, t('common.cancel', 'Cancel')));
