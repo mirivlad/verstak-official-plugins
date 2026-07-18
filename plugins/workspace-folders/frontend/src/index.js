@@ -282,19 +282,19 @@
     container.innerHTML = '';
 
     // Header
-    var header = h('div', { className: 'wt-header' });
-    header.appendChild(h('span', { className: 'wt-title' }, t('workspaceTree.title', 'Deals')));
-    var addBtn = h('button', { className: 'wt-btn', title: t('workspaceTree.new', 'New Deal'), type: 'button' }, '+');
+    var header = h('div', { className: 'wft-header' });
+    header.appendChild(h('span', { className: 'wft-title' }, t('workspaceTree.title', 'Deals')));
+    var addBtn = h('button', { className: 'wft-btn', title: t('workspaceTree.new', 'New Deal'), type: 'button' }, '+');
     addBtn.addEventListener('click', function() { showCreateDealModal(''); });
     header.appendChild(addBtn);
-    var folderBtn = h('button', { className: 'wt-btn', title: t('folder.create', 'Create Folder'), type: 'button', style: { marginLeft: '2px' } });
+    var folderBtn = h('button', { className: 'wft-btn', title: t('folder.create', 'Create Folder'), type: 'button', style: { marginLeft: '2px' } });
     folderBtn.textContent = '📁';
     folderBtn.addEventListener('click', function() { showCreateFolderModal('', function() { loadAndRender(container); }); });
     header.appendChild(folderBtn);
     container.appendChild(header);
 
     // Tree list
-    var list = h('div', { className: 'wt-list' });
+    var list = h('div', { className: 'wft-list' });
     renderNodeChildren(list, '', 0);
     container.appendChild(list);
   }
@@ -314,11 +314,11 @@
 
   function renderFolderNode(parent, node, depth) {
     var isExpanded = expandedFolders[node.id] !== false;
-    var row = h('div', { className: 'wt-row wt-folder-row' });
+    var row = h('div', { className: 'wft-row wt-folder-row' });
     var indent = h('span', { style: { width: (depth * 16) + 'px', flexShrink: '0' } });
     row.appendChild(indent);
 
-    var chevron = h('span', { className: 'wt-chevron' }, isExpanded ? '\u25BE' : '\u25B8');
+    var chevron = h('span', { className: 'wft-chevron' }, isExpanded ? '\u25BE' : '\u25B8');
     row.appendChild(chevron);
 
     var icon = renderIconSVG(node.icon || 'folder', 13, node.color || undefined);
@@ -331,7 +331,7 @@
 
     // Actions (visible on hover)
     var actions = h('span', { className: 'wf-folder-actions' });
-    var editBtn = h('button', { className: 'wt-icon-btn', title: t('folder.edit', 'Edit'), type: 'button' });
+    var editBtn = h('button', { className: 'wft-icon-btn', title: t('folder.edit', 'Edit'), type: 'button' });
     editBtn.appendChild(renderIconSVG('pencil', 11));
     editBtn.addEventListener('click', function(e) { e.stopPropagation(); showEditFolderModal(node); });
     actions.appendChild(editBtn);
@@ -339,7 +339,7 @@
     delBtn.appendChild(renderIconSVG('trash', 11));
     delBtn.addEventListener('click', function(e) { e.stopPropagation(); deleteFolder(node); });
     actions.appendChild(delBtn);
-    var addWsBtn = h('button', { className: 'wt-icon-btn', title: t('workspaceTree.new', 'New Deal'), type: 'button' });
+    var addWsBtn = h('button', { className: 'wft-icon-btn', title: t('workspaceTree.new', 'New Deal'), type: 'button' });
     addWsBtn.appendChild(renderIconSVG('plus', 11));
     addWsBtn.addEventListener('click', function(e) { e.stopPropagation(); showCreateDealModal(node.id); });
     actions.appendChild(addWsBtn);
@@ -373,8 +373,8 @@
   }
 
   function renderWorkspaceNode(parent, node, depth) {
-    var wsNode = h('div', { className: 'wt-node vt-list-row' + (treeData.currentId === node.id ? ' selected' : '') });
-    var row = h('div', { className: 'wt-row' });
+    var wsNode = h('div', { className: 'wft-node ' + (treeData.currentId === node.id ? ' selected' : '') });
+    var row = h('div', { className: 'wft-row' });
 
     var indent = h('span', { style: { width: (depth * 16 + 12) + 'px', flexShrink: '0' } });
     row.appendChild(indent);
@@ -382,7 +382,7 @@
     var icon = renderIconSVG('layout-grid', 13);
     row.appendChild(icon);
 
-    var label = h('button', { className: 'wt-label', type: 'button' }, node.title || node.name);
+    var label = h('button', { className: 'wft-label', type: 'button' }, node.title || node.name);
     label.addEventListener('click', function() {
       if (api) {
         window.dispatchEvent(new CustomEvent('verstak:open-view', {
@@ -640,7 +640,7 @@
           // Add plugin CSS
           var styleEl = document.createElement('style');
           styleEl.textContent = getPluginCSS();
-          containerEl.appendChild(styleEl);
+          document.head.appendChild(styleEl);
 
           loadAndRender(containerEl);
         },
@@ -683,29 +683,29 @@
       '.wf-color-swatch { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--vt-color-border-strong, #2a2a4a); flex-shrink: 0; }\n' +
       '.wf-color-name { font-size: 0.75rem; color: var(--vt-color-text-secondary, #a1a1aa); }\n' +
       '.wf-folder-actions { display: flex; gap: 0.1rem; margin-left: auto; opacity: 0; }\n' +
-      '.wt-row:hover .wf-folder-actions { opacity: 1; }\n' +
+      '.wft-row:hover .wf-folder-actions { opacity: 1; }\n' +
       '.wf-folder-children { padding-left: 0; }\n' +
       '.wf-dragging { opacity: 0.4; }\n' +
       '.wf-drag-over { outline: 2px dashed var(--vt-color-accent, #4ecca3); outline-offset: -2px; border-radius: var(--vt-radius-sm, 4px); }\n' +
       '.wf-icon-picker-modal { width: min(48rem, 100%); }\n' +
       '.wf-color-picker-modal { width: min(28rem, 100%); }\n' +
       '.wf-tree-container { display: flex; flex-direction: column; flex: 1; overflow: hidden; }\n' +
-      '.wf-tree-container .wt-header { display: flex; align-items: center; gap: 0.3rem; padding: 0.7rem 0.6rem 0.35rem; border-bottom: 1px solid var(--vt-color-border, #2a2a4a); flex-shrink: 0; }\n' +
-      '.wf-tree-container .wt-title { color: var(--vt-color-text-muted, #8b8ba8); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; flex: 1; }\n' +
-      '.wf-tree-container .wt-list { min-height: 0; overflow-y: auto; padding: 0.2rem 0.6rem; }\n' +
-      '.wf-tree-container .wt-row { display: flex; align-items: center; gap: 0.35rem; padding: 0.15rem 0.4rem; min-height: 1.75rem; border-radius: var(--vt-radius-sm, 4px); cursor: pointer; }\n' +
-      '.wf-tree-container .wt-row:hover { background: var(--vt-color-surface-hover, #16213e); }\n' +
-      '.wf-tree-container .wt-folder-row:hover { color: var(--vt-color-accent, #4ecca3); }\n' +
-      '.wf-tree-container .wt-chevron { width: 0.7rem; font-size: 0.6rem; color: var(--vt-color-text-muted, #8b8ba8); flex-shrink: 0; user-select: none; }\n' +
-      '.wf-tree-container .wt-label { flex: 1; min-width: 0; background: none; border: none; color: var(--vt-color-text-secondary, #a1a1aa); font-size: 0.78rem; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n' +
-      '.wf-tree-container .wt-folder-label { color: var(--vt-color-text-secondary, #a1a1aa); font-weight: 500; }\n' +
-      '.wf-tree-container .wt-node.selected > .wt-row { background: var(--vt-color-surface-selected, rgba(78,204,163,0.08)); box-shadow: inset 2px 0 0 var(--vt-color-accent, #4ecca3); }\n' +
-      '.wf-tree-container .wt-icon-btn { width: 1.35rem; height: 1.35rem; min-height: 0; padding: 0; border: none; background: transparent; color: var(--vt-color-text-muted, #8b8ba8); cursor: pointer; border-radius: var(--vt-radius-sm, 4px); display: inline-flex; align-items: center; justify-content: center; }\n' +
-      '.wf-tree-container .wt-icon-btn:hover { color: var(--vt-color-accent, #4ecca3); }\n' +
-      '.wf-tree-container .wt-icon-btn.danger:hover { color: var(--vt-color-danger, #e94560); }\n' +
-      '.wf-tree-container .wt-btn { min-height: 1.45rem; background: transparent; border: 1px solid transparent; color: var(--vt-color-text-muted, #8b8ba8); cursor: pointer; font-size: 0.78rem; padding: 0.1rem 0.35rem; border-radius: var(--vt-radius-sm, 4px); }\n' +
-      '.wf-tree-container .wt-btn:hover { color: var(--vt-color-accent, #4ecca3); }\n' +
-      '.wf-tree-container .wt-error { padding: 0.5rem; font-size: 0.75rem; color: var(--vt-color-danger, #e94560); }\n' +
+      '.wf-tree-container .wft-header { display: flex; align-items: center; gap: 0.3rem; padding: 0.7rem 0.6rem 0.35rem; border-bottom: 1px solid var(--vt-color-border, #2a2a4a); flex-shrink: 0; }\n' +
+      '.wf-tree-container .wft-title { color: var(--vt-color-text-muted, #8b8ba8); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; flex: 1; }\n' +
+      '.wf-tree-container .wft-list { min-height: 0; overflow-y: auto; padding: 0.2rem 0.6rem; }\n' +
+      '.wf-tree-container .wft-row { display: flex; align-items: center; gap: 0.35rem; padding: 0.15rem 0.4rem; min-height: 1.75rem; border-radius: var(--vt-radius-sm, 4px); cursor: pointer; }\n' +
+      '.wf-tree-container .wft-row:hover { background: var(--vt-color-surface-hover, #16213e); }\n' +
+      '.wf-tree-container .wft-folder-row:hover { color: var(--vt-color-accent, #4ecca3); }\n' +
+      '.wf-tree-container .wft-chevron { width: 0.7rem; font-size: 0.6rem; color: var(--vt-color-text-muted, #8b8ba8); flex-shrink: 0; user-select: none; }\n' +
+      '.wf-tree-container .wft-label { flex: 1; min-width: 0; background: none; border: none; color: var(--vt-color-text-secondary, #a1a1aa); font-size: 0.78rem; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }\n' +
+      '.wf-tree-container .wft-folder-label { color: var(--vt-color-text-secondary, #a1a1aa); font-weight: 500; }\n' +
+      '.wf-tree-container .wft-node.selected > .wft-row { background: var(--vt-color-surface-selected, rgba(78,204,163,0.08)); box-shadow: inset 2px 0 0 var(--vt-color-accent, #4ecca3); }\n' +
+      '.wf-tree-container .wft-icon-btn { width: 1.35rem; height: 1.35rem; min-height: 0; padding: 0; border: none; background: transparent; color: var(--vt-color-text-muted, #8b8ba8); cursor: pointer; border-radius: var(--vt-radius-sm, 4px); display: inline-flex; align-items: center; justify-content: center; }\n' +
+      '.wf-tree-container .wft-icon-btn:hover { color: var(--vt-color-accent, #4ecca3); }\n' +
+      '.wf-tree-container .wft-icon-btn.danger:hover { color: var(--vt-color-danger, #e94560); }\n' +
+      '.wf-tree-container .wft-btn { min-height: 1.45rem; background: transparent; border: 1px solid transparent; color: var(--vt-color-text-muted, #8b8ba8); cursor: pointer; font-size: 0.78rem; padding: 0.1rem 0.35rem; border-radius: var(--vt-radius-sm, 4px); }\n' +
+      '.wf-tree-container .wft-btn:hover { color: var(--vt-color-accent, #4ecca3); }\n' +
+      '.wf-tree-container .wft-error { padding: 0.5rem; font-size: 0.75rem; color: var(--vt-color-danger, #e94560); }\n' +
     '';
   }
 })();
