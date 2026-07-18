@@ -1,12 +1,25 @@
+<div align="center">
+
 # Verstak Official Plugins
 
-The first-party plugin set for Verstak Desktop: Files, Trash, Notes, editor and
-preview providers, Browser Inbox, Activity, Journal, Todo, Search, Secrets and
-Templates. Plugin bundles are built into independent directories that the
-desktop host loads from its `plugins/` folder.
+### The first-party plugin set — Files, Notes, Editor, Activity, Journal and more.
+
+**English** · [Русский](README.ru.md)
+
+[![Release](https://img.shields.io/github/v/release/mirivlad/verstak-official-plugins?include_prereleases\&label=release)](https://github.com/mirivlad/verstak-official-plugins/releases)
+![Status](https://img.shields.io/badge/status-alpha-orange)
+[![License](https://img.shields.io/github/license/mirivlad/verstak-official-plugins)](LICENSE)
+
+</div>
 
 > **Alpha software.** Build this repository together with compatible
 > `verstak-desktop` and `verstak-sdk` checkouts.
+
+Verstak Official Plugins is the first-party plugin set for Verstak Desktop:
+Files, Trash, Notes, Default Editor, File Preview, Browser Inbox, Activity,
+Journal, Todo, Search, Secrets, Sync, and Templates. Plugin bundles are built
+into independent directories that the desktop host loads from its `plugins/`
+folder.
 
 ## Build
 
