@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "id": "verstak.workspace-folders",
+  "name": "Workspace Folders",
+  "version": "0.1.0",
+  "apiVersion": "0.1.0",
+  "description": "Nested folders with icons, colors and drag-and-drop for the Deal tree.",
+  "source": "official",
+  "icon": "folder",
+  "localization": {
+    "defaultLocale": "en",
+    "locales": {
+      "en": "locales/en.json",
+      "ru": "locales/ru.json"
+    }
+  },
+  "provides": ["workspace.folders"],
+  "requires": [
+    "verstak/core/files/v1",
+    "verstak/core/workspace/v1"
+  ],
+  "optionalRequires": [],
+  "permissions": [
+    "files.read",
+    "files.write",
+    "ui.register",
+    "events.publish",
+    "events.subscribe",
+    "storage.namespace"
+  ],
+  "frontend": {
+    "entry": "frontend/src/index.js",
+    "style": "frontend/src/style.css"
+  },
+  "contributes": {
+    "workspaceTree": {
+      "component": "FolderTreeView"
+    }
+  }
+}
