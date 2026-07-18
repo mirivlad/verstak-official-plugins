@@ -367,8 +367,8 @@
     var label = h('button', { className: 'wft-label', type: 'button' }, node.title || node.name);
     label.addEventListener('click', function() {
       if (api) {
-        window.dispatchEvent(new CustomEvent('verstak:open-view', {
-          detail: { viewId: '__overview', pluginId: 'verstak.shell', workspaceName: node.id, workspacePath: node.id }
+        window.dispatchEvent(new CustomEvent('verstak:workspace-selected', {
+          detail: { workspaceName: node.id, workspacePath: node.id, nodes: [] }
         }));
         api.SetCurrentWorkspace(node.id);
       }
@@ -672,6 +672,16 @@
           document.head.appendChild(styleEl);
 
           loadAndRender(containerEl);
+
+          // Listen for workspace selection changes
+          window.addEventListener('verstak:workspace-active-changed', function(e) {
+            var wsName = (e.detail && e.detail.workspaceName) || '';
+            if (wsName && treeData.currentId !== wsName) {
+              treeData.currentId = wsName;
+              var tc = document.querySelector('.wf-tree-container');
+              if (tc) renderTree(tc);
+            }
+          });
         },
         unmount: function(containerEl) {
           containerEl.innerHTML = '';
