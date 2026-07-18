@@ -504,9 +504,12 @@
           errorEl.textContent = typeof result === 'string' ? result : result[1];
           return;
         }
-        overlay.remove();
         var treeContainer = document.querySelector('.wf-tree-container');
         if (treeContainer) loadAndRender(treeContainer);
+        // Auto-select the new workspace
+        if (api) {
+          setTimeout(function() { api.SetCurrentWorkspace(path).catch(function(){}); }, 300);
+        }
       });
     } }, t('workspaceTree.create', 'Create Deal')));
     actions.appendChild(h('button', { className: 'wf-btn', onClick: function() { overlay.remove(); } }, t('common.cancel', 'Cancel')));
@@ -525,26 +528,41 @@
     Promise.all([
       api.listWorkspaces().catch(function() { return []; }),
       api.getCurrentWorkspace().catch(function() { return {}; }),
-      api.getTree().catch(function() { return { nodes: [] }; })
+      api.folders.listPaths().catch(function() { return []; })
     ]).then(function(results) {
       var workspaces = results[0] || [];
       var current = results[1] || {};
-      var tree = results[2] || {};
+      var folderMetaPaths = results[2] || [];
 
-      // Collect folder paths from workspace parents AND tree nodes
+      // Collect folder paths: from workspace parents + from metadata store
       var folderPaths = {};
+      function addFolderPath(id, name, parent) {
+        if (!folderPaths[id]) {
+          folderPaths[id] = { id: id, name: name || id.split('/').pop(), parent: parent || '' };
+        }
+      }
+
       (workspaces || []).forEach(function(ws) {
         var wsPath = ws.path || ws.rootPath || ws.name || '';
         var parts = wsPath.split('/');
         var cp = '';
         for (var i = 0; i < parts.length - 1; i++) {
           cp = cp ? cp + '/' + parts[i] : parts[i];
-          folderPaths[cp] = { id: cp, name: parts[i], parent: i > 0 ? parts.slice(0, i).join('/') : '' };
+          addFolderPath(cp, parts[i], i > 0 ? parts.slice(0, i).join('/') : '');
         }
       });
-      (tree.nodes || []).forEach(function(n) {
-        if (n.type === 'folder' && n.id && !folderPaths[n.id]) {
-          folderPaths[n.id] = { id: n.id, name: n.title || n.name, parent: n.parentId || '' };
+
+      // Add folders from metadata store (includes empty folders)
+      (folderMetaPaths || []).forEach(function(fp) {
+        var parts = fp.split('/');
+        var name = parts[parts.length - 1];
+        var parent = parts.length > 1 ? parts.slice(0, -1).join('/') : '';
+        addFolderPath(fp, name, parent);
+        // Also add ancestors
+        var cp = '';
+        for (var i = 0; i < parts.length - 1; i++) {
+          cp = cp ? cp + '/' + parts[i] : parts[i];
+          addFolderPath(cp, parts[i], i > 0 ? parts.slice(0, i).join('/') : '');
         }
       });
 
@@ -581,6 +599,14 @@
           });
         });
         treeData = { nodes: nodes, currentId: current.path || current.rootPath || '' };
+
+        // Default: all folders collapsed
+        var newExpanded = {};
+        nodes.forEach(function(n) {
+          if (n.type === 'folder') newExpanded[n.id] = false;
+        });
+        expandedFolders = newExpanded;
+
         renderTree(container);
       });
     }).catch(function() {
@@ -626,6 +652,7 @@
             api.MoveWorkspace = function(id, parentId) { return pluginApi.workspaces.move(id, parentId); };
             api.folders.setMetadata = function(path, meta) { return pluginApi.folders.setMetadata(path, meta); };
             api.folders.getMetadata = function(path) { return pluginApi.folders.getMetadata(path); };
+            api.folders.listPaths = function() { return pluginApi.folders.listPaths(); };
           }
 
           // i18n
@@ -662,7 +689,7 @@
       '.wf-input { width: 100%; min-height: 2rem; box-sizing: border-box; border: 1px solid var(--vt-color-border-strong, #2a2a4a); border-radius: var(--vt-radius-sm, 4px); background: #0f1424; color: var(--vt-color-text-primary, #e4e4e7); padding: 0.35rem 0.5rem; font: inherit; font-size: 0.84rem; }\n' +
       '.wf-input:focus { outline: none; border-color: var(--vt-color-accent, #4ecca3); box-shadow: var(--vt-focus-ring, 0 0 0 2px rgba(78,204,163,0.3)); }\n' +
       '.wf-field { display: grid; gap: 0.35rem; color: var(--vt-color-text-muted, #8b8ba8); font-size: 0.75rem; }\n' +
-      '.wf-field select { width: 100%; min-height: 2rem; box-sizing: border-box; border: 1px solid var(--vt-color-border-strong, #2a2a4a); border-radius: var(--vt-radius-sm, 4px); background: #0f1424; color: var(--vt-color-text-primary, #e4e4e7); padding: 0.35rem 0.5rem; font: inherit; font-size: 0.84rem; }\n' +
+      '.wf-field select { width: 100%; min-height: 2rem; box-sizing: border-box; border: 1px solid var(--vt-color-border-strong, #2a2a4a); border-radius: var(--vt-radius-sm, 4px); background: #0f1424; color: var(--vt-color-text-primary, #e4e4e7); padding: 0.35rem 0.5rem; font: inherit; font-size: 0.84rem; appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--vt-color-text-muted, #8b8ba8) 50%), linear-gradient(135deg, var(--vt-color-text-muted, #8b8ba8) 50%, transparent 50%); background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 1.7rem; cursor: pointer; }\n' +
       '.wf-error { color: var(--vt-color-danger, #e94560); font-size: 0.78rem; min-height: 1rem; }\n' +
       '.wf-btn { min-height: 1.55rem; background: transparent; border: 1px solid transparent; color: var(--vt-color-text-muted, #8b8ba8); cursor: pointer; font-size: 0.78rem; padding: 0.12rem 0.38rem; border-radius: var(--vt-radius-sm, 4px); }\n' +
       '.wf-btn:hover:not(:disabled) { color: var(--vt-color-accent, #4ecca3); }\n' +
