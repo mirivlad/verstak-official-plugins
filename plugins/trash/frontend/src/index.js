@@ -96,7 +96,10 @@
   }
 
   function typeLabel(entry) {
-    return entry && entry.originalType === 'folder' ? 'Folder' : 'File';
+    var t = entry && entry.originalType;
+    if (t === 'workspace') return 'Deal';
+    if (t === 'folder') return 'Folder';
+    return 'File';
   }
 
   function formatSize(value) {
@@ -230,7 +233,8 @@
         }, [
           el('option', { value: '' }, [tr('ui.allTypes', null, 'All types')]),
           el('option', { value: 'file' }, [tr('ui.files', null, 'Files')]),
-          el('option', { value: 'folder' }, [tr('ui.folders', null, 'Folders')])
+          el('option', { value: 'folder' }, [tr('ui.folders', null, 'Folders')]),
+          el('option', { value: 'workspace' }, [tr('ui.workspaces', null, 'Deals')])
         ]);
 
         var sortSelect = el('select', {
