@@ -37,13 +37,17 @@
     return (catalogs[locale] || catalogs.en)[key] || key;
   }
 
-  window.VerstakPluginRegister("verstak.folder-appearance", {
-    components: {
-      FolderAppearanceAction: {
-        mount: function(container, props, api) { return mountAppearance(container, props, api, "action"); }
+  try {
+    window.VerstakPluginRegister("verstak.folder-appearance", {
+      components: {
+        FolderAppearanceAction: {
+          mount: function(container, props, api) { return mountAppearance(container, props, api, "action"); }
+        }
       }
-    }
-  });
+    });
+  } catch(e) {
+    console.error("[folder-appearance] registration failed:", e);
+  }
 
   function mountAppearance(container, props, api, mode) {
     var locale = (api.i18n && api.i18n.getLocale) ? api.i18n.getLocale() : 'en';
@@ -56,8 +60,8 @@
     var visible = false;
 
     // Load existing appearance
-    if (api.folders && api.folders.getAppearance && props.folderId) {
-      api.folders.getAppearance(props.folderId).then(function(a) {
+    if ((api||{}).folders && (api||{}).folders.getAppearance && (props||{}).folderId) {
+      (api||{}).folders.getAppearance((props||{}).folderId).then(function(a) {
         if (a) { selectedIcon = a.icon || ''; selectedColor = a.color || ''; render(); }
       }).catch(function(){});
     }
@@ -139,8 +143,8 @@
     }
 
     function save() {
-      if (api.folders && api.folders.setAppearance && props.folderId) {
-        api.folders.setAppearance(props.folderId, { icon: selectedIcon, color: selectedColor }).catch(function(){});
+      if ((api||{}).folders && (api||{}).folders.setAppearance && (props||{}).folderId) {
+        (api||{}).folders.setAppearance((props||{}).folderId, { icon: selectedIcon, color: selectedColor }).catch(function(){});
       }
     }
 
