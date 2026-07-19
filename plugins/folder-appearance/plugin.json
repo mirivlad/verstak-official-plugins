@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "verstak.folder-appearance",
+  "name": "Folder Appearance",
+  "version": "0.1.0",
+  "apiVersion": "0.1.0",
+  "description": "Customize folder icons and colors in the workspace tree.",
+  "localization": {
+    "defaultLocale": "en",
+    "locales": { "en": "locales/en.json", "ru": "locales/ru.json" }
+  },
+  "source": "official",
+  "icon": "palette",
+  "requires": [
+    "verstak/core/files/v1",
+    "verstak/core/workspace/v1"
+  ],
+  "permissions": [
+    "files.read",
+    "files.write",
+    "ui.register"
+  ],
+  "contributes": {
+    "workspaceTreeNodeActions": [
+      { "component": "FolderAppearanceAction", "forKind": "folder", "position": 100 }
+    ]
+  },
+  "frontend": {
+    "entry": "frontend/src/index.js"
+  }
+}
