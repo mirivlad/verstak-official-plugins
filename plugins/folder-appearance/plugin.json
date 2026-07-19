@@ -21,7 +21,8 @@
   "permissions": [
     "files.read",
     "files.write",
-    "ui.register"
+    "ui.register",
+    "storage.namespace"
   ],
   "contributes": {
     "workspaceTreeNodeActions": [
