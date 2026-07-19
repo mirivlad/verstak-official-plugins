@@ -332,6 +332,7 @@
           state.entries = state.entries.filter(function (item) { return item.trashId !== entry.trashId; });
           state.busyId = '';
           state.status = 'Restored ' + nameFor(entry) + '.';
+          window.dispatchEvent(new CustomEvent('verstak:workspace-tree-changed'));
           render();
         }).catch(function (error) {
           if (state.disposed) return;
