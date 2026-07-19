@@ -15,6 +15,9 @@
     "verstak/core/files/v1",
     "verstak/core/workspace/v1"
   ],
+  "provides": [
+    "verstak/folder-appearance/v1"
+  ],
   "permissions": [
     "files.read",
     "files.write",
