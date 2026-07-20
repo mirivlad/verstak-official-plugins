@@ -17,6 +17,7 @@
     "events.subscribe",
     "events.publish",
     "browser.receiver.manage",
+    "files.openExternal",
     "files.read",
     "files.write",
     "storage.namespace",

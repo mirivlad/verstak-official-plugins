@@ -49,6 +49,7 @@
   "ui.tokenRotateError": "Could not rotate the pairing token. Please try again.",
   "ui.statusFilter": "Material status filter",
   "ui.workspaceFilter": "Deal filter",
+  "ui.workspaceLoadError": "Deal assignment is unavailable. Please try again.",
   "ui.assignment": "Assign to Deal",
   "ui.clearAssignment": "Clear assignment",
   "ui.empty": "No browser materials yet. Send a page, selection, or link from the extension.",

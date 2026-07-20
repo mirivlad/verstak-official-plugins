@@ -6,6 +6,7 @@ const vm = require('vm');
 const root = path.resolve(__dirname, '..');
 const sourcePath = path.join(root, 'plugins', 'browser-inbox', 'frontend', 'src', 'index.js');
 const source = fs.readFileSync(sourcePath, 'utf8');
+const manifest = JSON.parse(fs.readFileSync(path.join(root, 'plugins', 'browser-inbox', 'plugin.json'), 'utf8'));
 const catalogs = {
   en: JSON.parse(fs.readFileSync(path.join(root, 'plugins', 'browser-inbox', 'locales', 'en.json'), 'utf8')),
   ru: JSON.parse(fs.readFileSync(path.join(root, 'plugins', 'browser-inbox', 'locales', 'ru.json'), 'utf8')),
@@ -158,14 +159,17 @@ function makeApi(initialSettings = {}, locale = 'en') {
   const openedURLs = [];
   const publishedEvents = [];
   const workspaceEntries = [
-    { name: 'ClientA', relativePath: 'ClientA', type: 'folder' },
-    { name: 'Project', relativePath: 'Project', type: 'folder' },
+    { id: 'deal-client', name: 'ClientA', rootPath: 'ClientA' },
+    { id: 'deal-project', name: 'Project', rootPath: 'Project' },
+    { id: 'deal-nested', name: 'kkk', rootPath: 'ddd/333/kkk' },
+    { id: 'deal-other', name: '111', rootPath: 'sdfsdfsdfsdfsdfsdf/111' },
   ];
   const receiverPairing = {
     receiverUrl: 'http://127.0.0.1:47731/api/browser-inbox/v1/captures',
     receiverToken: 'initial-browser-token',
   };
   let nextWriteError = null;
+  let nextOpenError = null;
   function translate(key, params, fallback) {
     let value = catalogs[locale]?.[key] || catalogs.en[key] || fallback || key;
     Object.entries(params || {}).forEach(([name, replacement]) => {
@@ -233,6 +237,9 @@ function makeApi(initialSettings = {}, locale = 'en') {
     failNextWrite(message) {
       nextWriteError = new Error(message || 'write failed');
     },
+    failNextOpen(message) {
+      nextOpenError = new Error(message || 'open failed');
+    },
     events: {
       publish: async (name, payload) => {
         publishedEvents.push({ name, payload });
@@ -257,7 +264,10 @@ function makeApi(initialSettings = {}, locale = 'en') {
       },
     },
     files: {
-      list: async () => workspaceEntries.map((entry) => ({ ...entry })),
+      list: async () => [
+        { name: 'ddd', relativePath: 'ddd', type: 'folder' },
+        { name: '333', relativePath: 'ddd/333', type: 'folder' },
+      ],
       writeText: async (relativePath, content, options = {}) => {
         if (nextWriteError) {
           const err = nextWriteError;
@@ -275,8 +285,16 @@ function makeApi(initialSettings = {}, locale = 'en') {
         fileByteWrites.push({ relativePath, dataBase64, options });
       },
       openURL: async (url) => {
+        if (nextOpenError) {
+          const err = nextOpenError;
+          nextOpenError = null;
+          throw err;
+        }
         openedURLs.push(url);
       },
+    },
+    workspaces: {
+      list: async () => workspaceEntries.map((entry) => ({ ...entry })),
     },
     browserReceiver: {
       pairing: async () => ({ ...receiverPairing }),
@@ -312,6 +330,9 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
 }
 
 (async () => {
+  if (!manifest.permissions.includes('files.openExternal')) {
+    throw new Error('Browser Inbox manifest must declare files.openExternal');
+  }
   const settingsComponents = loadComponents(makeDocument());
   if (!settingsComponents.BrowserInboxSettings) throw new Error('BrowserInboxSettings was not registered');
 
@@ -476,7 +497,7 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   }
 
   component.unmount && component.unmount(container);
-  if (api.unsubscribed.length !== 16) throw new Error('component did not unsubscribe all capture handlers');
+  if (api.unsubscribed.length !== 32) throw new Error('component did not unsubscribe all capture and Deal handlers');
 
   const persistedApi = makeApi({ 'captures:workspace:Project': [captures[0]] });
   const persisted = await mountWithApi(persistedApi);
@@ -643,6 +664,19 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
 
   const assignmentSelect = walk(assignmentView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-assignment') === 'assignment-unassigned');
   if (!assignmentSelect) throw new Error('workspace assignment control was not rendered');
+  const assignmentLabels = assignmentSelect.children.map((node) => node.textContent);
+  if (!assignmentLabels.includes('ddd/333/kkk') || !assignmentLabels.includes('sdfsdfsdfsdfsdfsdf/111')) {
+    throw new Error('nested semantic Deals were not rendered as assignment options');
+  }
+  if (assignmentLabels.includes('ddd') || assignmentLabels.includes('ddd/333')) {
+    throw new Error('plain folders leaked into Deal assignment options');
+  }
+  assignmentSelect.value = 'ddd/333/kkk';
+  assignmentSelect.dispatchEvent('change');
+  await flush();
+  if (!assignmentApi.getStoredCaptures(globalKey).some((capture) => capture.captureId === 'assignment-unassigned' && capture.workspaceRootPath === 'ddd/333/kkk')) {
+    throw new Error('nested Deal assignment did not persist its full root path');
+  }
   assignmentSelect.value = 'ClientA';
   assignmentSelect.dispatchEvent('change');
   await flush();
@@ -806,6 +840,15 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   openLinkButton.click();
   await flush();
   if (linkConversionApi.openedURLs.join(',') !== 'https://example.com/article') throw new Error('open link did not use browser URL capability');
+  linkConversionApi.failNextOpen('shell rejected URL');
+  openLinkButton.click();
+  await flush();
+  if (!linkConversionView.container.textContent.includes('Could not open the link. Please try again.')) {
+    throw new Error('failed open link did not render a localized error');
+  }
+  if (linkConversionView.container.textContent.includes('shell rejected URL')) {
+    throw new Error('failed open link exposed a raw host error');
+  }
   createLinkButton.click();
   await flush();
   if (linkConversionApi.fileWrites.length !== 1) throw new Error(`expected one link write, got ${linkConversionApi.fileWrites.length}`);

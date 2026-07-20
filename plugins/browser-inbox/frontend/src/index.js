@@ -8,6 +8,7 @@
 
   var PLUGIN_ID = 'verstak.browser-inbox';
   var CAPTURE_EVENTS = ['browser.capture.page', 'browser.capture.selection', 'browser.capture.link', 'browser.capture.file'];
+  var WORKSPACE_EVENTS = ['workspace.created', 'workspace.renamed', 'workspace.trashed', 'workspace.restored'];
   var MAX_CAPTURES = 100;
   var LEGACY_KEY = 'captures';
   var GLOBAL_KEY = 'captures:global';
@@ -1056,17 +1057,21 @@
     }
 
     function loadWorkspaceOptions() {
-      if (!api || !api.files || typeof api.files.list !== 'function') return Promise.resolve();
-      return api.files.list('').then(function (entries) {
-        workspaceOptions = (Array.isArray(entries) ? entries : []).filter(function (entry) {
-          return text(entry && entry.type).toLowerCase() === 'folder';
-        }).map(function (entry) {
-          return cleanWorkspace(entry.relativePath || entry.name);
+      if (!api || !api.workspaces || typeof api.workspaces.list !== 'function') return Promise.resolve();
+      return api.workspaces.list().then(function (entries) {
+        var seen = {};
+        workspaceOptions = (Array.isArray(entries) ? entries : []).map(function (entry) {
+          return cleanWorkspace(entry && entry.rootPath);
         }).filter(function (workspaceRoot) {
-          return workspaceRoot && workspaceRoot.indexOf('/') === -1;
+          if (!workspaceRoot || seen[workspaceRoot]) return false;
+          seen[workspaceRoot] = true;
+          return true;
+        }).sort(function (a, b) {
+          return a.localeCompare(b, undefined, { sensitivity: 'base' });
         });
-      }).catch(function () {
+      }).catch(function (err) {
         workspaceOptions = [];
+        reportError('ui.workspaceLoadError', 'Deal assignment is unavailable. Please try again.', err);
       });
     }
 
@@ -1115,11 +1120,24 @@
       });
     }
 
+    function subscribeWorkspaceEvents() {
+      if (!api || !api.events || typeof api.events.subscribe !== 'function') return Promise.resolve();
+      return Promise.all(WORKSPACE_EVENTS.map(function (eventName) {
+        return api.events.subscribe(eventName, function () {
+          return loadWorkspaceOptions().then(function () {
+            if (!disposed) render();
+          });
+        }).then(function (unsubscribe) {
+          if (typeof unsubscribe === 'function') unsubscribers.push(unsubscribe);
+        });
+      }));
+    }
+
     render();
     Promise.all([loadStored(), loadWorkspaceOptions()]).then(function () {
       if (disposed) return;
       render();
-      return subscribeEvents();
+      return Promise.all([subscribeEvents(), subscribeWorkspaceEvents()]);
     }).then(function () {
       if (!disposed) render();
     });
