@@ -48,6 +48,15 @@
   "ui.status.disabled": "Не настроено",
   "ui.status.error": "Ошибка",
   "ui.status.revoked": "Доступ отозван"
+  ,"ui.status.syncing": "Синхронизация…"
+  ,"ui.status.pendingFirst": "Ожидается первая синхронизация"
+  ,"ui.status.pending": "Изменений в очереди: {count}"
+  ,"ui.status.syncedAt": "Синхронизировано {relative}"
+  ,"ui.status.server": "Сервер: {server}"
+  ,"ui.status.lastSuccess": "Последняя успешная синхронизация: {date}"
+  ,"ui.status.pendingCount": "Изменений в очереди: {count}"
+  ,"ui.status.warning": "Некоторые файлы требуют внимания."
+  ,"ui.status.lastError": "Последняя синхронизация завершилась ошибкой."
   ,"ui.serverError.rate_limited": "Слишком много попыток. Подождите и повторите попытку."
   ,"ui.serverError.request_too_large": "Запрос синхронизации слишком велик."
   ,"ui.serverError.payload_too_large": "Операция с файлом слишком велика для отправки в этом виде."

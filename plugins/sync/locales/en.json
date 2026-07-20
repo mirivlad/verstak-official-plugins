@@ -48,6 +48,15 @@
   "ui.status.disabled": "Not configured",
   "ui.status.error": "Error",
   "ui.status.revoked": "Revoked"
+  ,"ui.status.syncing": "Syncing…"
+  ,"ui.status.pendingFirst": "First sync pending"
+  ,"ui.status.pending": "{count} changes pending"
+  ,"ui.status.syncedAt": "Synced {relative}"
+  ,"ui.status.server": "Server: {server}"
+  ,"ui.status.lastSuccess": "Last successful sync: {date}"
+  ,"ui.status.pendingCount": "Pending changes: {count}"
+  ,"ui.status.warning": "Some files still need attention."
+  ,"ui.status.lastError": "The last synchronization failed."
   ,"ui.serverError.rate_limited": "Too many attempts. Wait a little and try again."
   ,"ui.serverError.request_too_large": "The synchronization request is too large."
   ,"ui.serverError.payload_too_large": "A file operation is too large to send inline."

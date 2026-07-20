@@ -1,5 +1,6 @@
 <script>
   import { onDestroy, onMount } from 'svelte'
+  import { deriveSyncState, formatExactSyncTime } from './syncState.js'
 
   export let api = null
 
@@ -20,6 +21,8 @@
   let autoSync = false
   let locale = api?.i18n?.getLocale?.() || 'en'
   let unsubscribeLocale
+
+  $: settingsPresentation = deriveSyncState(settings)
 
   function tr(key, params, fallback) {
     locale
@@ -87,6 +90,7 @@
         await api.settings.writeAll({ serverUrl, vaultId, username, autoSync, syncInterval })
       }
       await syncAPI().setInterval(autoSync ? syncInterval : 0)
+      await load()
       resultMsg = tr('ui.settingsSaved', null, 'Settings saved.')
       resultKind = ''
     } catch (e) {
@@ -159,6 +163,7 @@
       await load()
     } catch (e) {
       errorMsg = reportError('ui.syncFailed', 'Could not synchronize. Please try again.', e)
+      await load()
     }
     loading = false
   }
@@ -167,6 +172,20 @@
     autoSync = !autoSync
     if (autoSync && syncInterval < 1) syncInterval = 5
     saveSettings()
+  }
+
+  function settingsStatusText() {
+    const labels = {
+      success: tr('ui.status.connected', null, 'Connected'),
+      disconnected: tr('ui.status.disconnected', null, 'Disconnected'),
+      disabled: tr('ui.status.disabled', null, 'Not configured'),
+      error: tr('ui.status.error', null, 'Error'),
+      revoked: tr('ui.status.revoked', null, 'Revoked'),
+      syncing: tr('ui.status.syncing', null, 'Syncing…'),
+      pendingFirst: tr('ui.status.pendingFirst', null, 'First sync pending'),
+      pending: tr('ui.status.pending', { count: settingsPresentation.count }, '{count} changes pending'),
+    }
+    return labels[settingsPresentation.kind] || labels.disabled
   }
 
   function saveInterval() {
@@ -247,6 +266,18 @@
     </div>
   {/if}
 
+  {#if settings}
+    <div class="sync-settings-summary">
+      <strong>{settingsStatusText()}</strong>
+      {#if settings.lastSyncAt}
+        <span>{tr('ui.status.lastSuccess', { date: formatExactSyncTime(settings.lastSyncAt, locale) }, 'Last successful sync: {date}')}</span>
+      {/if}
+      {#if Number(settings.unpushedOps) > 0}
+        <span>{tr('ui.status.pendingCount', { count: settings.unpushedOps }, 'Pending changes: {count}')}</span>
+      {/if}
+    </div>
+  {/if}
+
   <div style="background:#16213e;border:1px solid #0f3460;border-radius:8px;padding:1rem 1.25rem;margin-bottom:1rem;">
     <h3 style="margin:0 0 0.75rem;color:#e0e0f0;font-size:0.95rem;">{tr('ui.server', null, 'Server')}</h3>
 
@@ -299,7 +330,7 @@
 
     {#if settings && settings.lastSyncAt}
       <div style="color:#a0a0b8;font-size:0.85rem;">
-        {tr('ui.lastSync', { date: settings.lastSyncAt }, 'Last sync: {date}')}
+        {tr('ui.lastSync', { date: formatExactSyncTime(settings.lastSyncAt, locale) }, 'Last sync: {date}')}
       </div>
     {/if}
   </div>
@@ -319,5 +350,20 @@
     width: 100%;
     max-width: none;
     box-sizing: border-box;
+  }
+  .sync-settings-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1rem;
+    margin-bottom: 0.75rem;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid #0f3460;
+    border-radius: 6px;
+    background: rgba(15, 52, 96, 0.3);
+    color: #a0a0b8;
+    font-size: 0.82rem;
+  }
+  .sync-settings-summary strong {
+    color: #e0e0f0;
   }
 </style>
