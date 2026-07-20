@@ -43,7 +43,7 @@ for plugin_dir in "$ROOT"/plugins/*/; do
   (
     cd "$backend_dir"
     GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC="$WINDOWS_CC" \
-      "$GO_BIN" build -o "$package_backend/$plugin_name.exe" .
+      "$GO_BIN" build -buildvcs=false -o "$package_backend/$plugin_name.exe" .
   )
   backend_count=$((backend_count + 1))
 done
