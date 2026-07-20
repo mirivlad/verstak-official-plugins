@@ -23,6 +23,10 @@
   let unsubscribeLocale
 
   $: settingsPresentation = deriveSyncState(settings)
+  $: passwordStored = !!settings?.tokenStored && !password
+  $: passwordPlaceholder = passwordStored
+    ? tr('ui.passwordStoredPlaceholder', null, '••••••••')
+    : ''
 
   function tr(key, params, fallback) {
     locale
@@ -106,7 +110,13 @@
     connectionOk = null
     errorMsg = ''
     try {
-      await syncAPI().testConnection(serverUrl, username, password)
+      if (passwordStored) {
+        const pairedStatus = await syncAPI().status()
+        settings = pairedStatus
+        if (!pairedStatus?.connected) throw new Error('stored device token is not connected')
+      } else {
+        await syncAPI().testConnection(serverUrl, username, password)
+      }
       connectionOk = true
       connectionResult = tr('ui.connectionSuccessful', null, 'Connection successful.')
     } catch (e) {
@@ -123,9 +133,11 @@
     connectionResult = ''
     try {
       await syncAPI().configure(serverUrl, username, password, vaultId)
+      if (api?.settings?.writeAll) {
+        await api.settings.writeAll({ serverUrl, vaultId, username, autoSync, syncInterval })
+      }
       connectionResult = tr('ui.connectedSuccessfully', null, 'Connected successfully.')
       connectionOk = true
-      username = ''
       password = ''
       await load()
     } catch (e) {
@@ -299,7 +311,10 @@
 
     <div style="margin-bottom:0.75rem;">
       <label for="sync-password" style="display:block;color:#a0a0b8;font-size:0.85rem;margin-bottom:0.35rem;">{tr('ui.password', null, 'Password')}</label>
-      <input id="sync-password" type="password" style={INPUT_STYLE} on:focus={e => e.target.style.cssText = INPUT_FOCUS_STYLE} on:blur={e => e.target.style.cssText = INPUT_STYLE} bind:value={password} />
+      <input id="sync-password" type="password" style={INPUT_STYLE} on:focus={e => e.target.style.cssText = INPUT_FOCUS_STYLE} on:blur={e => e.target.style.cssText = INPUT_STYLE} bind:value={password} placeholder={passwordPlaceholder} />
+      {#if settings?.tokenStored}
+        <div style="color:#a0a0b8;font-size:0.78rem;margin-top:0.3rem;">{tr('ui.passwordStoredHint', null, 'The paired device credential is stored. Enter a new password only to reconnect this device.')}</div>
+      {/if}
     </div>
 
     <div style="display:flex;gap:0.5rem;margin-top:1rem;">

@@ -39,6 +39,25 @@ if (!source.includes('settings.lastWarning')) {
 if (!source.includes("tr('ui.remoteVaultHint'")) {
   throw new Error('SyncSettings must explain remote vault restoration');
 }
+const configureSource = source.match(/async function configureSync\(\)[\s\S]*?\n  function syncResultWarning/)?.[0] || '';
+if (/\busername\s*=\s*''/.test(configureSource)) {
+  throw new Error('SyncSettings must keep the paired username visible');
+}
+if (!/syncAPI\(\)\.configure\([\s\S]*api\.settings\.writeAll\(\{ serverUrl, vaultId, username, autoSync, syncInterval \}\)/.test(source)) {
+  throw new Error('SyncSettings must persist the paired username after configure');
+}
+if (!source.includes('$: passwordStored = !!settings?.tokenStored && !password')) {
+  throw new Error('SyncSettings must derive a saved-password indication from the device token');
+}
+if (!source.includes('placeholder={passwordPlaceholder}')) {
+  throw new Error('SyncSettings must render the saved-password indication as a placeholder');
+}
+if (/password\s*=\s*['"](?:•|\*)+['"]/.test(source)) {
+  throw new Error('SyncSettings must never store the password placeholder as form data');
+}
+if (!source.includes('if (passwordStored)') || !source.includes('await syncAPI().status()')) {
+  throw new Error('SyncSettings must verify a stored device token without submitting an empty password');
+}
 
 if (!statusSource.includes('createSyncController')) {
   throw new Error('SyncStatusBar must own the automatic synchronization controller');

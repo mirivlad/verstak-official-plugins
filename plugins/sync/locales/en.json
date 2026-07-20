@@ -32,6 +32,8 @@
   "ui.remoteVaultHint": "Leave empty for this vault. Enter an existing remote vault ID to restore it on this device.",
   "ui.username": "Username",
   "ui.password": "Password",
+  "ui.passwordStoredPlaceholder": "••••••••",
+  "ui.passwordStoredHint": "The paired device credential is stored. Enter a new password only to reconnect this device.",
   "ui.testConnection": "Test Connection",
   "ui.connect": "Connect",
   "ui.behavior": "Sync Behavior",
