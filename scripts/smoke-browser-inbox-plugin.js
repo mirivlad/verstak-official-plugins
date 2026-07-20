@@ -162,7 +162,7 @@ function makeApi(initialSettings = {}, locale = 'en') {
     { id: 'deal-client', name: 'ClientA', rootPath: 'ClientA' },
     { id: 'deal-project', name: 'Project', rootPath: 'Project' },
     { id: 'deal-nested', name: 'kkk', rootPath: 'ddd/333/kkk' },
-    { id: 'deal-other', name: '111', rootPath: 'sdfsdfsdfsdfsdfsdf/111' },
+    { id: 'deal-inactive', name: '111', rootPath: 'sdfsdfsdfsdfsdfsdf/111', active: false },
   ];
   const receiverPairing = {
     receiverUrl: 'http://127.0.0.1:47731/api/browser-inbox/v1/captures',
@@ -294,7 +294,7 @@ function makeApi(initialSettings = {}, locale = 'en') {
       },
     },
     workspaces: {
-      list: async () => workspaceEntries.map((entry) => ({ ...entry })),
+      list: async () => workspaceEntries.filter((entry) => entry.active !== false).map(({ active, ...entry }) => ({ ...entry })),
     },
     browserReceiver: {
       pairing: async () => ({ ...receiverPairing }),
@@ -665,8 +665,11 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   const assignmentSelect = walk(assignmentView.container, (node) => node.getAttribute && node.getAttribute('data-browser-inbox-assignment') === 'assignment-unassigned');
   if (!assignmentSelect) throw new Error('workspace assignment control was not rendered');
   const assignmentLabels = assignmentSelect.children.map((node) => node.textContent);
-  if (!assignmentLabels.includes('ddd/333/kkk') || !assignmentLabels.includes('sdfsdfsdfsdfsdfsdf/111')) {
-    throw new Error('nested semantic Deals were not rendered as assignment options');
+  if (!assignmentLabels.includes('ddd/333/kkk')) {
+    throw new Error('active nested semantic Deal was not rendered as an assignment option');
+  }
+  if (assignmentLabels.includes('sdfsdfsdfsdfsdfsdf/111')) {
+    throw new Error('Deal without the Browser workspace tool leaked into assignment options');
   }
   if (assignmentLabels.includes('ddd') || assignmentLabels.includes('ddd/333')) {
     throw new Error('plain folders leaked into Deal assignment options');
