@@ -1011,23 +1011,19 @@
         var from = renameTarget.relativePath;
         var targetParent = parentPath(from);
         var to = targetParent ? targetParent + '/' + newName : newName;
-        api.files.metadata(to).then(function () {
-          if (to.toLowerCase() === from.toLowerCase() && to !== from) {
-            setRenameError(tr('ui.nameDiffersOnlyByCase', null, 'The name differs only by letter case.'));
+        if (to.toLowerCase() === from.toLowerCase() && to !== from) {
+          setRenameError(tr('ui.nameDiffersOnlyByCase', null, 'The name differs only by letter case.'));
+          return;
+        }
+        api.files.move(from, to, { overwrite: false }).then(function () {
+          cancelRename();
+          loadEntries();
+        }).catch(function (err) {
+          if (isConflictError(err)) {
+            setRenameError(tr('ui.nameConflict', null, 'An item with that name already exists.'));
             return;
           }
-          setRenameError(tr('ui.nameConflict', null, 'An item with that name already exists.'));
-        }, function () {
-          api.files.move(from, to, { overwrite: false }).then(function () {
-            cancelRename();
-            loadEntries();
-          }).catch(function (err) {
-            if (isConflictError(err)) {
-              setRenameError(tr('ui.nameConflict', null, 'An item with that name already exists.'));
-              return;
-            }
-            setRenameError(reportError('ui.renameError', 'Could not rename this item. Please try again.', err));
-          });
+          setRenameError(reportError('ui.renameError', 'Could not rename this item. Please try again.', err));
         });
       }
 
@@ -1204,23 +1200,21 @@
         var from = scopedPath(currentPath ? currentPath + '/' + name : name);
         var maxAttempts = 100;
 
-        function tryName(n) {
-          var newName = n === 1 ? base + ' (copy)' + ext : base + ' (copy ' + n + ')' + ext;
-          var to = scopedPath(currentPath ? currentPath + '/' + newName : newName);
-          return api.files.metadata(to).then(function () {
-            if (n >= maxAttempts) {
-              console.error('[files] Duplicate failed: all ' + maxAttempts + ' name variations are taken');
-              return null;
-            }
-            return tryName(n + 1);
-          }, function () {
-            return api.files.readText(from).then(function (content) {
-              return api.files.writeText(to, content, { createIfMissing: true, overwrite: false });
+        api.files.readText(from).then(function (content) {
+          function tryName(n) {
+            var newName = n === 1 ? base + ' (copy)' + ext : base + ' (copy ' + n + ')' + ext;
+            var to = scopedPath(currentPath ? currentPath + '/' + newName : newName);
+            return api.files.writeText(to, content, { createIfMissing: true, overwrite: false }).catch(function (err) {
+              if (!isConflictError(err)) throw err;
+              if (n >= maxAttempts) {
+                console.error('[files] Duplicate failed: all ' + maxAttempts + ' name variations are taken');
+                return null;
+              }
+              return tryName(n + 1);
             });
-          });
-        }
-
-        tryName(1).then(function (result) {
+          }
+          return tryName(1);
+        }).then(function (result) {
           if (result !== null) loadEntries();
         }).catch(function (err) {
           console.error('[files] Duplicate failed:', err);

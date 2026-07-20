@@ -264,7 +264,9 @@ function makeApi(options = {}) {
         }
         return entries;
       },
-      metadata: async () => { throw new Error('not-found'); },
+      // Wails returns the first value of (metadata, string), so a missing path
+      // currently arrives as an empty metadata object rather than a rejection.
+      metadata: async () => ({}),
       readText: async () => '# Readme\n',
       writeText: async (relativePath, content, options) => {
         created.push({ type: 'file', relativePath, content, options });
@@ -414,6 +416,16 @@ async function flush() {
 
   const list = walk(container, (node) => node.getAttribute && node.getAttribute('data-files-list') !== undefined);
   if (!list) throw new Error('files list not rendered');
+  list.dispatchEvent('contextmenu', { target: row, clientX: 20, clientY: 20 });
+
+  const duplicate = walk(document.body, (node) => node.getAttribute && node.getAttribute('data-files-menu-action') === 'duplicate');
+  if (!duplicate) throw new Error('Duplicate menu item not found');
+  duplicate.click();
+  await flush();
+  if (!api.created.some((entry) => entry.type === 'file' && entry.relativePath === 'readme (copy).md')) {
+    throw new Error(`duplicate file was incorrectly treated as an existing target: ${JSON.stringify(api.created)}`);
+  }
+
   list.dispatchEvent('contextmenu', { target: row, clientX: 20, clientY: 20 });
 
   const openExternal = walk(document.body, (node) => node.getAttribute && node.getAttribute('data-files-menu-action') === 'open-external');

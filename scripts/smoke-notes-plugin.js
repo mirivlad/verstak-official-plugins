@@ -346,6 +346,19 @@ async function mountNotes(api) {
     throw new Error('Escape did not close the rename modal');
   }
 
+  const thirdRow = walk(container, (node) => node.getAttribute && node.getAttribute('data-note-path') === 'Project/Notes/Third_Note.md');
+  const successfulRenameButton = walk(thirdRow, (node) => node.getAttribute && node.getAttribute('data-note-action') === 'rename');
+  if (!successfulRenameButton) throw new Error('unique note rename button not found');
+  successfulRenameButton.click();
+  const successfulRenameModal = walk(document.body, (node) => node.getAttribute && node.getAttribute('data-notes-rename-modal') !== undefined);
+  const successfulRenameInput = walk(successfulRenameModal, (node) => node.getAttribute && node.getAttribute('data-notes-rename-input') !== undefined);
+  successfulRenameInput.value = 'Renamed Note';
+  successfulRenameInput.dispatchEvent('keydown', { key: 'Enter' });
+  await flush();
+  if (!createApi.entries.has('Project/Notes/Renamed_Note.md') || createApi.entries.has('Project/Notes/Third_Note.md')) {
+    throw new Error('unique note rename was incorrectly reported as a conflict');
+  }
+
   const providerAction = walk(container, (node) => node.getAttribute && node.getAttribute('data-note-contribution-action') === 'provider.note.action');
   if (!providerAction) throw new Error('provider note action button not found');
   providerAction.click();

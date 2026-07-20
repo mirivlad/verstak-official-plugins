@@ -254,16 +254,11 @@
         if (!trimmedTitle) return Promise.reject(new Error('note title must not be empty'));
         var newPath = parentPath(notePath) + '/' + normalizeNoteFilename(trimmedTitle);
         if (newPath === notePath) return Promise.resolve({ path: notePath });
-        return api.files.metadata(newPath).then(function () {
-          return { path: newPath, conflict: true };
-        }).catch(function (err) {
-          if (!isNotFoundError(err)) throw err;
-          return api.files.move(notePath, newPath, { overwrite: false }).then(function () {
-            return { path: newPath };
-          }).catch(function (moveErr) {
-            if (isConflictError(moveErr)) return { path: newPath, conflict: true };
-            throw moveErr;
-          });
+        return api.files.move(notePath, newPath, { overwrite: false }).then(function () {
+          return { path: newPath };
+        }).catch(function (moveErr) {
+          if (isConflictError(moveErr)) return { path: newPath, conflict: true };
+          throw moveErr;
         });
       }
 
