@@ -1,4 +1,6 @@
 {
+  "manifest.name": "Оформление папок",
+  "manifest.description": "Настройка значков и цветов папок в дереве Дел.",
   "folderAppearance.title": "Настройка папки",
   "folderAppearance.search": "Поиск значка",
   "folderAppearance.color": "Цвет",

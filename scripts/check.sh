@@ -272,6 +272,8 @@ if command -v node &>/dev/null; then
   report "secrets frontend behavior" $?
   node "$ROOT/scripts/smoke-sync-plugin.js"
   report "sync frontend behavior" $?
+  node "$ROOT/scripts/smoke-folder-appearance-plugin.js"
+  report "folder appearance frontend behavior" $?
 else
   echo "  ⚠️  node not available — skipping frontend smoke"
 fi
@@ -298,7 +300,7 @@ if command -v node &>/dev/null; then
       continue
     fi
     # Execute bundle via new Function() and verify registration
-    node -e "
+    BUNDLE_OUTPUT=$(node -e "
       const fs = require('fs');
       const content = fs.readFileSync('$bundle', 'utf8');
       // Provide minimal globals
@@ -315,14 +317,15 @@ if command -v node &>/dev/null; then
         console.log('ERROR: ' + e.message);
         process.exit(1);
       }
-    " 2>&1 | while read -r line; do
+    " 2>&1) || BUNDLE_FAILED=1
+    while read -r line; do
       if [[ "$line" == ERROR:* ]]; then
         echo "  ❌ $plugin_id: ${line#ERROR: }"
         BUNDLE_FAILED=1
       elif [[ "$line" == OK:* ]]; then
         echo "  ✅ $plugin_id: ${line#OK: }"
       fi
-    done
+    done <<< "$BUNDLE_OUTPUT"
   done
   if [ "$BUNDLE_FAILED" -ne 0 ]; then
     FAILED=1

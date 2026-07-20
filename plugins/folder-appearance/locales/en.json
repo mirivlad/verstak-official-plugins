@@ -1,4 +1,6 @@
 {
+  "manifest.name": "Folder Appearance",
+  "manifest.description": "Customize folder icons and colors in the workspace tree.",
   "folderAppearance.title": "Folder Appearance",
   "folderAppearance.search": "Search icons",
   "folderAppearance.color": "Color",

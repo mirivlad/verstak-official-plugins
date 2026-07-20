@@ -170,7 +170,7 @@ for plugin_dir in "$ROOT"/plugins/*/; do
     echo "  → backend"
     if command -v go &>/dev/null; then
       (cd "$plugin_dir/backend" && go mod download 2>/dev/null || true)
-      (cd "$plugin_dir/backend" && go build -o "$plugin_name" .)
+      (cd "$plugin_dir/backend" && go build -buildvcs=false -o "$plugin_name" .)
       report "backend go build" $?
     else
       echo "  ⚠️  go not available — skipping backend"
