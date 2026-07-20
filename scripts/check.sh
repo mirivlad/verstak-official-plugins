@@ -102,6 +102,18 @@ else
 fi
 
 echo ""
+echo "[responsive plugin layout]"
+if command -v node &>/dev/null; then
+  set +e
+  node "$ROOT/scripts/check-responsive-plugin-layout.js"
+  STATUS=$?
+  set -e
+  report "plugin settings and filter groups are responsive" "$STATUS"
+else
+  echo "  ⚠️  node not available — skipping responsive plugin layout validation"
+fi
+
+echo ""
 echo "[user-facing errors]"
 if command -v node &>/dev/null; then
   set +e

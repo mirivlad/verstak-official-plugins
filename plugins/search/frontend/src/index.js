@@ -28,8 +28,9 @@
   }
 
   var STYLES = [
-    '.search-root{height:100%;min-height:0;display:flex;flex-direction:column;background:var(--vt-color-background,#101020);color:var(--vt-color-text-primary,#f4f7fb);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}',
+    '.search-root{height:100%;min-height:0;display:flex;flex-direction:column;container-type:inline-size;background:var(--vt-color-background,#101020);color:var(--vt-color-text-primary,#f4f7fb);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}',
     '.search-toolbar{display:flex;align-items:center;gap:.5rem;min-height:2.75rem;padding:.55rem .75rem;border-bottom:1px solid var(--vt-color-border,#202b46);background:var(--vt-color-surface-muted,#111629);flex-shrink:0;flex-wrap:wrap}',
+    '.search-filter-group{display:flex;align-items:center;gap:.5rem;min-width:0;flex:1;flex-wrap:nowrap}',
     '.search-input{flex:1;min-width:180px;font-size:.86rem;padding:.42rem .55rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:#0f1424;color:var(--vt-color-text-primary,#f4f7fb);outline:none}',
     '.search-input:focus{border-color:var(--vt-color-accent,#4ecca3);box-shadow:var(--vt-focus-ring,0 0 0 2px rgba(78,204,163,.34))}',
     '.search-btn{font-size:.8rem;min-height:2rem;padding:.42rem .7rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-md,6px);background:var(--vt-color-surface-hover,#1b2440);color:var(--vt-color-text-secondary,#b7c0d4);cursor:pointer}',
@@ -52,7 +53,8 @@
     '.search-snippet{margin-top:.25rem;font-size:.8rem;line-height:1.45;color:var(--vt-color-text-secondary,#b7c0d4);white-space:pre-wrap;overflow-wrap:anywhere}',
     '.search-meta{margin-top:.28rem;font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3)}',
     '.search-open-btn{align-self:center;white-space:nowrap;min-width:4.5rem;padding:.35rem .65rem}',
-    '@media(max-width:700px){.search-result{grid-template-columns:1fr}.search-toolbar{align-items:stretch}.search-btn{width:100%}.search-scope{max-width:none}}'
+    '@container(max-width:700px){.search-filter-group{order:10;flex:1 0 100%;width:100%}.search-filter-group .search-input{min-width:0}.search-scope{max-width:none}}',
+    '@media(max-width:700px){.search-result{grid-template-columns:1fr}}'
   ].join('\n');
 
   function el(tag, attrs, children) {
@@ -346,9 +348,8 @@
           onClick: search
         });
         containerEl.appendChild(el('div', { className: 'search-toolbar' }, [
-          input,
-          button,
-          el('span', { className: 'search-scope', title: rootPath || tr('ui.vault', null, 'Vault') }, [rootPath || tr('ui.vault', null, 'Vault')])
+          el('span', { className: 'search-scope', title: rootPath || tr('ui.vault', null, 'Vault') }, [rootPath || tr('ui.vault', null, 'Vault')]),
+          el('div', { className: 'search-filter-group' }, [input, button])
         ]));
 
         statusEl = el('div', { className: 'search-status' });

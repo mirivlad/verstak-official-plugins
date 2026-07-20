@@ -218,7 +218,7 @@
   onDestroy(() => unsubscribeLocale?.())
 </script>
 
-<div style="padding:1.5rem;max-width:500px;">
+<div class="sync-settings-surface">
   <h2 style="margin:0 0 0.25rem;color:#e0e0f0;font-size:1.2rem;">{tr('ui.title', null, 'Sync')}</h2>
   <p style="color:#a0a0b8;font-size:0.85rem;margin-bottom:1.25rem;">{tr('ui.description', null, 'Synchronize your vault across devices.')}</p>
 
@@ -313,3 +313,11 @@
     {/if}
   </div>
 </div>
+
+<style>
+  .sync-settings-surface {
+    width: 100%;
+    max-width: none;
+    box-sizing: border-box;
+  }
+</style>

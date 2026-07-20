@@ -698,7 +698,7 @@
       injectStyles();
 
       containerEl.innerHTML = '';
-      containerEl.className = 'pt-root';
+      containerEl.className = 'pt-root pt-settings-root';
 
       function tr(key, params, fallback) {
         if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);

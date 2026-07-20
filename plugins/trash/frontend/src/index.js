@@ -9,11 +9,12 @@
   var PLUGIN_ID = 'verstak.trash';
 
   var STYLES = [
-    '.trash-root{display:flex;flex-direction:column;height:100%;min-height:0;background:var(--vt-color-background,#101020);color:var(--vt-color-text-primary,#f4f7fb);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}',
+    '.trash-root{display:flex;flex-direction:column;height:100%;min-height:0;container-type:inline-size;background:var(--vt-color-background,#101020);color:var(--vt-color-text-primary,#f4f7fb);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}',
     '.trash-toolbar{display:flex;align-items:center;gap:.5rem;min-height:2.75rem;padding:.5rem .75rem;border-bottom:1px solid var(--vt-color-border,#202b46);background:var(--vt-color-surface-muted,#111629);flex-shrink:0;flex-wrap:wrap}',
     '.trash-title{font-size:.88rem;font-weight:650;color:var(--vt-color-text-primary,#f4f7fb)}',
     '.trash-count{font-size:.74rem;color:var(--vt-color-text-muted,#7f8aa3)}',
     '.trash-spacer{flex:1}',
+    '.trash-filter-group{display:flex;align-items:center;gap:.5rem;min-width:0;flex:1;flex-wrap:nowrap}',
     '.trash-control{min-height:2rem;box-sizing:border-box;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-surface,#15152c);color:var(--vt-color-text-primary,#f4f7fb);font:inherit;font-size:.78rem;padding:.35rem .5rem}',
     '.trash-search{min-width:12rem;flex:1 1 14rem}',
     '.trash-select{max-width:11rem;appearance:none;background-color:var(--vt-color-surface,#15152c);background-image:linear-gradient(45deg,transparent 50%,var(--vt-color-text-muted,#7f8aa3) 50%),linear-gradient(135deg,var(--vt-color-text-muted,#7f8aa3) 50%,transparent 50%);background-position:calc(100% - 14px) 50%,calc(100% - 9px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:1.7rem}.trash-select option{background:var(--vt-color-surface,#15152c);color:var(--vt-color-text-primary,#f4f7fb)}.trash-control:focus{outline:none;border-color:var(--vt-color-accent,#4ecca3);box-shadow:var(--vt-focus-ring,0 0 0 2px rgba(78,204,163,.34))}',
@@ -39,7 +40,8 @@
     '.trash-confirm p{margin:.55rem 0;color:var(--vt-color-text-secondary,#b7c0d4);font-size:.82rem;line-height:1.45;overflow-wrap:anywhere}',
     '.trash-confirm-path{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--vt-color-text-muted,#7f8aa3)}',
     '.trash-confirm-actions{display:flex;justify-content:flex-end;gap:.5rem;margin-top:1rem}',
-    '@media(max-width:900px){.trash-header{display:none}.trash-row{grid-template-columns:minmax(0,1fr) auto;gap:.45rem .75rem;padding:.7rem .75rem}.trash-row>span:nth-child(2),.trash-row>span:nth-child(3),.trash-row>span:nth-child(4),.trash-row>span:nth-child(5){grid-column:1}.trash-actions{grid-column:2;grid-row:1 / span 5;align-self:center;flex-direction:column}.trash-search{order:5;flex-basis:100%}.trash-select{max-width:none;flex:1 1 8rem}}'
+    '@container(max-width:1040px){.trash-filter-group{order:10;flex:1 0 100%;width:100%}.trash-filter-group .trash-search{min-width:0}.trash-filter-group .trash-select{flex:0 1 11rem}}',
+    '@media(max-width:900px){.trash-header{display:none}.trash-row{grid-template-columns:minmax(0,1fr) auto;gap:.45rem .75rem;padding:.7rem .75rem}.trash-row>span:nth-child(2),.trash-row>span:nth-child(3),.trash-row>span:nth-child(4),.trash-row>span:nth-child(5){grid-column:1}.trash-actions{grid-column:2;grid-row:1 / span 5;align-self:center;flex-direction:column}}'
   ].join('\n');
 
   function injectStyles() {
@@ -253,17 +255,19 @@
           el('span', { className: 'trash-title' }, [tr('ui.title', null, 'Trash')]),
           el('span', { className: 'trash-count' }, [tr('ui.total', { count: state.entries.length }, state.entries.length + ' total')]),
           el('span', { className: 'trash-spacer' }),
-          el('input', {
-            className: 'trash-control trash-search',
-            type: 'search',
-            value: state.query,
-            placeholder: tr('ui.filter', null, 'Filter name or path'),
-            'data-trash-filter-search': '',
-            onInput: function (event) { state.query = event.target.value; render(); }
-          }),
-          workspaceSelect,
-          typeSelect,
-          sortSelect,
+          el('div', { className: 'trash-filter-group' }, [
+            el('input', {
+              className: 'trash-control trash-search',
+              type: 'search',
+              value: state.query,
+              placeholder: tr('ui.filter', null, 'Filter name or path'),
+              'data-trash-filter-search': '',
+              onInput: function (event) { state.query = event.target.value; render(); }
+            }),
+            workspaceSelect,
+            typeSelect,
+            sortSelect
+          ]),
           el('button', { className: 'trash-btn', type: 'button', onClick: loadEntries }, [tr('ui.refresh', null, 'Refresh')])
         ]));
         containerEl.appendChild(el('div', {

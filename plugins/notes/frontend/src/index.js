@@ -15,7 +15,7 @@
   }
 
   var STYLES = [
-    '.notes-root{display:flex;flex-direction:column;height:100%;min-height:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:var(--vt-color-text-primary,#f4f7fb);background:var(--vt-color-background,#101020);outline:none}',
+    '.notes-root{display:flex;flex-direction:column;height:100%;min-height:0;container-type:inline-size;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:var(--vt-color-text-primary,#f4f7fb);background:var(--vt-color-background,#101020);outline:none}',
     '.notes-toolbar{display:flex;align-items:center;gap:.5rem;min-height:2.75rem;padding:.5rem .75rem;border-bottom:1px solid var(--vt-color-border,#202b46);flex-shrink:0;background:var(--vt-color-surface-muted,#111629);flex-wrap:wrap}',
     '.notes-btn{font-size:.78rem;padding:.36rem .7rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-md,6px);background:var(--vt-color-surface-hover,#1b2440);color:var(--vt-color-text-secondary,#b7c0d4);cursor:pointer;display:inline-flex;align-items:center;gap:.35rem}',
     '.notes-btn:hover{background:var(--vt-color-surface-hover,#1b2440);border-color:var(--vt-color-accent,#4ecca3);color:var(--vt-color-text-primary,#f4f7fb)}',
@@ -23,6 +23,7 @@
     '.notes-btn:disabled{opacity:.45;cursor:default}',
     '.notes-btn.primary{background:var(--vt-color-accent,#4ecca3);border-color:var(--vt-color-accent,#4ecca3);color:#101827}',
     '.notes-btn.primary:hover{background:#63d9b3;color:#101827}',
+    '.notes-filter-group{display:flex;align-items:center;gap:.5rem;min-width:0;flex-wrap:nowrap}',
     '.notes-filter,.notes-sort{font-size:.78rem;padding:.32rem .5rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:#0f1424;color:var(--vt-color-text-primary,#f4f7fb);outline:none}',
     '.notes-filter{width:11rem}',
     '.notes-sort{width:8rem;appearance:none;background-color:#0f1424;background-image:linear-gradient(45deg,transparent 50%,#8b8ba8 50%),linear-gradient(135deg,#8b8ba8 50%,transparent 50%);background-position:calc(100% - 14px) 50%,calc(100% - 9px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:1.6rem}.notes-sort option{background:#0f1424;color:var(--vt-color-text-primary,#f4f7fb)}',
@@ -65,7 +66,7 @@
     '.notes-status.success{color:#4ecca3}',
     '.notes-status.error{color:#e74c3c}',
     '.notes-status.loading{color:#79c0ff}',
-    '@media(max-width:600px){.notes-toolbar{flex-direction:column;align-items:stretch}}'
+    '@container(max-width:620px){.notes-filter-group{order:10;flex:1 0 100%;width:100%}.notes-filter-group .notes-filter{flex:1;min-width:0;width:auto}}'
   ].join('\n');
 
   function el(tag, attrs, children) {
@@ -277,8 +278,7 @@
       ]);
       var statusEl = el('span', { className: 'notes-status' });
       toolbar.appendChild(createBtn);
-      toolbar.appendChild(filterInput);
-      toolbar.appendChild(sortSelect);
+      toolbar.appendChild(el('div', { className: 'notes-filter-group' }, [filterInput, sortSelect]));
       toolbar.appendChild(el('span', { style: { flex: '1' } }));
       toolbar.appendChild(statusEl);
       containerEl.appendChild(toolbar);
