@@ -33,6 +33,7 @@ export function addGraphNode(graph, node) {
     modifiedAt: node.modifiedAt || '',
     links: Array.isArray(node.links) ? node.links : [],
     warnings: Array.isArray(node.warnings) ? node.warnings : [],
+    metadata: node.metadata || {},
   };
   if (typeof node.text === 'string') value.text = node.text;
   graph.nodes.push(value);
