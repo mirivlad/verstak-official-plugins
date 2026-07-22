@@ -1,5 +1,6 @@
 {
   "manifest.name": "Import",
+  "manifest.description": "Review and import current DokuWiki or Obsidian content.",
   "contributions.settingsPanels.verstak.import.settings.title": "Import",
   "ui.title": "Import",
   "ui.description": "Move current DokuWiki or Obsidian content into a new Imported folder.",

@@ -2,6 +2,7 @@
   "schemaVersion": 1,
   "id": "verstak.import",
   "name": "Import",
+  "description": "Review and import current DokuWiki or Obsidian content.",
   "version": "0.1.0",
   "apiVersion": "0.1.0",
   "localization": { "defaultLocale": "en", "locales": { "en": "locales/en.json", "ru": "locales/ru.json" } },

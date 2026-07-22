@@ -6,11 +6,21 @@ const root = path.resolve(__dirname, '..');
 const componentPath = path.join(root, 'plugins', 'import', 'frontend', 'src', 'ImportSettings.svelte');
 const entryPath = path.join(root, 'plugins', 'import', 'frontend', 'src', 'index.js');
 const stylePath = path.join(root, 'plugins', 'import', 'frontend', 'src', 'style.css');
+const manifestPath = path.join(root, 'plugins', 'import', 'plugin.json');
+const englishPath = path.join(root, 'plugins', 'import', 'locales', 'en.json');
+const russianPath = path.join(root, 'plugins', 'import', 'locales', 'ru.json');
 
 if (!fs.existsSync(componentPath)) throw new Error('ImportSettings.svelte is missing');
 const component = fs.readFileSync(componentPath, 'utf8');
 const entry = fs.readFileSync(entryPath, 'utf8');
 const style = fs.readFileSync(stylePath, 'utf8');
+const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+const english = JSON.parse(fs.readFileSync(englishPath, 'utf8'));
+const russian = JSON.parse(fs.readFileSync(russianPath, 'utf8'));
+
+if (!manifest.description || !english['manifest.description'] || !russian['manifest.description']) {
+  throw new Error('Importer card description must have a manifest fallback and both translations');
+}
 
 for (const selector of [
   'data-import-step="source"', 'data-import-select-directory', 'data-import-select-archive',
