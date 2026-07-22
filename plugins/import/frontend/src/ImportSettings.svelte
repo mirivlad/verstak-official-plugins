@@ -390,8 +390,11 @@
     <div class="import-panel apply-panel" data-import-step="apply">
       {#if result}
         <div class="result-icon"><CheckCircle2 size={36} aria-hidden="true" /></div>
-        <h3 data-import-result>{tr('ui.completeTitle', null, 'Import complete')}</h3>
-        <p>{tr('ui.completeDescription', null, 'The new content is ready in Imported. You can arrange it manually.')}</p>
+        <div data-import-result>
+          <h3>{tr('ui.completeTitle', null, 'Import complete')}</h3>
+          <p>{tr('ui.completeDescription', null, 'The new content is ready in Imported. You can arrange it manually.')}</p>
+          <code>{result.runPath}</code>
+        </div>
         <div class="result-counts">
           <span><strong>{result.folders || 0}</strong>{tr('ui.folders', null, 'folders')}</span>
           <span><strong>{result.workspaces || 0}</strong>{tr('ui.workspaces', null, 'Deals')}</span>
