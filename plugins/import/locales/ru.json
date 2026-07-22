@@ -1,0 +1,6 @@
+{
+  "manifest.name": "Импорт",
+  "contributions.settingsPanels.verstak.import.settings.title": "Импорт",
+  "ui.title": "Импорт",
+  "ui.comingSoon": "Выберите резервную копию DokuWiki или хранилище Obsidian."
+}

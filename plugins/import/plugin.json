@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "verstak.import",
+  "name": "Import",
+  "version": "0.1.0",
+  "apiVersion": "0.1.0",
+  "localization": { "defaultLocale": "en", "locales": { "en": "locales/en.json", "ru": "locales/ru.json" } },
+  "source": "official",
+  "provides": ["verstak/import/v1"],
+  "requires": ["verstak/core/import/v1"],
+  "permissions": ["imports.readExternal", "imports.apply", "storage.namespace", "ui.register"],
+  "frontend": { "entry": "frontend/dist/index.js", "style": "frontend/dist/style.css" },
+  "contributes": { "settingsPanels": [{ "id": "verstak.import.settings", "title": "Import", "component": "ImportSettings" }] }
+}

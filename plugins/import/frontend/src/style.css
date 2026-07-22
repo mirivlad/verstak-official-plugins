@@ -1,0 +1,16 @@
+.verstak-import-placeholder {
+  color: var(--verstak-plugin-text);
+  background: var(--verstak-plugin-surface);
+  border: 1px solid var(--verstak-plugin-border);
+  border-radius: var(--verstak-plugin-radius);
+  padding: 1rem;
+}
+
+.verstak-import-placeholder h2 {
+  margin: 0 0 0.5rem;
+}
+
+.verstak-import-placeholder p {
+  margin: 0;
+  color: var(--verstak-plugin-text-muted);
+}

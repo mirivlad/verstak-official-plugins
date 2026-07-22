@@ -1,0 +1,6 @@
+{
+  "manifest.name": "Import",
+  "contributions.settingsPanels.verstak.import.settings.title": "Import",
+  "ui.title": "Import",
+  "ui.comingSoon": "Choose a DokuWiki backup or Obsidian vault to begin."
+}
