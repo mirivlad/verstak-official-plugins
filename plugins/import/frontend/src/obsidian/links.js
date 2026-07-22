@@ -214,7 +214,7 @@ export function rewriteObsidianMarkdown({ sourcePath, text, index, mapping }) {
       }
       const targetMapping = mappingValue(mapping, resolved.item.sourcePath);
       const noteTarget = targetMapping.kind === 'note';
-      links.push({ kind: noteTarget ? 'note' : 'file', raw: targetWithSubpath, target: url });
+      links.push({ kind: noteTarget ? 'note' : 'file', raw: targetWithSubpath, target: url, sourceTarget: resolved.item.sourcePath });
       if (embed && noteTarget) {
         warnings.push({ code: 'obsidian-note-embed-degraded', sourcePath, target: targetWithSubpath });
         return `[${label || withoutMarkdownExtension(basename(resolved.item.sourcePath))}](${url})`;

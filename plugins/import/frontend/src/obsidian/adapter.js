@@ -77,6 +77,7 @@ export async function buildObsidianGraph(api, session, candidate, onProgress = (
   }
   for (const item of notes) {
     const rewritten = rewriteObsidianMarkdown({ sourcePath: item.relativePath, text: noteTexts.get(item.relativePath), index, mapping });
+    const links = rewritten.links.map((link) => ({ ...link, sourceTarget: `${rootPrefix}${link.sourceTarget}` }));
     const node = addGraphNode(graph, {
       entryId: item.entry.id,
       path: noteTargets.get(item.relativePath),
@@ -85,11 +86,11 @@ export async function buildObsidianGraph(api, session, candidate, onProgress = (
       size: item.entry.size,
       modifiedAt: item.entry.modifiedAt,
       text: rewritten.markdown,
-      links: rewritten.links,
+      links,
       warnings: rewritten.warnings,
       metadata: { originalPath: item.relativePath },
     });
-    graph.links.push(...rewritten.links.map((link) => ({ ...link, from: node.id })));
+    graph.links.push(...links.map((link) => ({ ...link, from: node.id })));
     graph.warnings.push(...rewritten.warnings.map((warning) => ({ ...warning, nodeId: node.id })));
   }
   return sortSourceGraph(graph);

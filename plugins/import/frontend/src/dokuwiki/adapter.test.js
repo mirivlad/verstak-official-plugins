@@ -32,6 +32,10 @@ describe('DokuWiki graph adapter', () => {
     const start = graph.nodes.find((node) => node.metadata.pageId === 'project:start');
     expect(start.text).toContain('[Plan](plan.md)');
     expect(start.text).toContain('![Logo](../../Files/media/logo.png)');
+    expect(start.links).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'page', sourceTarget: 'site/data/pages/project/plan.txt' }),
+      expect.objectContaining({ kind: 'media', sourceTarget: 'site/data/media/media/logo.png' }),
+    ]));
     expect(graph.nodes.find((node) => node.metadata.pageId === 'private:passwords').role).toBe('note');
     expect(api.imports.readText).not.toHaveBeenCalledWith('h', 'revision');
   });

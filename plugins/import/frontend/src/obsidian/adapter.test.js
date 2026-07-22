@@ -25,7 +25,12 @@ describe('Obsidian graph adapter', () => {
       'Projects/Readme.md',
     ]);
     expect(graph.nodes.find((node) => node.metadata.originalPath === 'Projects/backup.zip').role).toBe('asset');
-    expect(graph.nodes.find((node) => node.metadata.originalPath === 'Projects/Readme.md').text).toContain('[Plan](Plan.md)');
+    const readme = graph.nodes.find((node) => node.metadata.originalPath === 'Projects/Readme.md');
+    expect(readme.text).toContain('[Plan](Plan.md)');
+    expect(readme.links).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'note', sourceTarget: 'Vault/Projects/Plan.md' }),
+      expect.objectContaining({ kind: 'file', sourceTarget: 'Vault/Projects/diagram.png' }),
+    ]));
     expect(api.imports.readText).not.toHaveBeenCalledWith('h', 'settings');
   });
 });

@@ -161,6 +161,8 @@ export async function buildDokuWikiGraph(api, session, candidate, onProgress = (
 
   const pageTargets = allocatePageTargets(importedPages);
   const mediaTargets = new Map(media.map((item) => [pageIdFromPath(item.relativePath).toLocaleLowerCase('en'), sanitizeRelativePath(item.relativePath, '')]));
+  const pageSources = new Map(importedPages.map((item) => [item.pageId.toLocaleLowerCase('en'), item.entry.path]));
+  const mediaSources = new Map(media.map((item) => [pageIdFromPath(item.relativePath).toLocaleLowerCase('en'), item.entry.path]));
   const graph = createSourceGraph('dokuwiki', candidate.root);
   graph.sourceHandle = session.sourceHandle;
   graph.sourceFingerprint = session.fingerprint;
@@ -191,6 +193,15 @@ export async function buildDokuWikiGraph(api, session, candidate, onProgress = (
       return target ? relativeLink(targetPath, target, 'Files') : null;
     };
     const converted = convertDokuWikiPage({ pageId: page.pageId, text: pageTexts.get(page.pageId.toLocaleLowerCase('en')), resolvePage, resolveMedia });
+    const links = converted.links.map((link) => {
+      if (link.kind === 'page') {
+        return { ...link, sourceTarget: pageSources.get(resolveNamespacedId(link.raw, page.pageId).toLocaleLowerCase('en')) };
+      }
+      if (link.kind === 'media') {
+        return { ...link, sourceTarget: mediaSources.get(resolveNamespacedId(link.raw, page.pageId).toLocaleLowerCase('en')) };
+      }
+      return link;
+    });
     const node = addGraphNode(graph, {
       entryId: page.entry.id,
       path: targetPath,
@@ -199,11 +210,11 @@ export async function buildDokuWikiGraph(api, session, candidate, onProgress = (
       size: page.entry.size,
       modifiedAt: page.entry.modifiedAt,
       text: converted.markdown,
-      links: converted.links,
+      links,
       warnings: converted.warnings,
       metadata: { originalPath: `pages/${page.relativePath}`, pageId: page.pageId },
     });
-    graph.links.push(...converted.links.map((link) => ({ ...link, from: node.id })));
+    graph.links.push(...links.map((link) => ({ ...link, from: node.id })));
     graph.warnings.push(...converted.warnings.map((item) => ({ ...item, nodeId: node.id })));
   }
   return sortSourceGraph(graph);
