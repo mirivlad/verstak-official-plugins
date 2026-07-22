@@ -1,18 +1,16 @@
 import './style.css';
+import ImportSettings from './ImportSettings.svelte';
 
-function mount(container, _props, api) {
-  const root = document.createElement('section');
-  root.className = 'verstak-import-placeholder';
-  const title = document.createElement('h2');
-  title.textContent = api.i18n.t('ui.title', undefined, 'Import');
-  const description = document.createElement('p');
-  description.textContent = api.i18n.t('ui.comingSoon', undefined, 'Choose a source to begin.');
-  root.append(title, description);
-  container.replaceChildren(root);
+function mount(container, props, api) {
+  container.__verstakImportInstance?.$destroy?.();
+  const instance = new ImportSettings({ target: container, props: { ...props, api } });
+  container.__verstakImportInstance = instance;
+  return instance;
 }
 
 function unmount(container) {
-  container.replaceChildren();
+  container.__verstakImportInstance?.$destroy?.();
+  delete container.__verstakImportInstance;
 }
 
 window.VerstakPluginRegister('verstak.import', {

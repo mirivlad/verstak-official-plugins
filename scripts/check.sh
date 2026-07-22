@@ -284,6 +284,8 @@ if command -v node &>/dev/null; then
   report "secrets frontend behavior" $?
   node "$ROOT/scripts/smoke-sync-plugin.js"
   report "sync frontend behavior" $?
+  node "$ROOT/scripts/smoke-import-plugin.js"
+  report "import frontend behavior" $?
   node "$ROOT/scripts/smoke-folder-appearance-plugin.js"
   report "folder appearance frontend behavior" $?
 else

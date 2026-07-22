@@ -17,7 +17,9 @@
 
 Verstak Official Plugins is the first-party plugin set for Verstak Desktop:
 Files, Trash, Notes, Default Editor, File Preview, Browser Inbox, Activity,
-Journal, Todo, Search, Secrets, Sync, and Templates. Plugin bundles are built
+Journal, Todo, Search, Secrets, Sync, Import, and Templates. The Import plugin
+reviews and converts current DokuWiki or Obsidian content before creating a
+separate `Imported` tree. Plugin bundles are built
 into independent directories that the desktop host loads from its `plugins/`
 folder.
 
