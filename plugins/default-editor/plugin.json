@@ -18,6 +18,7 @@
   "permissions": [
     "files.read",
     "files.write",
+    "storage.namespace",
     "workbench.open"
   ],
   "frontend": {

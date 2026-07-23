@@ -33,6 +33,7 @@
     '.de-editor-shell{flex:1;display:flex;min-width:0;min-height:0;overflow:hidden;background:#0d0d1a}',
     '.de-lines{flex:0 0 auto;min-width:3rem;padding:.75rem .45rem;text-align:right;background:#0a0a15;color:#555;font-family:"SF Mono","Fira Code","Cascadia Code",Consolas,monospace;font-size:.82rem;line-height:1.6;user-select:none;overflow:hidden;white-space:pre}',
     '.de-textarea{flex:1;width:100%;height:100%;resize:none;border:0;outline:0;padding:.75rem;font-family:"SF Mono","Fira Code","Cascadia Code",Consolas,monospace;font-size:.86rem;line-height:1.6;background:#0d0d1a;color:#e0e0e0;tab-size:2;white-space:pre;overflow:auto}',
+    '.de-textarea.de-textarea-wrap{white-space:pre-wrap;overflow-wrap:anywhere;overflow-x:hidden}',
     '.de-preview{flex:1;height:100%;padding:1rem 1.15rem;overflow:auto;background:#0d0d1a;line-height:1.7;font-size:.92rem;color:#d8d8e8}',
     '.de-preview h1,.de-preview h2,.de-preview h3,.de-preview h4,.de-preview h5,.de-preview h6{color:#f0f0ff;margin:1rem 0 .5rem}',
     '.de-preview h1{font-size:1.55rem;border-bottom:1px solid #16213e;padding-bottom:.35rem}.de-preview h2{font-size:1.3rem;border-bottom:1px solid #16213e;padding-bottom:.25rem}.de-preview h3{font-size:1.12rem}',
@@ -292,6 +293,7 @@
       var linesEl = null;
       var previewEl = null;
       var secretLinksAvailable = false;
+      var wrapLongLines = true;
       function tr(key, params, fallback) {
         if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
         return fallback || key;
@@ -309,11 +311,12 @@
       var splitBtn = isMarkdown ? el('button', { className: 'de-toolbar-btn', 'data-editor-mode-button': 'split' }, [tr('ui.split', null, 'Split')]) : null;
       var reloadBtn = el('button', { className: 'de-toolbar-btn', 'data-editor-action': 'reload' }, [tr('ui.reload', null, 'Reload')]);
       var saveBtn = el('button', { className: 'de-toolbar-btn', 'data-editor-action': 'save' }, [tr('ui.save', null, 'Save')]);
+      var wrapBtn = el('button', { className: 'de-toolbar-btn', type: 'button', 'data-editor-action': 'toggle-wrap', 'aria-pressed': 'true' }, [tr('ui.wrapLongLines', null, 'Wrap long lines')]);
       var statusEl = el('span', { className: 'de-status', 'data-save-state': '' });
       var toolbarChildren = [contextLabel];
       if (notesBadge) toolbarChildren.push(notesBadge);
       toolbarChildren.push(spacer);
-      [editBtn, previewBtn, splitBtn, reloadBtn, saveBtn, statusEl].forEach(function (node) { if (node) toolbarChildren.push(node); });
+      [editBtn, previewBtn, splitBtn, wrapBtn, reloadBtn, saveBtn, statusEl].forEach(function (node) { if (node) toolbarChildren.push(node); });
       containerEl.appendChild(el('div', { className: 'de-toolbar' }, toolbarChildren));
 
       var mdToolbar = null;
@@ -397,12 +400,22 @@
         updatePreview();
       }
 
+      function updateWrapPresentation() {
+        wrapBtn.setAttribute('aria-pressed', wrapLongLines ? 'true' : 'false');
+        wrapBtn.className = 'de-toolbar-btn' + (wrapLongLines ? ' active' : '');
+        if (textarea) {
+          textarea.className = 'de-textarea' + (wrapLongLines ? ' de-textarea-wrap' : '');
+          textarea.setAttribute('wrap', wrapLongLines ? 'soft' : 'off');
+        }
+      }
+
       function makeEditorPane() {
         var pane = el('div', { className: 'de-pane' });
         var shell = el('div', { className: 'de-editor-shell' });
         linesEl = el('div', { className: 'de-lines' });
         textarea = el('textarea', { className: 'de-textarea', spellcheck: 'false', 'data-editor-textarea': '' });
         textarea.value = currentContent;
+        updateWrapPresentation();
         textarea.addEventListener('input', syncFromTextarea);
         textarea.addEventListener('scroll', function () { if (linesEl) linesEl.scrollTop = textarea.scrollTop; });
         textarea.addEventListener('keydown', function (event) {
@@ -520,6 +533,13 @@
       }
 
       saveBtn.addEventListener('click', save);
+      wrapBtn.addEventListener('click', function () {
+        wrapLongLines = !wrapLongLines;
+        updateWrapPresentation();
+        if (api.settings && typeof api.settings.write === 'function') {
+          api.settings.write('wrapLongLines', wrapLongLines).catch(function () {});
+        }
+      });
       reloadBtn.addEventListener('click', reloadFromDisk);
       if (editBtn) editBtn.addEventListener('click', function () { setMode('edit'); });
       if (previewBtn) previewBtn.addEventListener('click', function () { setMode('preview'); });
@@ -533,6 +553,16 @@
       }
 
       loadSecretProviderAvailability();
+      if (api.settings && typeof api.settings.read === 'function') {
+        api.settings.read('wrapLongLines').then(function (stored) {
+          if (disposed) return;
+          wrapLongLines = stored === undefined || stored === null ? true : stored !== false;
+          updateWrapPresentation();
+        }).catch(function () {
+          wrapLongLines = true;
+          updateWrapPresentation();
+        });
+      }
       reloadFromDisk();
       var localeUnsubscribe = api.i18n && typeof api.i18n.onDidChangeLocale === 'function'
         ? api.i18n.onDidChangeLocale(function () {
@@ -542,6 +572,7 @@
           if (splitBtn) splitBtn.textContent = tr('ui.split', null, 'Split');
           reloadBtn.textContent = tr('ui.reload', null, 'Reload');
           saveBtn.textContent = tr('ui.save', null, 'Save');
+          wrapBtn.textContent = tr('ui.wrapLongLines', null, 'Wrap long lines');
           if (mdToolbar) {
             [
               ['heading', 'ui.md.heading', 'Heading'], ['bold', 'ui.md.bold', 'Bold'], ['italic', 'ui.md.italic', 'Italic'],

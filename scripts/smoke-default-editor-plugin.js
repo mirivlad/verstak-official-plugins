@@ -120,14 +120,23 @@ async function flush() {
   }
 }
 
-async function mountEditor(secretProviderEnabled, translations) {
+async function mountEditor(secretProviderEnabled, translations, settings = {}) {
   const document = makeDocument();
   const component = loadComponent(document);
   const opened = [];
+  const written = [];
   const api = {
     files: {
       readText: async () => '[DB password](verstak-secret://client-a.db)\n',
-      writeText: async () => undefined,
+      writeText: async (path, content) => {
+        written.push({ path, content });
+      },
+    },
+    settings: {
+      read: async (key) => settings[key],
+      write: async (key, value) => {
+        settings[key] = value;
+      },
     },
     contributions: {
       list: async (point) => {
@@ -161,7 +170,7 @@ async function mountEditor(secretProviderEnabled, translations) {
     request: { kind: 'vault-file', path: 'Project/Notes/Secret.md', extension: '.md', mode: 'view' },
   }, api);
   await flush();
-  return { container, opened };
+  return { container, opened, written, settings };
 }
 
 (async () => {
@@ -197,10 +206,50 @@ async function mountEditor(secretProviderEnabled, translations) {
     throw new Error('secret link did not open through workbench');
   }
 
-  const russian = await mountEditor(true, { 'ui.md.heading': 'Заголовок' });
+  const russian = await mountEditor(true, {
+    'ui.md.heading': 'Заголовок',
+    'ui.wrapLongLines': 'Переносить длинные строки',
+  });
   const headingButton = walk(russian.container, (node) => node.getAttribute && node.getAttribute('data-md-action') === 'heading');
   if (!headingButton || headingButton.getAttribute('title') !== 'Заголовок') {
     throw new Error('Markdown toolbar titles must use the locale catalog');
+  }
+  const russianWrapButton = walk(russian.container, (node) => node.getAttribute && node.getAttribute('data-editor-action') === 'toggle-wrap');
+  if (!russianWrapButton || russianWrapButton.textContent !== 'Переносить длинные строки') {
+    throw new Error('soft wrap label must use the Russian locale catalog');
+  }
+
+  const wrapSettings = {};
+  const wrapping = await mountEditor(true, { 'ui.wrapLongLines': 'Wrap long lines' }, wrapSettings);
+  walk(wrapping.container, (node) => node.getAttribute && node.getAttribute('data-editor-mode-button') === 'edit').dispatchEvent('click');
+  const wrapButton = walk(wrapping.container, (node) => node.getAttribute && node.getAttribute('data-editor-action') === 'toggle-wrap');
+  const textarea = walk(wrapping.container, (node) => node.getAttribute && node.getAttribute('data-editor-textarea') === '');
+  if (!wrapButton || wrapButton.getAttribute('aria-pressed') !== 'true' || !textarea) {
+    throw new Error('soft wrap must be enabled by default');
+  }
+  if (textarea.getAttribute('wrap') !== 'soft' || !textarea.className.includes('de-textarea-wrap')) {
+    throw new Error('soft wrap did not update textarea presentation');
+  }
+  const exactText = 'first very long logical line without inserted breaks\\r\\nsecond line';
+  textarea.value = exactText;
+  textarea.dispatchEvent('input');
+  const saveButton = walk(wrapping.container, (node) => node.getAttribute && node.getAttribute('data-editor-action') === 'save');
+  saveButton.dispatchEvent('click');
+  await flush();
+  if (wrapping.written.length !== 1 || wrapping.written[0].content !== exactText) {
+    throw new Error('soft wrap changed saved text or newline bytes');
+  }
+  wrapButton.dispatchEvent('click');
+  await flush();
+  if (wrapSettings.wrapLongLines !== false || wrapButton.getAttribute('aria-pressed') !== 'false') {
+    throw new Error('soft wrap off state was not persisted');
+  }
+  const remounted = await mountEditor(true, { 'ui.wrapLongLines': 'Wrap long lines' }, wrapSettings);
+  walk(remounted.container, (node) => node.getAttribute && node.getAttribute('data-editor-mode-button') === 'edit').dispatchEvent('click');
+  const remountedWrapButton = walk(remounted.container, (node) => node.getAttribute && node.getAttribute('data-editor-action') === 'toggle-wrap');
+  const remountedTextarea = walk(remounted.container, (node) => node.getAttribute && node.getAttribute('data-editor-textarea') === '');
+  if (remountedWrapButton.getAttribute('aria-pressed') !== 'false' || remountedTextarea.getAttribute('wrap') !== 'off') {
+    throw new Error('persisted soft wrap state was not restored');
   }
 
   console.log('default editor smoke passed');

@@ -11,6 +11,7 @@
   "ui.split": "Split",
   "ui.reload": "Reload",
   "ui.save": "Save",
+  "ui.wrapLongLines": "Wrap long lines",
   "ui.notesInfo": "Notes context active. Note actions, backlinks, and graph tools are reserved for the future Notes plugin.",
   "ui.saving": "Saving...",
   "ui.saveError": "Error saving",
