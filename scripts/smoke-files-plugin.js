@@ -200,6 +200,8 @@ function makeApi(options = {}) {
   const contributionCalls = [];
   const created = [];
   const moved = [];
+  const copied = [];
+  const listCalls = [];
   const eventHandlers = {};
   let restored = false;
   let externalVisible = false;
@@ -216,6 +218,8 @@ function makeApi(options = {}) {
     contributionCalls,
     created,
     moved,
+    copied,
+    listCalls,
     emitFileChanged(payload) {
       (eventHandlers['file.changed'] || []).forEach((handler) => handler({
         name: 'file.changed',
@@ -224,7 +228,11 @@ function makeApi(options = {}) {
       }));
     },
     files: {
-      list: async () => {
+      list: async (relativeDir) => {
+        listCalls.push(relativeDir || '');
+        if (typeof options.entriesForPath === 'function') {
+          return options.entriesForPath(relativeDir || '');
+        }
         const entries = [{
           name: 'readme.md',
           relativePath: 'Docs/readme.md',
@@ -276,6 +284,9 @@ function makeApi(options = {}) {
       },
       move: async (fromRelativePath, toRelativePath) => {
         moved.push({ fromRelativePath, toRelativePath });
+      },
+      copy: async (fromRelativePath, toRelativePath, copyOptions) => {
+        copied.push({ fromRelativePath, toRelativePath, options: copyOptions });
       },
       trash: async () => undefined,
       listTrash: async () => trashEntries.slice(),
@@ -473,6 +484,46 @@ async function flush() {
   if (!externalRow) {
     throw new Error(`external file row not rendered after file.changed: ${container.textContent}`);
   }
+
+  const transferDocument = makeDocument();
+  const { component: transferComponent } = loadFilesComponent(transferDocument);
+  const sourceApi = makeApi({
+    entriesForPath: (relativeDir) => relativeDir === 'Project' ? [{
+      name: 'Archive',
+      relativePath: 'Project/Archive',
+      type: 'folder',
+      size: 0,
+      modifiedAt: '2026-06-27T01:05:00Z',
+    }] : [],
+  });
+  const sourceContainer = new FakeNode('div');
+  transferComponent.mount(sourceContainer, { workspaceRootPath: 'Project' }, sourceApi);
+  await flush();
+  const sourceFolder = walk(sourceContainer, (node) => node.getAttribute && node.getAttribute('data-file-path') === 'Project/Archive');
+  if (!sourceFolder) throw new Error('cross-Deal source folder not rendered');
+  sourceFolder.click();
+  const copySelection = walk(sourceContainer, (node) => node.getAttribute && node.getAttribute('data-files-action') === 'copy');
+  copySelection.click();
+  transferComponent.unmount(sourceContainer);
+
+  const targetApi = makeApi({ entriesForPath: () => [] });
+  const targetContainer = new FakeNode('div');
+  transferComponent.mount(targetContainer, { workspaceRootPath: 'Test' }, targetApi);
+  await flush();
+  const pasteSelection = walk(targetContainer, (node) => node.getAttribute && node.getAttribute('data-files-action') === 'paste');
+  pasteSelection.click();
+  await flush();
+  if (!targetApi.listCalls.includes('Test/Files')) {
+    throw new Error(`cross-Deal paste did not inspect the existing Files folder: ${JSON.stringify(targetApi.listCalls)}`);
+  }
+  if (JSON.stringify(targetApi.copied) !== JSON.stringify([{
+    fromRelativePath: 'Project/Archive',
+    toRelativePath: 'Test/Files/Archive',
+    options: { overwrite: false },
+  }])) {
+    throw new Error(`cross-Deal folder copy did not use files.copy: ${JSON.stringify(targetApi.copied)}`);
+  }
+  transferComponent.unmount(targetContainer);
 
   const russianDocument = makeDocument();
   const { component: russianComponent } = loadFilesComponent(russianDocument);

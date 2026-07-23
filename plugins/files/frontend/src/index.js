@@ -676,7 +676,12 @@
                 paths = [entry.relativePath];
               }
               e.dataTransfer.setData('application/files-paths', JSON.stringify(paths));
-              e.dataTransfer.effectAllowed = 'move';
+              e.dataTransfer.setData('application/x-verstak-files', JSON.stringify({
+                paths: paths,
+                workspaceRoot: workspaceRoot,
+                operation: 'move'
+              }));
+              e.dataTransfer.effectAllowed = 'copyMove';
               row.classList.add('files-dragging');
             },
             onDragend: function () { row.classList.remove('files-dragging'); }
@@ -1244,7 +1249,7 @@
       }
 
       function copySelection() {
-        var items = clipboardItemsFromSelection().filter(function (item) { return item.type !== 'folder'; });
+        var items = clipboardItemsFromSelection();
         if (items.length === 0) return;
         setClipboard('copy', items);
       }
@@ -1264,32 +1269,30 @@
       function pasteEntry() {
         var clip = window.__filesClipboard;
         if (!clip || !clip.items || clip.items.length === 0) return;
-        if (clip.workspaceRoot && clip.workspaceRoot !== workspaceRoot) {
-          window.alert(tr('ui.clipboardDifferentDeal', null, 'Clipboard items belong to another Deal.'));
-          return;
-        }
-        var destinationDir = scopedPath(currentPath);
-        var occupied = {};
-        entries.forEach(function (entry) { occupied[entry.name] = true; });
+        var crossWorkspace = !!(clip.workspaceRoot && clip.workspaceRoot !== workspaceRoot);
+        var destinationDir = crossWorkspace ? scopedPath(currentPath || 'Files') : scopedPath(currentPath);
 
-        var tasks = clip.items.map(function (item) {
-          var newName = uniqueDestinationName(item.name, occupied);
-          occupied[newName] = true;
-          var to = destinationDir ? destinationDir + '/' + newName : newName;
-          if (clip.action === 'cut') {
-            if (item.path === to || to.indexOf(item.path + '/') === 0) return Promise.resolve();
-            return api.files.move(item.path, to, { overwrite: false });
-          }
-          return api.files.readText(item.path).then(function (content) {
-            return api.files.writeText(to, content, { createIfMissing: true, overwrite: false });
+        api.files.list(destinationDir).then(function (destinationEntries) {
+          var occupied = {};
+          (destinationEntries || []).forEach(function (entry) { occupied[entry.name] = true; });
+          var tasks = clip.items.map(function (item) {
+            var newName = uniqueDestinationName(item.name, occupied);
+            occupied[newName] = true;
+            var to = destinationDir ? destinationDir + '/' + newName : newName;
+            if (clip.action === 'cut') {
+              if (item.path === to || to.indexOf(item.path + '/') === 0) return Promise.resolve();
+              return api.files.move(item.path, to, { overwrite: false });
+            }
+            return api.files.copy(item.path, to, { overwrite: false });
           });
-        });
-
-        Promise.allSettled(tasks).then(function () {
-          if (clip.action === 'cut') window.__filesClipboard = null;
+          return Promise.all(tasks);
+        }).then(function () {
+          if (clip.action === 'cut') {
+            window.__filesClipboard = null;
+          }
           loadEntries();
         }).catch(function (err) {
-          console.error('[files] Paste failed:', err);
+          window.alert(reportError('ui.pasteError', 'Could not paste these items. Check the destination and try again.', err));
         });
       }
 

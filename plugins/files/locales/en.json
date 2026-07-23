@@ -66,6 +66,7 @@
   "ui.trashConfirm": "Move \"{name}\" to trash?",
   "ui.trashManyConfirm": "Move {count} items to trash?",
   "ui.clipboardDifferentDeal": "Clipboard items belong to another Deal.",
+  "ui.pasteError": "Could not paste these items. Check the destination and try again.",
   "ui.emptyFolder": "Empty folder",
   "ui.noMatches": "No matches",
   "ui.clearFilter": "Clear filter",
