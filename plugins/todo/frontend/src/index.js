@@ -350,10 +350,6 @@
 
     function workspaceRoots() {
       var roots = workspaceOptions.slice();
-      todos.forEach(function (todo) {
-        var workspace = cleanWorkspace(todo.workspaceRootPath);
-        if (workspace && roots.indexOf(workspace) === -1) roots.push(workspace);
-      });
       if (scope.workspaceRoot && roots.indexOf(scope.workspaceRoot) === -1) roots.push(scope.workspaceRoot);
       return roots.sort(function (a, b) { return a.localeCompare(b, undefined, { sensitivity: 'base' }); });
     }
@@ -438,14 +434,12 @@
     }
 
     function loadWorkspaceOptions() {
-      if (!api || !api.files || typeof api.files.list !== 'function') return Promise.resolve();
-      return api.files.list('').then(function (entries) {
-        workspaceOptions = (Array.isArray(entries) ? entries : []).filter(function (entry) {
-          return text(entry && entry.type).toLowerCase() === 'folder';
-        }).map(function (entry) {
-          return cleanWorkspace(entry.relativePath || entry.name);
-        }).filter(function (workspace) {
-          return workspace && workspace.indexOf('/') === -1;
+      if (!api || !api.workspaces || typeof api.workspaces.list !== 'function') return Promise.resolve();
+      return api.workspaces.list().then(function (workspaces) {
+        workspaceOptions = (Array.isArray(workspaces) ? workspaces : []).map(function (workspace) {
+          return cleanWorkspace(workspace && workspace.rootPath);
+        }).filter(function (workspace, index, items) {
+          return workspace && items.indexOf(workspace) === index;
         });
       }).catch(function () {
         workspaceOptions = [];

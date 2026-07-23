@@ -161,8 +161,16 @@ function makeApi(initialSettings = {}, initialLocale = 'en') {
     },
     files: {
       list: async () => [
-        { name: 'ClientA', relativePath: 'ClientA', type: 'folder' },
+        { name: 'OrdinaryFolder', relativePath: 'OrdinaryFolder', type: 'folder' },
+        { name: 'DealWithoutTodo', relativePath: 'DealWithoutTodo', type: 'folder' },
         { name: 'Project', relativePath: 'Project', type: 'folder' },
+      ],
+    },
+    workspaces: {
+      list: async () => [
+        { id: 'workspace-project', name: 'Project', rootPath: 'Project' },
+        { id: 'workspace-client', name: 'ClientA', rootPath: 'ClientA' },
+        { id: 'workspace-nested', name: 'Acme', rootPath: 'Clients/Acme' },
       ],
     },
     notifications: {
@@ -178,6 +186,7 @@ function makeApi(initialSettings = {}, initialLocale = 'en') {
       return {
         settings: this.settingsApi,
         files: this.files,
+        workspaces: this.workspaces,
         notifications: this.notifications,
         i18n: {
           getLocale: () => locale,
@@ -333,6 +342,13 @@ async function mountWithApi(apiState, props, emittedEvents = [], document = make
     throw new Error('global Todo filter did not use Deal terminology');
   }
   const workspaceFilter = byData(globalView.container, 'data-todo-filter', 'workspace');
+  const workspaceFilterValues = workspaceFilter.children.map((option) => option.value);
+  if (!workspaceFilterValues.includes('Clients/Acme')) {
+    throw new Error('global Todo selector omitted a nested semantic Deal');
+  }
+  if (workspaceFilterValues.includes('OrdinaryFolder') || workspaceFilterValues.includes('DealWithoutTodo')) {
+    throw new Error('global Todo selector included a folder or a Deal without Todo');
+  }
   workspaceFilter.value = 'ClientA';
   workspaceFilter.dispatchEvent('change');
   await flush();
