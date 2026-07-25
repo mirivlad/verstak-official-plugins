@@ -1,0 +1,43 @@
+name: check
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      # scripts/check.sh validates every plugin manifest against
+      # ../verstak-sdk/schemas/manifest.json, so the SDK must sit beside this
+      # repository exactly as it does in a local workspace. Without it the
+      # script skips manifest validation instead of failing, which would make
+      # the job green for the wrong reason.
+      - uses: actions/checkout@v4
+        with:
+          path: verstak-official-plugins
+
+      - uses: actions/checkout@v4
+        with:
+          repository: mirivlad/verstak-sdk
+          path: verstak-sdk
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Confirm the SDK schema is reachable
+        run: test -f verstak-sdk/schemas/manifest.json
+
+      - name: Manifests, locales and plugin smokes
+        run: bash scripts/check.sh
+        working-directory: verstak-official-plugins
