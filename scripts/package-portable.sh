@@ -25,11 +25,37 @@ WINDOWS_ARCHIVE="$RELEASE_ROOT/verstak-official-plugins-windows-amd64-$VERSION.z
 rm -rf "$RELEASE_ROOT"
 mkdir -p "$RELEASE_ROOT"
 
+# Plugins whose manifest sets "development": true are built and installed for
+# local development but must not reach users: platform-test, for instance,
+# appears in the sidebar as "Platform Test" and reports its own results in the
+# status bar. Staging directories are used so dist/ stays complete for
+# install-dev-plugins.sh.
+stage_release_tree() {
+  local source="$1"
+  local staged="$2"
+  rm -rf "$staged"
+  cp -a "$source" "$staged"
+  for manifest in "$staged"/*/plugin.json; do
+    [ -f "$manifest" ] || continue
+    if python3 -c "import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get('development') else 1)" "$manifest"; then
+      echo "  ⊘ excluding development plugin: $(basename "$(dirname "$manifest")")"
+      rm -rf "$(dirname "$manifest")"
+    fi
+  done
+}
+
+STAGE_LINUX="$ROOT/.release-stage/linux"
+STAGE_WINDOWS="$ROOT/.release-stage/windows"
+trap 'rm -rf "$ROOT/.release-stage"' EXIT
+mkdir -p "$ROOT/.release-stage"
+stage_release_tree "$ROOT/dist" "$STAGE_LINUX"
+stage_release_tree "$ROOT/dist-windows" "$STAGE_WINDOWS"
+
 # Each archive expands directly into the desktop application's plugins/
-# directory. Frontends and manifests are shared; platform-test's native
-# sidecar is built for the target operating system.
-tar -C "$ROOT/dist" -czf "$LINUX_ARCHIVE" .
-(cd "$ROOT/dist-windows" && zip -qr "$WINDOWS_ARCHIVE" .)
+# directory. Frontends and manifests are shared; native sidecars are built for
+# the target operating system.
+tar -C "$STAGE_LINUX" -czf "$LINUX_ARCHIVE" .
+(cd "$STAGE_WINDOWS" && zip -qr "$WINDOWS_ARCHIVE" .)
 (cd "$RELEASE_ROOT" && sha256sum "$(basename "$LINUX_ARCHIVE")" "$(basename "$WINDOWS_ARCHIVE")" > SHA256SUMS)
 
 echo "Linux plugins:   $LINUX_ARCHIVE"

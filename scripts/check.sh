@@ -126,6 +126,18 @@ else
 fi
 
 echo ""
+echo "[release contents]"
+if command -v node &>/dev/null; then
+  set +e
+  node "$ROOT/scripts/check-release-contents.js"
+  STATUS=$?
+  set -e
+  report "release contents" "$STATUS"
+else
+  echo "  ⚠️  node not available — skipping release content validation"
+fi
+
+echo ""
 echo "[keyboard shortcuts]"
 if command -v node &>/dev/null; then
   set +e
