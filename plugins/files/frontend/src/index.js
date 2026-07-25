@@ -59,6 +59,9 @@
     '.files-empty-btn{display:inline-flex;align-items:center;justify-content:center;gap:.35rem;min-height:2rem;padding:.35rem .6rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-md,6px);background:var(--vt-color-surface-hover,#1b2440);color:var(--vt-color-text-secondary,#b7c0d4);cursor:pointer;font-size:.78rem}',
     '.files-empty-btn:hover{background:var(--vt-color-surface-hover,#1b2440);border-color:var(--vt-color-accent,#4ecca3)}',
     '.files-empty-btn svg{width:15px;height:15px;display:block;fill:currentColor}',
+    '.files-notice{display:flex;align-items:flex-start;gap:.5rem;margin:.4rem .6rem 0;padding:.45rem .55rem;border:1px solid rgba(233,69,96,.55);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-danger-muted,rgba(233,69,96,.14));color:var(--vt-color-danger-foreground,#ffc6ce);font-size:.78rem;line-height:1.35}',
+    '.files-notice-text{flex:1;min-width:0}',
+    '.files-notice-close{flex-shrink:0;min-height:0;padding:0 .3rem;border:0;background:transparent;color:inherit;cursor:pointer}',
     '.files-error{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--vt-color-danger,#e94560);gap:.5rem;padding:1rem}',
     '.files-error-msg{font-size:.85rem;color:var(--vt-color-text-secondary,#b7c0d4);max-width:420px;text-align:center}',
     '@container(max-width:1120px){.files-filter-group{order:10;flex:1 0 100%;width:100%;border-right:0;padding-right:0}.files-filter-group .files-filter{flex:1;min-width:0;width:auto}}',
@@ -450,6 +453,34 @@
         el('div', { className: 'files-toolbar-group files-filter-group', 'aria-label': 'Filter and sort' }, [filterInput, sortSelect])
       ].forEach(function (node) { toolbar.appendChild(node); });
       containerEl.appendChild(toolbar);
+
+      // Failures used to go through window.alert, a blocking OS dialog in a
+      // desktop app. This is an in-app banner: it does not steal focus and it
+      // leaves the file list visible so the user can see what went wrong.
+      var noticeEl = el('div', { className: 'files-notice', role: 'alert', 'data-files-notice': '' });
+      var noticeTextEl = el('span', { className: 'files-notice-text' });
+      var noticeCloseEl = el('button', {
+        className: 'files-notice-close',
+        type: 'button',
+        'data-files-notice-close': '',
+        title: tr('ui.close', null, 'Close'),
+        'aria-label': tr('ui.close', null, 'Close'),
+        onClick: function () { hideNotice(); },
+      }, ['\u00d7']);
+      noticeEl.appendChild(noticeTextEl);
+      noticeEl.appendChild(noticeCloseEl);
+      noticeEl.style.display = 'none';
+      containerEl.appendChild(noticeEl);
+
+      function showNotice(message) {
+        noticeTextEl.textContent = message;
+        noticeEl.style.display = '';
+      }
+
+      function hideNotice() {
+        noticeTextEl.textContent = '';
+        noticeEl.style.display = 'none';
+      }
 
       var listContainer = el('div', { className: 'files-list', 'data-files-list': '' });
       containerEl.appendChild(listContainer);
@@ -1044,7 +1075,7 @@
             api.files.trash(entry.relativePath).then(function () {
               loadEntries();
             }).catch(function (err) {
-              window.alert(reportError('ui.trashError', 'Could not move this item to trash. Please try again.', err));
+              showNotice(reportError('ui.trashError', 'Could not move this item to trash. Please try again.', err));
             });
           });
         } else if (count > 1) {
@@ -1292,7 +1323,7 @@
           }
           loadEntries();
         }).catch(function (err) {
-          window.alert(reportError('ui.pasteError', 'Could not paste these items. Check the destination and try again.', err));
+          showNotice(reportError('ui.pasteError', 'Could not paste these items. Check the destination and try again.', err));
         });
       }
 

@@ -126,6 +126,18 @@ else
 fi
 
 echo ""
+echo "[keyboard shortcuts]"
+if command -v node &>/dev/null; then
+  set +e
+  node "$ROOT/scripts/check-shortcuts.js"
+  STATUS=$?
+  set -e
+  report "keyboard shortcuts" "$STATUS"
+else
+  echo "  ⚠️  node not available — skipping shortcut validation"
+fi
+
+echo ""
 # Guard official plugins against bypassing the v2 plugin API for note features.
 echo "[frontend API boundary]"
 if [ "$HAS_PYTHON" -eq 1 ]; then
