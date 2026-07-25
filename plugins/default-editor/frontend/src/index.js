@@ -299,6 +299,19 @@
         return fallback || key;
       }
 
+      // Shortcut matching belongs to the host, which compares event.code so a
+      // non-Latin keyboard layout does not break the binding. The fallback
+      // keeps the editor working on a host that predates api.keys, and is
+      // deliberately code-based for the same reason.
+      function matchesShortcut(event, spec) {
+        if (api && api.keys && typeof api.keys.matches === 'function') {
+          return api.keys.matches(event, spec);
+        }
+        if (!event || !spec || event.code !== spec.code) return false;
+        if (spec.ctrlOrMeta) return Boolean(event.ctrlKey || event.metaKey);
+        return true;
+      }
+
       containerEl.setAttribute('data-editor-mode', editorMode);
       containerEl.setAttribute('data-resource-path', resourcePath);
       containerEl.setAttribute('data-request-mode', requestedMode);
@@ -419,7 +432,7 @@
         textarea.addEventListener('input', syncFromTextarea);
         textarea.addEventListener('scroll', function () { if (linesEl) linesEl.scrollTop = textarea.scrollTop; });
         textarea.addEventListener('keydown', function (event) {
-          if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+          if (matchesShortcut(event, { code: 'KeyS', ctrlOrMeta: true })) {
             event.preventDefault();
             save();
           }
