@@ -7,7 +7,12 @@
   'use strict';
 
   var PLUGIN_ID = 'verstak.activity';
-  var MAX_EVENTS = 250;
+  // How many rows the list draws. This used to be applied when *reading*
+  // storage, so 789 of 1039 recorded events in one real vault never reached the
+  // session builder at all -- and the Journal could not propose anything
+  // because three quarters of the history had been thrown away before it was
+  // looked at. It is a rendering limit and belongs at rendering.
+  var MAX_RENDERED_EVENTS = 250;
   var RAW_DATA_NAME = 'activity-events';
   var MAX_CANDIDATES = 12;
   var LEGACY_KEY = 'events';
@@ -20,6 +25,10 @@
   var MIN_SESSION_DURATION_MINUTES = 10;
   var MIN_SESSION_ACTIVITY_COUNT = 2;
   var MAX_IDLE_GAP_MINUTES = 20;
+  // Credited to a session for the work that produced its first recorded event,
+  // which nothing observes directly. Only sessions containing at least one
+  // event that carries no measured duration of its own get it.
+  var SESSION_LEAD_IN_MINUTES = 5;
   var MAX_SESSION_DURATION_MINUTES = 120;
   var ACTIVITY_EVENTS = [
     'file.opened',
@@ -90,6 +99,8 @@
     '.activity-candidate-duration{font-size:.76rem;color:var(--vt-color-accent,#4ecca3);white-space:nowrap}',
     '.activity-list{flex:1;min-height:0;overflow:auto;background:var(--vt-color-background,#101020)}',
     '.activity-empty{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.35rem;color:var(--vt-color-text-muted,#7f8aa3);font-size:.86rem;padding:2rem;text-align:center}',
+    '.activity-service-toggle{display:inline-flex;align-items:center;gap:.32rem;font-size:.76rem;color:var(--vt-color-text-secondary,#b7c0d4);cursor:pointer;white-space:nowrap}',
+    '.activity-truncated{padding:.55rem .7rem;font-size:.75rem;color:var(--vt-color-text-muted,#7f8aa3);border-top:1px solid var(--vt-color-border,#202b46)}',
     '.activity-empty-title{color:var(--vt-color-text-secondary,#b7c0d4);font-weight:650}',
     '.activity-row{display:grid;grid-template-columns:9.5rem minmax(0,1fr);gap:.75rem;padding:.72rem .85rem;border-bottom:1px solid rgba(32,43,70,.72)}',
     '.activity-row:hover{background:var(--vt-color-surface-hover,#1b2440)}',
@@ -189,7 +200,7 @@
         _storageKey: storageKey || '',
         payload: item.payload && typeof item.payload === 'object' ? item.payload : {}
       };
-    }).slice(0, MAX_EVENTS);
+    });
   }
 
   function storageEvents(activityList) {
@@ -221,7 +232,22 @@
       return true;
     }).slice().sort(function (a, b) {
       return text(b.occurredAt || b.receivedAt).localeCompare(text(a.occurredAt || a.receivedAt));
-    }).slice(0, MAX_EVENTS);
+    });
+  }
+
+  // Activity that Verstak recorded because files moved, not because the user
+  // did something: an import publishing a run, sync applying a pull, the
+  // watcher noticing a change made outside the application. One import wrote
+  // 497 of these in a single minute across 44 Deals.
+  //
+  // `service` is set at the source; `external` and the `external.` operation
+  // prefix are what the same events already carried before the flag existed, so
+  // history recorded until now is classified correctly without a migration.
+  function isServiceActivity(activity) {
+    var payload = (activity && activity.payload) || {};
+    if (payload.service === true || activity.service === true) return true;
+    if (payload.external === true) return true;
+    return text(payload.operation).indexOf('external.') === 0;
   }
 
   function isMeaningfulActivity(activity) {
@@ -292,16 +318,33 @@
     return registry;
   }
 
+  // How long a session of work lasted.
+  //
+  // Events that measured their own time -- browser activity does -- contribute
+  // it directly. Everything else is a moment, not a span: a file save records
+  // when it happened, not how long the work before it took. Time between two
+  // such moments counts, up to the idle cap.
+  //
+  // The lead-in is the piece that was missing. Without it a session begins at
+  // its first save, so a burst of saves in the same second measured zero
+  // minutes -- one real vault had fourteen events in a session worth 0 -- and
+  // four saves over four minutes measured four, when the work plainly started
+  // before the first one. Every session of real events is credited with the
+  // work that led to its first event.
   function sessionDurationMinutes(session) {
     var events = session.activities.slice().sort(function (a, b) { return eventTimeMs(a) - eventTimeMs(b); });
+    if (events.length === 0) return 0;
     var durationMs = 0;
+    var hasMomentEvent = false;
     for (var index = 0; index < events.length; index += 1) {
       var explicit = Math.max(0, Number(events[index].durationSeconds || 0)) * 1000;
       durationMs += explicit;
+      if (explicit === 0) hasMomentEvent = true;
       if (index === 0 || explicit > 0 || Number(events[index - 1].durationSeconds || 0) > 0) continue;
       var gap = eventTimeMs(events[index]) - eventTimeMs(events[index - 1]);
       if (gap > 0 && gap <= MAX_IDLE_GAP_MINUTES * 60 * 1000) durationMs += Math.min(gap, 10 * 60 * 1000);
     }
+    if (hasMomentEvent) durationMs += SESSION_LEAD_IN_MINUTES * 60 * 1000;
     return Math.min(MAX_SESSION_DURATION_MINUTES, Math.floor(durationMs / 60000));
   }
 
@@ -324,7 +367,9 @@
     var sessions = [];
     var lastScope = '';
     var ordered = sortEvents(activityList || []).filter(function (activity) {
-      return isMeaningfulActivity(activity) && eventTimeMs(activity);
+      // Service activity never forms a work session: nobody worked those
+      // minutes, and a journal entry built from them would be fiction.
+      return !isServiceActivity(activity) && isMeaningfulActivity(activity) && eventTimeMs(activity);
     }).slice().sort(function (a, b) { return eventTimeMs(a) - eventTimeMs(b); });
     ordered.forEach(function (activity) {
       var scope = candidateScope(activity);
@@ -346,6 +391,8 @@
         sessionsById[sessionId] = session;
         sessions.push(session);
       }
+      // Moving to another Deal ends the session for the one before it, so time
+      // spent elsewhere is not billed to both.
       if (!session && (!lastScope || lastScope === scope)) {
         session = findCompatibleSession(sessions, scope, eventTimeMs(activity));
       }
@@ -553,6 +600,7 @@
     var events = [];
     var candidateSourceEvents = [];
     var candidates = [];
+    var showService = false;
     var dismissedByWorkspace = {};
     var handledSessions = {};
     var sessionRegistry = normalizeSessionRegistry({});
@@ -583,8 +631,25 @@
       textContent: tr('ui.clear', null, 'Clear'),
       onClick: showClearConfirmation
     });
+    // Service activity is hidden by default and reachable on request: it is a
+    // record of files appearing, and on an import day it outnumbers real work
+    // roughly two to one.
+    var serviceToggle = el('label', { className: 'activity-service-toggle' }, []);
+    var serviceCheckbox = el('input', {
+      type: 'checkbox',
+      'data-activity-show-service': '',
+      onChange: function () {
+        showService = serviceCheckbox.checked;
+        renderList();
+        renderCount();
+      }
+    });
+    serviceToggle.appendChild(serviceCheckbox);
+    serviceToggle.appendChild(el('span', { 'data-activity-service-label': '', textContent: tr('ui.showService', null, 'Service activity') }));
+
     toolbar.appendChild(titleEl);
     toolbar.appendChild(countEl);
+    toolbar.appendChild(serviceToggle);
     toolbar.appendChild(el('span', { className: 'activity-spacer' }));
     toolbar.appendChild(statusEl);
     toolbar.appendChild(clearBtn);
@@ -745,16 +810,22 @@
       });
     }
 
+    function visibleEvents() {
+      return showService ? events : events.filter(function (activity) { return !isServiceActivity(activity); });
+    }
+
     function renderList() {
       listEl.innerHTML = '';
-      if (events.length === 0) {
+      var visible = visibleEvents();
+      var shown = visible.slice(0, MAX_RENDERED_EVENTS);
+      if (visible.length === 0) {
         listEl.appendChild(el('div', { className: 'activity-empty' }, [
           el('div', { className: 'activity-empty-title', textContent: tr('ui.empty', null, 'No activity events yet') }),
           el('div', { textContent: tr('ui.emptyHint', null, 'File changes, browser captures, and conversions will appear here.') })
         ]));
         return;
       }
-      events.forEach(function (activity) {
+      shown.forEach(function (activity) {
         listEl.appendChild(el('div', {
           className: 'activity-row',
           'data-activity-id': activity.activityId
@@ -769,6 +840,14 @@
           ])
         ]));
       });
+      if (visible.length > shown.length) {
+        listEl.appendChild(el('div', {
+          className: 'activity-truncated',
+          'data-activity-truncated': '',
+          textContent: tr('ui.truncated', { shown: shown.length, total: visible.length },
+            'Showing the latest ' + shown.length + ' of ' + visible.length + ' events')
+        }));
+      }
     }
 
     function candidateTimeRange(candidate) {
@@ -842,8 +921,13 @@
       });
     }
 
+    function renderCount() {
+      var count = visibleEvents().length;
+      countEl.textContent = tr(count === 1 ? 'ui.eventCount.one' : 'ui.eventCount.many', { count: count }, count + ' event' + (count === 1 ? '' : 's'));
+    }
+
     function render() {
-      countEl.textContent = tr(events.length === 1 ? 'ui.eventCount.one' : 'ui.eventCount.many', { count: events.length }, events.length + ' event' + (events.length === 1 ? '' : 's'));
+      renderCount();
       clearBtn.disabled = events.length === 0;
       statusEl.textContent = statusText;
       statusEl.className = 'activity-status' + (statusClass ? ' ' + statusClass : '');
