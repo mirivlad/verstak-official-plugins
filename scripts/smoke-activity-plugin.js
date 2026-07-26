@@ -642,6 +642,105 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   if (rawApi.storedData('activity-events').length !== 0) throw new Error('clear activity did not replace append-only data');
   component.unmount && component.unmount(rawView.container);
 
+  // Browser time arrives belonging to nobody -- the extension cannot know which
+  // Deal a page was for. The Browser tool lists it and says, through these two
+  // commands, with no Activity view mounted.
+  const browserApi = makeApi({}, {
+    'activity-events': [
+      {
+        activityId: 'browser-domain:b1:0',
+        type: 'browser.activity.domain',
+        title: 'https://dash.example.com/projects/42',
+        occurredAt: '2026-07-22T11:20:00Z',
+        hostname: 'dash.example.com',
+        url: 'https://dash.example.com/projects/42',
+        startedAt: '2026-07-22T11:02:00Z',
+        endedAt: '2026-07-22T11:20:00Z',
+        durationSeconds: 1080,
+        workspaceRootPath: '',
+        payload: { hostname: 'dash.example.com', url: 'https://dash.example.com/projects/42', durationSeconds: 1080 },
+      },
+      {
+        activityId: 'browser-domain:b1:1',
+        type: 'browser.activity.domain',
+        title: 'https://example.com/blog/post',
+        occurredAt: '2026-07-22T11:40:00Z',
+        hostname: 'example.com',
+        url: 'https://example.com/blog/post',
+        startedAt: '2026-07-22T11:33:00Z',
+        endedAt: '2026-07-22T11:40:00Z',
+        durationSeconds: 420,
+        workspaceRootPath: '',
+        payload: { hostname: 'example.com', url: 'https://example.com/blog/post', durationSeconds: 420 },
+      },
+      // Not browser activity, and must never be offered for attaching here.
+      {
+        activityId: 'note-x',
+        type: 'note.saved',
+        occurredAt: '2026-07-22T12:00:00Z',
+        workspaceRootPath: 'Project',
+        payload: { workspaceRootPath: 'Project' },
+      },
+    ],
+  });
+  await activateWithApi(browserApi);
+  const listBrowser = browserApi.commandHandlers.get('verstak.activity.listBrowserActivity');
+  const assignBrowser = browserApi.commandHandlers.get('verstak.activity.assignBrowserActivity');
+  if (typeof listBrowser !== 'function' || typeof assignBrowser !== 'function') {
+    throw new Error('the Browser tool has no way to list or attach browser activity');
+  }
+  const listed = (await listBrowser({})).activities;
+  if (listed.length !== 2) throw new Error(`expected the two recorded pages, got ${JSON.stringify(listed)}`);
+  if (listed[0].url !== 'https://example.com/blog/post') throw new Error('browser activity must be listed newest first');
+  if (listed[0].durationSeconds !== 420) throw new Error('browser activity must carry the time it accounts for');
+  if ((await listBrowser({ onlyUnassigned: true })).activities.length !== 2) {
+    throw new Error('nothing is attached yet, so everything is unassigned');
+  }
+
+  // Until the user says which Deal a page was for, the time is not countable
+  // against anything -- the browser cannot know, and guessing would put
+  // invented work in the Journal.
+  if ((await browserApi.commandHandlers.get(WORKLOG_COMMAND_ID)({})).candidates.length !== 0) {
+    throw new Error('browser time that belongs to no Deal must not be proposed as work');
+  }
+
+  const assignResult = await assignBrowser({ activityIds: ['browser-domain:b1:0', 'note-x'], workspaceRootPath: 'Project' });
+  if (assignResult.assigned !== 1) throw new Error(`only browser activity may be attached, assigned ${assignResult.assigned}`);
+  const storedBrowser = browserApi.storedData('activity-events');
+  const attached = storedBrowser.find((item) => item.activityId === 'browser-domain:b1:0');
+  if (attached.workspaceRootPath !== 'Project' || attached.payload.workspaceRootPath !== 'Project') {
+    throw new Error(`attaching did not reach the stored record: ${JSON.stringify(attached)}`);
+  }
+  if (storedBrowser.find((item) => item.activityId === 'browser-domain:b1:1').workspaceRootPath !== '') {
+    throw new Error('attaching one page must not touch another');
+  }
+  const afterAttach = (await listBrowser({ onlyUnassigned: true })).activities;
+  if (afterAttach.length !== 1 || afterAttach[0].activityId !== 'browser-domain:b1:1') {
+    throw new Error('an attached page is no longer unassigned');
+  }
+  if ((await listBrowser({ workspaceRootPath: 'Project' })).activities.length !== 1) {
+    throw new Error('a Deal must be able to ask for its own browser activity');
+  }
+
+  // Attaching is what makes the time countable: until the user says which Deal
+  // a page was for, nobody can bill it to anything.
+  const browserWorklog = browserApi.commandHandlers.get(WORKLOG_COMMAND_ID);
+  const browserCandidates = (await browserWorklog({ workspaceRootPath: 'Project' })).candidates;
+  if (browserCandidates.length !== 1) {
+    throw new Error(`attached browser time must become a possible journal entry, got ${JSON.stringify(browserCandidates)}`);
+  }
+  // 18 minutes measured by the extension, not guessed from the gap to a
+  // neighbouring event, so one page on its own is enough to propose.
+  if (browserCandidates[0].estimatedMinutes !== 18) {
+    throw new Error(`expected the measured 18 minutes, got ${browserCandidates[0].estimatedMinutes}`);
+  }
+  if (browserCandidates[0].activityIds.join(',') !== 'browser-domain:b1:0') {
+    throw new Error(`the proposal must be built from the attached page: ${browserCandidates[0].activityIds}`);
+  }
+  if ((await browserWorklog({ workspaceRootPath: 'ClientA' })).candidates.length !== 0) {
+    throw new Error('browser time attached to one Deal must not be offered to another');
+  }
+
   // The Journal's situation exactly: no Activity view has ever been mounted
   // against this api, and possible entries still have to come back.
   const headlessApi = makeApi({

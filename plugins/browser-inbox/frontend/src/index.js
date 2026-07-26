@@ -14,6 +14,9 @@
   var GLOBAL_KEY = 'captures:global';
   var WORKSPACE_PREFIX = 'captures:workspace:';
   var MUTATION_EVENT = 'browser-inbox.storage.mutate';
+  var ACTIVITY_PLUGIN_ID = 'verstak.activity';
+  var LIST_ACTIVITY_COMMAND = 'verstak.activity.listBrowserActivity';
+  var ASSIGN_ACTIVITY_COMMAND = 'verstak.activity.assignBrowserActivity';
 
   function injectStyles() {
     if (document.getElementById('browser-inbox-style-injected')) return;
@@ -41,6 +44,17 @@
     '.browser-inbox-btn.danger{border-color:rgba(233,69,96,.42);color:#ff9a9a;background:var(--vt-color-danger-muted,rgba(233,69,96,.14))}',
     '.browser-inbox-status{font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3);white-space:nowrap}',
     '.browser-inbox-status.error{display:inline-flex;border:1px solid rgba(233,69,96,.45);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-danger-muted,rgba(233,69,96,.14));color:#ffc6ce;padding:.18rem .4rem}',
+    '.browser-inbox-activity{flex-shrink:0;max-height:38%;display:flex;flex-direction:column;min-height:0;border-bottom:1px solid var(--vt-color-border,#202b46);background:var(--vt-color-surface-muted,#111629)}',
+    '.browser-inbox-activity[hidden]{display:none}',
+    '.browser-inbox-activity-head{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap;padding:.45rem .75rem;border-bottom:1px solid rgba(32,43,70,.72)}',
+    '.browser-inbox-activity-title{font-size:.78rem;font-weight:600;color:var(--vt-color-text-secondary,#b7c0d4)}',
+    '.browser-inbox-activity-toggle{display:flex;align-items:center;gap:.25rem;font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3);white-space:nowrap}',
+    '.browser-inbox-activity-list{min-height:0;overflow:auto}',
+    '.browser-inbox-activity-empty{padding:.75rem;font-size:.76rem;color:var(--vt-color-text-muted,#7f8aa3)}',
+    '.browser-inbox-activity-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:.5rem;padding:.4rem .75rem;border-bottom:1px solid rgba(32,43,70,.5);cursor:pointer}',
+    '.browser-inbox-activity-row:hover{background:var(--vt-color-surface-hover,#1b2440)}',
+    '.browser-inbox-activity-url{font-size:.78rem;color:var(--vt-color-text-primary,#f4f7fb);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.browser-inbox-activity-meta{font-size:.7rem;color:var(--vt-color-text-muted,#7f8aa3);white-space:nowrap}',
     '.browser-inbox-body{display:grid;grid-template-columns:minmax(260px,360px) minmax(0,1fr);flex:1;min-height:0}',
     '.browser-inbox-list{min-height:0;overflow:auto;border-right:1px solid var(--vt-color-border,#202b46);background:var(--vt-color-surface-muted,#111629)}',
     '.browser-inbox-empty{height:100%;display:flex;align-items:center;justify-content:center;color:var(--vt-color-text-muted,#7f8aa3);font-size:.86rem;padding:2rem;text-align:center;line-height:1.45}',
@@ -374,6 +388,10 @@
     var statusFilter = 'all';
     var workspaceFilter = '';
     var searchQuery = '';
+    var browserActivity = [];
+    var activitySelection = {};
+    var showAttachedActivity = false;
+    var activityTarget = '';
     function tr(key, params, fallback) {
       if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
       return fallback || key;
@@ -469,12 +487,25 @@
     toolbar.appendChild(statusEl);
     toolbar.appendChild(clearBtn);
 
+    // Time the extension recorded arrives belonging to nobody: the browser
+    // cannot know which Deal a page was for. This is where the user says.
+    var activityEl = el('div', {
+      className: 'browser-inbox-activity',
+      'data-browser-activity-section': '',
+      hidden: 'hidden'
+    });
+    var activityHeadEl = el('div', { className: 'browser-inbox-activity-head' });
+    var activityListEl = el('div', { className: 'browser-inbox-activity-list' });
+    activityEl.appendChild(activityHeadEl);
+    activityEl.appendChild(activityListEl);
+
     var body = el('div', { className: 'browser-inbox-body' });
     var listEl = el('div', { className: 'browser-inbox-list' });
     var detailEl = el('div', { className: 'browser-inbox-detail' });
     body.appendChild(listEl);
     body.appendChild(detailEl);
     containerEl.appendChild(toolbar);
+    containerEl.appendChild(activityEl);
     containerEl.appendChild(body);
 
     function option(value, label) {
@@ -801,6 +832,176 @@
       });
     }
 
+    function loadBrowserActivity() {
+      if (!api || !api.commands || typeof api.commands.executeFor !== 'function') return Promise.resolve();
+      return api.commands.executeFor(ACTIVITY_PLUGIN_ID, LIST_ACTIVITY_COMMAND, {}).then(function (response) {
+        var result = response && response.result;
+        browserActivity = result && Array.isArray(result.activities) ? result.activities : [];
+      }).catch(function (err) {
+        // Activity is an optional plugin. Without it there is simply nothing
+        // to attach, which is not an error the user needs to see.
+        console.warn('[verstak.browser-inbox] browser activity unavailable:', err);
+        browserActivity = [];
+      });
+    }
+
+    function visibleActivity() {
+      return browserActivity.filter(function (item) {
+        var workspaceRoot = cleanWorkspace(item && item.workspaceRootPath);
+        if (scope.mode === 'workspace') return !workspaceRoot || workspaceRoot === scope.workspaceRoot;
+        if (!showAttachedActivity) return !workspaceRoot;
+        return true;
+      });
+    }
+
+    function selectedActivityIds() {
+      var visibleIds = {};
+      visibleActivity().forEach(function (item) { visibleIds[item.activityId] = true; });
+      return Object.keys(activitySelection).filter(function (id) {
+        return activitySelection[id] && visibleIds[id];
+      });
+    }
+
+    function attachTarget() {
+      return scope.mode === 'workspace' ? scope.workspaceRoot : cleanWorkspace(activityTarget);
+    }
+
+    function attachSelectedActivity() {
+      var ids = selectedActivityIds();
+      var workspaceRoot = attachTarget();
+      if (!ids.length || !workspaceRoot) return Promise.resolve();
+      if (!api || !api.commands || typeof api.commands.executeFor !== 'function') return Promise.resolve();
+      return api.commands.executeFor(ACTIVITY_PLUGIN_ID, ASSIGN_ACTIVITY_COMMAND, {
+        activityIds: ids,
+        workspaceRootPath: workspaceRoot
+      }).then(function (response) {
+        var assigned = response && response.result && Number(response.result.assigned) || 0;
+        if (!assigned) {
+          reportError('ui.browserActivity.attachError', 'Could not attach the browser activity. Please try again.');
+          return undefined;
+        }
+        activitySelection = {};
+        statusText = tr('ui.browserActivity.attached', { count: assigned, workspace: workspaceRoot }, assigned + ' attached to ' + workspaceRoot);
+        statusClass = '';
+        return loadBrowserActivity().then(render);
+      }).catch(function (err) {
+        reportError('ui.browserActivity.attachError', 'Could not attach the browser activity. Please try again.', err);
+      });
+    }
+
+    function activityMinutes(item) {
+      return Math.round(Math.max(0, Number(item && item.durationSeconds) || 0) / 60);
+    }
+
+    function renderActivity() {
+      activityHeadEl.innerHTML = '';
+      activityListEl.innerHTML = '';
+      var visible = visibleActivity();
+      if (!browserActivity.length) {
+        activityEl.setAttribute('hidden', 'hidden');
+        return;
+      }
+      if (typeof activityEl.removeAttribute === 'function') activityEl.removeAttribute('hidden');
+      else delete activityEl.attributes.hidden;
+
+      var chosen = selectedActivityIds();
+      activityHeadEl.appendChild(el('span', {
+        className: 'browser-inbox-activity-title',
+        textContent: tr('ui.browserActivity.title', null, 'Browser activity')
+      }));
+      activityHeadEl.appendChild(el('span', {
+        className: 'browser-inbox-count',
+        'data-browser-activity-count': String(visible.length),
+        textContent: chosen.length
+          ? tr('ui.browserActivity.chosen', { count: chosen.length, total: visible.length }, chosen.length + ' of ' + visible.length + ' selected')
+          : String(visible.length)
+      }));
+      if (scope.mode === 'global') {
+        var showAttachedInput = el('input', {
+          type: 'checkbox',
+          'data-browser-activity-show-attached': '',
+          onChange: function () {
+            showAttachedActivity = showAttachedInput.checked === true;
+            renderActivity();
+          }
+        });
+        showAttachedInput.checked = showAttachedActivity;
+        activityHeadEl.appendChild(el('label', { className: 'browser-inbox-activity-toggle' }, [
+          showAttachedInput,
+          el('span', { textContent: tr('ui.browserActivity.showAttached', null, 'Show attached') })
+        ]));
+      }
+      activityHeadEl.appendChild(el('span', { className: 'browser-inbox-spacer' }));
+      activityHeadEl.appendChild(el('button', {
+        className: 'browser-inbox-btn',
+        type: 'button',
+        'data-browser-activity-action': 'select-all',
+        textContent: chosen.length === visible.length && visible.length > 0
+          ? tr('ui.browserActivity.clearSelection', null, 'Clear selection')
+          : tr('ui.browserActivity.selectAll', null, 'Select all'),
+        onClick: function () {
+          var all = chosen.length === visible.length && visible.length > 0;
+          activitySelection = {};
+          if (!all) visible.forEach(function (item) { activitySelection[item.activityId] = true; });
+          renderActivity();
+        }
+      }));
+      if (scope.mode === 'global') {
+        var dealSelect = el('select', {
+          className: 'browser-inbox-select',
+          'data-browser-activity-deal': '',
+          'aria-label': tr('ui.browserActivity.chooseDeal', null, 'Choose a Deal'),
+          onChange: function (event) {
+            activityTarget = cleanWorkspace(event && event.target && event.target.value);
+            renderActivity();
+          }
+        }, [option('', tr('ui.browserActivity.chooseDeal', null, 'Choose a Deal'))].concat(workspaceRoots().map(function (root) {
+          return option(root, root);
+        })));
+        dealSelect.value = activityTarget;
+        activityHeadEl.appendChild(dealSelect);
+      }
+      var attachBtn = el('button', {
+        className: 'browser-inbox-btn',
+        type: 'button',
+        'data-browser-activity-action': 'attach',
+        textContent: tr('ui.browserActivity.attach', null, 'Attach to Deal'),
+        onClick: attachSelectedActivity
+      });
+      attachBtn.disabled = chosen.length === 0 || !attachTarget();
+      activityHeadEl.appendChild(attachBtn);
+
+      if (!visible.length) {
+        activityListEl.appendChild(el('div', {
+          className: 'browser-inbox-activity-empty',
+          textContent: tr('ui.browserActivity.allAttached', null, 'Every recorded page is attached to a Deal.')
+        }));
+        return;
+      }
+      visible.forEach(function (item) {
+        var workspaceRoot = cleanWorkspace(item.workspaceRootPath);
+        var checkbox = el('input', {
+          type: 'checkbox',
+          'data-browser-activity-id': item.activityId,
+          onChange: function () {
+            if (checkbox.checked) activitySelection[item.activityId] = true;
+            else delete activitySelection[item.activityId];
+            renderActivity();
+          }
+        });
+        checkbox.checked = activitySelection[item.activityId] === true;
+        activityListEl.appendChild(el('label', { className: 'browser-inbox-activity-row' }, [
+          checkbox,
+          el('span', { className: 'browser-inbox-activity-url', textContent: item.url || item.hostname || item.activityId }),
+          el('span', { className: 'browser-inbox-activity-meta', textContent: [
+            formatDate(item.endedAt || item.occurredAt),
+            tr('ui.browserActivity.minutes', { minutes: activityMinutes(item) }, activityMinutes(item) + ' min'),
+            workspaceRoot || tr('ui.unassigned', null, 'Unassigned')
+          ].filter(Boolean).join(' · ') })
+        ]));
+      });
+    }
+
     function renderList() {
       listEl.innerHTML = '';
       var visible = visibleCaptures();
@@ -1014,6 +1215,7 @@
       renderCount();
       statusEl.textContent = statusText;
       statusEl.className = 'browser-inbox-status' + (statusClass ? ' ' + statusClass : '');
+      renderActivity();
       renderList();
       renderDetail();
     }
@@ -1138,7 +1340,7 @@
     Promise.all([loadStored(), loadWorkspaceOptions()]).then(function () {
       if (disposed) return;
       render();
-      return Promise.all([subscribeEvents(), subscribeWorkspaceEvents()]);
+      return Promise.all([subscribeEvents(), subscribeWorkspaceEvents(), loadBrowserActivity()]);
     }).then(function () {
       if (!disposed) render();
     });
