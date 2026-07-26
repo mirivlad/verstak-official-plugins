@@ -98,7 +98,7 @@ function makeDocument() {
   };
 }
 
-function loadComponent(document) {
+function loadBundle(document) {
   const registry = {};
   vm.runInNewContext(source, {
     console,
@@ -107,13 +107,28 @@ function loadComponent(document) {
     document,
     window: {
       VerstakPluginRegister(pluginId, bundle) {
-        registry[pluginId] = bundle.components || {};
+        registry[pluginId] = bundle;
       },
     },
   }, { filename: sourcePath });
-  const component = registry['verstak.activity'] && registry['verstak.activity'].ActivityView;
-  if (!component) throw new Error('ActivityView was not registered');
-  return component;
+  const bundle = registry['verstak.activity'];
+  if (!bundle || !bundle.components || !bundle.components.ActivityView) throw new Error('ActivityView was not registered');
+  return bundle;
+}
+
+function loadComponent(document) {
+  return loadBundle(document).components.ActivityView;
+}
+
+// Activation is what the shell does for a plugin nothing is showing: the
+// Journal asks Activity for possible entries while the user is looking at the
+// Journal.
+async function activateWithApi(api, document = makeDocument()) {
+  const bundle = loadBundle(document);
+  if (typeof bundle.activate !== 'function') throw new Error('activity bundle declares no activate hook');
+  await bundle.activate(api);
+  await flush();
+  return bundle;
 }
 
 function makeApi(initialSettings = {}, initialData = {}) {
@@ -187,7 +202,14 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   if (!manifest.permissions.includes('commands.register')) throw new Error('activity manifest must request commands.register');
   const worklogCommand = (manifest.contributes.commands || []).find((item) => item.id === WORKLOG_COMMAND_ID);
   if (!worklogCommand || worklogCommand.handler !== WORKLOG_COMMAND_ID) throw new Error('activity worklog suggestion command contribution is missing');
-  if (typeof api.commandHandlers.get(WORKLOG_COMMAND_ID) !== 'function') throw new Error('activity worklog suggestion command was not registered');
+  const worklogProvider = (manifest.contributes.worklogProviders || []).find((item) => item.handler === WORKLOG_COMMAND_ID);
+  if (!worklogProvider) throw new Error('activity must declare itself a worklog provider so the Journal can find it');
+  // The command belongs to activation, not to a mounted view. Registering it
+  // from mount() meant the Journal could reach possible entries exactly when
+  // the user was looking at Activity instead.
+  if (api.commandHandlers.has(WORKLOG_COMMAND_ID)) throw new Error('mounting a view must not be what registers the worklog command');
+  await activateWithApi(api);
+  if (typeof api.commandHandlers.get(WORKLOG_COMMAND_ID) !== 'function') throw new Error('activation did not register the worklog suggestion command');
   const activityProvider = (manifest.contributes.activityProviders || []).find((item) => item.id === 'verstak.activity.log');
   if (!activityProvider || !activityProvider.events.includes('browser.capture.file')) throw new Error('activity provider must include browser.capture.file');
   if (!activityProvider || !activityProvider.events.includes('browser.capture.converted')) throw new Error('activity provider must include browser.capture.converted');
@@ -460,6 +482,7 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
     ],
   });
   const sessionView = await mountWithApi(sessionsApi, {});
+  await activateWithApi(sessionsApi);
   const sessionResult = await sessionsApi.commandHandlers.get(WORKLOG_COMMAND_ID)({});
   const sessionCandidates = sessionResult && sessionResult.candidates;
   if (!Array.isArray(sessionCandidates) || sessionCandidates.length !== 4) throw new Error('workspace switches and idle gaps must split candidates');
@@ -514,6 +537,7 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   }
 
   // Whether the filter is on or off, service activity is never work.
+  await activateWithApi(serviceApi);
   const serviceCandidates = (await serviceApi.commandHandlers.get(WORKLOG_COMMAND_ID)({ workspaceRootPath: 'Project' })).candidates;
   if (!Array.isArray(serviceCandidates) || serviceCandidates.length !== 1) {
     throw new Error(`expected one candidate from the two real events, got ${serviceCandidates && serviceCandidates.length}`);
@@ -530,6 +554,7 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
     ],
   });
   const lateView = await mountWithApi(lateApi);
+  await activateWithApi(lateApi);
   const lateCommand = lateApi.commandHandlers.get(WORKLOG_COMMAND_ID);
   const firstLateCandidate = (await lateCommand({ workspaceRootPath: 'Project' })).candidates[0];
   // 10 minutes between the two events, plus the five-minute lead-in.
@@ -603,6 +628,23 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   await flush();
   if (rawApi.storedData('activity-events').length !== 0) throw new Error('clear activity did not replace append-only data');
   component.unmount && component.unmount(rawView.container);
+
+  // The Journal's situation exactly: no Activity view has ever been mounted
+  // against this api, and possible entries still have to come back.
+  const headlessApi = makeApi({
+    'events:workspace:Project': [
+      { activityId: 'headless-a', type: 'note.saved', occurredAt: '2026-07-20T09:00:00Z', workspaceRootPath: 'Project' },
+      { activityId: 'headless-b', type: 'file.changed', occurredAt: '2026-07-20T09:20:00Z', workspaceRootPath: 'Project' },
+    ],
+  });
+  await activateWithApi(headlessApi);
+  const headless = await headlessApi.commandHandlers.get(WORKLOG_COMMAND_ID)({ workspaceRootPath: 'Project' });
+  if (!headless || !Array.isArray(headless.candidates) || headless.candidates.length !== 1) {
+    throw new Error(`possible entries must be available with no view mounted, got ${JSON.stringify(headless)}`);
+  }
+  if (headless.candidates[0].activityIds.join(',') !== 'headless-a,headless-b') {
+    throw new Error('the unmounted handler returned the wrong activities');
+  }
 
   console.log('activity plugin smoke passed');
 })().catch((err) => {

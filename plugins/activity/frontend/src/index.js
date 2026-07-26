@@ -21,6 +21,7 @@
   var CANDIDATE_PREFIX = 'work-session-candidates:workspace:';
   var DISMISSAL_PREFIX = 'work-session-dismissals:workspace:';
   var SESSION_REGISTRY_KEY = 'activity-session-registry-v2';
+  var SESSION_HANDLING_KEY = 'activity-session-handling-v2';
   var WORKLOG_COMMAND_ID = 'verstak.activity.suggestWorklog';
   var MIN_SESSION_DURATION_MINUTES = 10;
   var MIN_SESSION_ACTIVITY_COUNT = 2;
@@ -588,6 +589,41 @@
     return date.toLocaleString(undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
   }
 
+  // Everything the candidate list is built from, read back from storage rather
+  // than from a mounted view. The Journal asks for possible entries while the
+  // user is looking at the Journal, so no Activity view is on screen to ask.
+  function readCandidateState(api) {
+    var readRaw = api && api.storage && api.storage.data && typeof api.storage.data.readNDJSON === 'function'
+      ? api.storage.data.readNDJSON(RAW_DATA_NAME)
+      : Promise.resolve([]);
+    return Promise.all([api.settings.read(), readRaw]).then(function (results) {
+      var settings = results[0] || {};
+      var rawRecords = Array.isArray(results[1]) ? results[1] : [];
+      var source = rawRecords.length ? eventsFromRecords(rawRecords, '') : eventsFromSettings(settings, '');
+      return {
+        source: source,
+        sessionRegistry: pruneSessionRegistry(normalizeSessionRegistry(settings[SESSION_REGISTRY_KEY]), source),
+        dismissed: dismissedCandidatesFromSettings(settings),
+        handled: settings[SESSION_HANDLING_KEY] && typeof settings[SESSION_HANDLING_KEY] === 'object'
+          ? settings[SESSION_HANDLING_KEY]
+          : {}
+      };
+    });
+  }
+
+  function listWorkSessionCandidates(api, args) {
+    var workspace = cleanWorkspace(args && args.workspaceRootPath);
+    if (!api || !api.settings || typeof api.settings.read !== 'function') {
+      return Promise.resolve({ candidates: [] });
+    }
+    return readCandidateState(api).then(function (state) {
+      return { candidates: visibleCandidates(state.source, workspace, state.sessionRegistry, state.dismissed, state.handled) };
+    }).catch(function (err) {
+      console.warn('[verstak.activity] list possible journal entries:', err);
+      return { candidates: [] };
+    });
+  }
+
   function ActivityView() {}
 
   ActivityView.mount = function (containerEl, props, api) {
@@ -945,8 +981,8 @@
         var rawRecords = Array.isArray(results[1]) ? results[1] : [];
         settings = settings || {};
         sessionRegistry = normalizeSessionRegistry(settings[SESSION_REGISTRY_KEY]);
-        handledSessions = settings["activity-session-handling-v2"] && typeof settings["activity-session-handling-v2"] === 'object'
-          ? settings["activity-session-handling-v2"]
+        handledSessions = settings[SESSION_HANDLING_KEY] && typeof settings[SESSION_HANDLING_KEY] === 'object'
+          ? settings[SESSION_HANDLING_KEY]
           : {};
         candidateSourceEvents = rawRecords.length ? eventsFromRecords(rawRecords, '') : eventsFromSettings(settings, '');
         sessionRegistry = pruneSessionRegistry(sessionRegistry, candidateSourceEvents);
@@ -958,33 +994,6 @@
         return persistSessionRegistry().then(persistCandidateCaches);
       }).catch(function (err) {
         reportError('ui.loadError', 'Could not load activity. Please try again.', err);
-      });
-    }
-
-    function listWorkSessionCandidates(args) {
-      var workspace = cleanWorkspace(args && args.workspaceRootPath);
-      if (!api || !api.settings || typeof api.settings.read !== 'function') {
-        return Promise.resolve({ candidates: visibleCandidates(candidateSourceEvents, workspace || (scope.mode === 'workspace' ? scope.workspaceRoot : ''), sessionRegistry, dismissedByWorkspace, handledSessions) });
-      }
-      var readRaw = api.storage && api.storage.data && typeof api.storage.data.readNDJSON === 'function'
-        ? api.storage.data.readNDJSON(RAW_DATA_NAME)
-        : Promise.resolve([]);
-      return Promise.all([api.settings.read(), readRaw]).then(function (results) {
-        var settings = results[0] || {};
-        var rawRecords = Array.isArray(results[1]) ? results[1] : [];
-        var source = rawRecords.length ? eventsFromRecords(rawRecords, '') : eventsFromSettings(settings, '');
-        return { candidates: visibleCandidates(source, workspace, sessionRegistry, dismissedCandidatesFromSettings(settings), settings["activity-session-handling-v2"] || {}) };
-      }).catch(function () {
-        return { candidates: [] };
-      });
-    }
-
-    function registerCommands() {
-      if (!api || !api.commands || typeof api.commands.register !== 'function') return Promise.resolve();
-      return api.commands.register(WORKLOG_COMMAND_ID, listWorkSessionCandidates).then(function (unregister) {
-        if (typeof unregister === 'function') unsubscribers.push(unregister);
-      }).catch(function (err) {
-        reportError('ui.commandsUnavailable', 'Activity actions are unavailable. Please try again.', err);
       });
     }
 
@@ -1012,9 +1021,6 @@
     loadStored().then(function () {
       if (disposed) return;
       render();
-      return registerCommands();
-    }).then(function () {
-      if (disposed) return;
       return subscribeEvents();
     }).then(function () {
       if (!disposed) render();
@@ -1049,6 +1055,17 @@
   window.VerstakPluginRegister(PLUGIN_ID, {
     components: {
       ActivityView: ActivityView
+    },
+    // Runs once, with no view mounted, and stays for as long as the app does.
+    // Registering this from mount() meant the Journal could reach possible
+    // entries exactly when the user was looking at Activity instead.
+    activate: function (api) {
+      if (!api || !api.commands || typeof api.commands.register !== 'function') return Promise.resolve();
+      return api.commands.register(WORKLOG_COMMAND_ID, function (args) {
+        return listWorkSessionCandidates(api, args);
+      }).catch(function (err) {
+        console.warn('[verstak.activity] possible journal entries are unavailable:', err);
+      });
     }
   });
 })();
