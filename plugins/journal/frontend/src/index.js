@@ -28,7 +28,7 @@
     '.journal-btn:hover{border-color:var(--vt-color-accent,#4ecca3);background:var(--vt-color-surface-hover,#1b2440);color:var(--vt-color-text-primary,#f4f7fb)}',
     '.journal-btn:disabled{opacity:.45;cursor:default}',
     '.journal-filters{display:flex;align-items:center;gap:.4rem;padding:.4rem .75rem;border-bottom:1px solid var(--vt-color-border,#202b46);background:var(--vt-color-surface,#15152c);flex-wrap:wrap}',
-    '.journal-filter{font-size:.78rem;padding:.2rem .4rem;border:1px solid var(--vt-color-border-strong,#4a6b9e);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-input,#0f1424);color:var(--vt-color-text-primary,#f4f7fb)}',
+    '.journal-filter{font-size:.78rem;padding-top:.2rem;padding-bottom:.2rem;width:auto;min-width:9rem}',
     '.journal-total{font-size:.78rem;color:var(--vt-color-text-secondary,#b7c0d4);white-space:nowrap}',
     '.journal-status{font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3)}',
     '.journal-status.error{display:inline-flex;border:1px solid rgba(233,69,96,.45);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-danger-muted,rgba(233,69,96,.14));color:#ffc6ce;padding:.18rem .4rem}',
@@ -324,7 +324,10 @@
     var filtersEl = el('div', { className: 'journal-filters', 'data-journal-filters': '' });
 
     function filterSelect(attr, options, current, onPick) {
-      var select = el('select', { className: 'journal-filter' }, options.map(function (option) {
+      // The same select treatment the entry form uses. A bare <select> renders
+      // with the platform's own light chrome in WebKitGTK -- white box, white
+      // text -- which is what check-select-styles.js exists to prevent.
+      var select = el('select', { className: 'journal-input journal-select journal-filter' }, options.map(function (option) {
         return el('option', { value: option.value, selected: option.value === current }, [option.label]);
       }));
       select.setAttribute(attr, '');
