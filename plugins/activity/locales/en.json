@@ -1,6 +1,9 @@
 {
   "contributions.commands.verstak.activity.assignBrowserActivity.title": "Attach Browser Activity to a Deal",
   "contributions.commands.verstak.activity.listBrowserActivity.title": "List Browser Activity",
+  "contributions.commands.verstak.activity.listBrowserActivityRules.title": "List Browser Activity Rules",
+  "contributions.commands.verstak.activity.removeBrowserActivityRule.title": "Remove a Browser Activity Rule",
+  "contributions.commands.verstak.activity.setBrowserActivityRule.title": "Save a Browser Activity Rule",
   "contributions.commands.verstak.activity.suggestWorklog.title": "List Possible Journal Entries",
   "contributions.sidebarItems.verstak.activity.sidebar.title": "Activity",
   "contributions.views.verstak.activity.view.title": "Activity",

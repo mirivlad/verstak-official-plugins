@@ -1,6 +1,9 @@
 {
   "contributions.commands.verstak.activity.assignBrowserActivity.title": "Привязать активность браузера к Делу",
   "contributions.commands.verstak.activity.listBrowserActivity.title": "Показать активность браузера",
+  "contributions.commands.verstak.activity.listBrowserActivityRules.title": "Показать правила активности браузера",
+  "contributions.commands.verstak.activity.removeBrowserActivityRule.title": "Убрать правило активности браузера",
+  "contributions.commands.verstak.activity.setBrowserActivityRule.title": "Сохранить правило активности браузера",
   "contributions.commands.verstak.activity.suggestWorklog.title": "Показать возможные записи журнала",
   "contributions.sidebarItems.verstak.activity.sidebar.title": "Активность",
   "contributions.views.verstak.activity.view.title": "Активность",

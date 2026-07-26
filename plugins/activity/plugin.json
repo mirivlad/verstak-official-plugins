@@ -70,6 +70,21 @@
         "id": "verstak.activity.assignBrowserActivity",
         "title": "Attach Browser Activity to a Deal",
         "handler": "verstak.activity.assignBrowserActivity"
+      },
+      {
+        "id": "verstak.activity.listBrowserActivityRules",
+        "title": "List Browser Activity Rules",
+        "handler": "verstak.activity.listBrowserActivityRules"
+      },
+      {
+        "id": "verstak.activity.setBrowserActivityRule",
+        "title": "Save a Browser Activity Rule",
+        "handler": "verstak.activity.setBrowserActivityRule"
+      },
+      {
+        "id": "verstak.activity.removeBrowserActivityRule",
+        "title": "Remove a Browser Activity Rule",
+        "handler": "verstak.activity.removeBrowserActivityRule"
       }
     ],
     "worklogProviders": [

@@ -17,6 +17,8 @@
   var ACTIVITY_PLUGIN_ID = 'verstak.activity';
   var LIST_ACTIVITY_COMMAND = 'verstak.activity.listBrowserActivity';
   var ASSIGN_ACTIVITY_COMMAND = 'verstak.activity.assignBrowserActivity';
+  var LIST_RULES_COMMAND = 'verstak.activity.listBrowserActivityRules';
+  var REMOVE_RULE_COMMAND = 'verstak.activity.removeBrowserActivityRule';
 
   function injectStyles() {
     if (document.getElementById('browser-inbox-style-injected')) return;
@@ -50,6 +52,9 @@
     '.browser-inbox-activity-title{font-size:.78rem;font-weight:600;color:var(--vt-color-text-secondary,#b7c0d4)}',
     '.browser-inbox-activity-toggle{display:flex;align-items:center;gap:.25rem;font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3);white-space:nowrap}',
     '.browser-inbox-activity-list{min-height:0;overflow:auto}',
+    '.browser-inbox-activity-rules{flex-shrink:0;padding:.45rem .75rem .55rem;border-top:1px solid rgba(32,43,70,.72)}',
+    '.browser-inbox-activity-rules[hidden]{display:none}',
+    '.browser-inbox-activity-rule{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:.5rem;padding:.3rem 0}',
     '.browser-inbox-activity-empty{padding:.75rem;font-size:.76rem;color:var(--vt-color-text-muted,#7f8aa3)}',
     '.browser-inbox-activity-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:.5rem;padding:.4rem .75rem;border-bottom:1px solid rgba(32,43,70,.5);cursor:pointer}',
     '.browser-inbox-activity-row:hover{background:var(--vt-color-surface-hover,#1b2440)}',
@@ -390,7 +395,9 @@
     var workspaceFilter = '';
     var searchQuery = '';
     var browserActivity = [];
+    var activityRules = [];
     var activitySelection = {};
+    var showNotWorkActivity = false;
     var showAttachedActivity = false;
     var showUnattachedActivity = false;
     var activityAnchorId = '';
@@ -499,8 +506,14 @@
     });
     var activityHeadEl = el('div', { className: 'browser-inbox-activity-head' });
     var activityListEl = el('div', { className: 'browser-inbox-activity-list' });
+    var activityRulesEl = el('div', {
+      className: 'browser-inbox-activity-rules',
+      'data-browser-activity-rules': '',
+      hidden: 'hidden'
+    });
     activityEl.appendChild(activityHeadEl);
     activityEl.appendChild(activityListEl);
+    activityEl.appendChild(activityRulesEl);
 
     var body = el('div', { className: 'browser-inbox-body' });
     var listEl = el('div', { className: 'browser-inbox-list' });
@@ -837,14 +850,19 @@
 
     function loadBrowserActivity() {
       if (!api || !api.commands || typeof api.commands.executeFor !== 'function') return Promise.resolve();
-      return api.commands.executeFor(ACTIVITY_PLUGIN_ID, LIST_ACTIVITY_COMMAND, {}).then(function (response) {
+      return api.commands.executeFor(ACTIVITY_PLUGIN_ID, LIST_ACTIVITY_COMMAND, { includeNotWork: true }).then(function (response) {
         var result = response && response.result;
         browserActivity = result && Array.isArray(result.activities) ? result.activities : [];
+        return api.commands.executeFor(ACTIVITY_PLUGIN_ID, LIST_RULES_COMMAND, {});
+      }).then(function (response) {
+        var result = response && response.result;
+        activityRules = result && Array.isArray(result.rules) ? result.rules : [];
       }).catch(function (err) {
         // Activity is an optional plugin. Without it there is simply nothing
         // to attach, which is not an error the user needs to see.
         console.warn('[verstak.browser-inbox] browser activity unavailable:', err);
         browserActivity = [];
+        activityRules = [];
       });
     }
 
@@ -855,6 +873,10 @@
     function visibleActivity() {
       return browserActivity.filter(function (item) {
         var workspaceRoot = cleanWorkspace(item && item.workspaceRootPath);
+        // Not work is a state, not a deletion: a wrong answer has to be
+        // findable, and time that vanished cannot be.
+        if (item && item.notWork === true) return showNotWorkActivity;
+        if (showNotWorkActivity) return false;
         if (scope.mode === 'workspace') {
           if (workspaceRoot === scope.workspaceRoot) return true;
           return showUnattachedActivity && !workspaceRoot;
@@ -895,15 +917,16 @@
       }).map(function (item) { return item.activityId; });
     }
 
-    function attachSelectedActivity() {
-      var ids = attachableActivityIds();
-      var workspaceRoot = attachTarget();
-      if (!ids.length || !workspaceRoot) return Promise.resolve();
+    function decideSelectedActivity(decision) {
+      var ids = selectedActivityIds();
+      if (!ids.length) return Promise.resolve();
       if (!api || !api.commands || typeof api.commands.executeFor !== 'function') return Promise.resolve();
       return api.commands.executeFor(ACTIVITY_PLUGIN_ID, ASSIGN_ACTIVITY_COMMAND, {
         activityIds: ids,
-        workspaceRootPath: workspaceRoot,
-        workspaceId: workspaceIds[workspaceRoot] || ''
+        workspaceRootPath: decision.workspaceRootPath || '',
+        workspaceId: decision.workspaceId || '',
+        notWork: decision.notWork === true,
+        assignedBy: 'user'
       }).then(function (response) {
         var assigned = response && response.result && Number(response.result.assigned) || 0;
         if (!assigned) {
@@ -911,11 +934,88 @@
           return undefined;
         }
         activitySelection = {};
-        statusText = tr('ui.browserActivity.attached', { count: assigned, workspace: workspaceRoot }, assigned + ' attached to ' + workspaceRoot);
+        activityAnchorId = '';
+        statusText = decision.notWork
+          ? tr('ui.browserActivity.markedNotWork', { count: assigned }, assigned + ' marked as not work')
+          : decision.workspaceRootPath
+            ? tr('ui.browserActivity.attached', { count: assigned, workspace: decision.workspaceRootPath }, assigned + ' attached to ' + decision.workspaceRootPath)
+            : tr('ui.browserActivity.detached', { count: assigned }, assigned + ' detached');
         statusClass = '';
         return loadBrowserActivity().then(render);
       }).catch(function (err) {
         reportError('ui.browserActivity.attachError', 'Could not attach the browser activity. Please try again.', err);
+      });
+    }
+
+    function attachSelectedActivity() {
+      var ids = attachableActivityIds();
+      var workspaceRoot = attachTarget();
+      if (!ids.length || !workspaceRoot) return Promise.resolve();
+      activitySelection = {};
+      ids.forEach(function (id) { activitySelection[id] = true; });
+      return decideSelectedActivity({
+        workspaceRootPath: workspaceRoot,
+        workspaceId: workspaceIds[workspaceRoot] || '',
+        notWork: false
+      });
+    }
+
+    function activitySourceLabel(item) {
+      var source = text(item && item.assignedBy);
+      if (source === 'rule') return tr('ui.browserActivity.byRule', null, 'by a rule');
+      if (source === 'guess') return tr('ui.browserActivity.byGuess', null, 'guessed');
+      return '';
+    }
+
+    // Every rule that decides where time goes, visible and removable. A rule
+    // nobody can see is the worst kind of automation: the time lands in the
+    // wrong Deal and the reason is nowhere.
+    function renderActivityRules() {
+      activityRulesEl.innerHTML = '';
+      if (!activityRules.length) {
+        activityRulesEl.setAttribute('hidden', 'hidden');
+        return;
+      }
+      if (typeof activityRulesEl.removeAttribute === 'function') activityRulesEl.removeAttribute('hidden');
+      else delete activityRulesEl.attributes.hidden;
+      activityRulesEl.appendChild(el('div', {
+        className: 'browser-inbox-activity-title',
+        textContent: tr('ui.browserActivity.rules', { count: activityRules.length }, 'Rules (' + activityRules.length + ')')
+      }));
+      activityRules.forEach(function (rule) {
+        activityRulesEl.appendChild(el('div', {
+          className: 'browser-inbox-activity-rule',
+          'data-browser-activity-rule': rule.pattern
+        }, [
+          el('span', { className: 'browser-inbox-activity-url', textContent: rule.pattern }),
+          el('span', {
+            className: 'browser-inbox-activity-meta',
+            textContent: [
+              rule.notWork ? tr('ui.browserActivity.notWorkBadge', null, 'Not work') : rule.workspaceRootPath,
+              rule.createdBy === 'guess' ? tr('ui.browserActivity.byGuess', null, 'guessed') : ''
+            ].filter(Boolean).join(' · ')
+          }),
+          el('button', {
+            className: 'browser-inbox-btn',
+            type: 'button',
+            'data-browser-activity-action': 'remove-rule',
+            textContent: tr('ui.browserActivity.removeRule', null, 'Remove'),
+            onClick: function () { removeActivityRule(rule.pattern); }
+          })
+        ]));
+      });
+    }
+
+    function removeActivityRule(pattern) {
+      if (!api || !api.commands || typeof api.commands.executeFor !== 'function') return Promise.resolve();
+      return api.commands.executeFor(ACTIVITY_PLUGIN_ID, REMOVE_RULE_COMMAND, { pattern: pattern }).then(function () {
+        statusText = tr('ui.browserActivity.ruleRemoved', { pattern: pattern }, 'Rule removed: ' + pattern);
+        statusClass = '';
+        // What the rule decided stays as it is. Rewriting the past silently is
+        // exactly what makes automation untrustworthy.
+        return loadBrowserActivity().then(render);
+      }).catch(function (err) {
+        reportError('ui.browserActivity.ruleRemoveError', 'Could not remove the rule. Please try again.', err);
       });
     }
 
@@ -927,7 +1027,8 @@
       activityHeadEl.innerHTML = '';
       activityListEl.innerHTML = '';
       var visible = visibleActivity();
-      if (!browserActivity.length) {
+      renderActivityRules();
+      if (!browserActivity.length && !activityRules.length) {
         activityEl.setAttribute('hidden', 'hidden');
         return;
       }
@@ -1005,6 +1106,48 @@
       attachBtn.disabled = attachableActivityIds().length === 0 || !attachTarget();
       activityHeadEl.appendChild(attachBtn);
 
+      // Every answer is reversible: put it back where nothing has been decided,
+      // or say it was never work. Both are states, not deletions.
+      var detachBtn = el('button', {
+        className: 'browser-inbox-btn',
+        type: 'button',
+        'data-browser-activity-action': 'detach',
+        textContent: tr('ui.browserActivity.detach', null, 'Detach'),
+        onClick: function () { decideSelectedActivity({ workspaceRootPath: '', workspaceId: '', notWork: false }); }
+      });
+      detachBtn.disabled = chosen.length === 0;
+      activityHeadEl.appendChild(detachBtn);
+
+      var notWorkBtn = el('button', {
+        className: 'browser-inbox-btn',
+        type: 'button',
+        'data-browser-activity-action': 'not-work',
+        textContent: showNotWorkActivity
+          ? tr('ui.browserActivity.isWork', null, 'This is work')
+          : tr('ui.browserActivity.notWork', null, 'Not work'),
+        onClick: function () {
+          decideSelectedActivity({ workspaceRootPath: '', workspaceId: '', notWork: !showNotWorkActivity });
+        }
+      });
+      notWorkBtn.disabled = chosen.length === 0;
+      activityHeadEl.appendChild(notWorkBtn);
+
+      var notWorkToggle = el('input', {
+        type: 'checkbox',
+        'data-browser-activity-show-not-work': '',
+        onChange: function () {
+          showNotWorkActivity = notWorkToggle.checked === true;
+          activitySelection = {};
+          activityAnchorId = '';
+          renderActivity();
+        }
+      });
+      notWorkToggle.checked = showNotWorkActivity;
+      activityHeadEl.appendChild(el('label', { className: 'browser-inbox-activity-toggle' }, [
+        notWorkToggle,
+        el('span', { textContent: tr('ui.browserActivity.showNotWork', null, 'Not work') })
+      ]));
+
       if (!visible.length) {
         activityListEl.appendChild(el('div', {
           className: 'browser-inbox-activity-empty',
@@ -1048,11 +1191,20 @@
         activityListEl.appendChild(el('label', { className: 'browser-inbox-activity-row' }, [
           checkbox,
           el('span', { className: 'browser-inbox-activity-url', textContent: item.url || item.hostname || item.activityId }),
-          el('span', { className: 'browser-inbox-activity-meta', textContent: [
-            formatDate(item.endedAt || item.occurredAt),
-            tr('ui.browserActivity.minutes', { minutes: activityMinutes(item) }, activityMinutes(item) + ' min'),
-            workspaceRoot || tr('ui.unassigned', null, 'Unassigned')
-          ].filter(Boolean).join(' · ') })
+          el('span', {
+            className: 'browser-inbox-activity-meta',
+            'data-browser-activity-source': text(item.assignedBy),
+            textContent: [
+              formatDate(item.endedAt || item.occurredAt),
+              tr('ui.browserActivity.minutes', { minutes: activityMinutes(item) }, activityMinutes(item) + ' min'),
+              item.notWork
+                ? tr('ui.browserActivity.notWorkBadge', null, 'Not work')
+                : (workspaceRoot || tr('ui.unassigned', null, 'Unassigned')),
+              // Whether the Deal came from the user or was decided for them. A
+              // badly taught rule is unfindable without this.
+              activitySourceLabel(item)
+            ].filter(Boolean).join(' · ')
+          })
         ]));
       });
     }

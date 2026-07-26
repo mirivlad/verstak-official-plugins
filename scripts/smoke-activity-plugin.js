@@ -681,10 +681,11 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
         payload: { hostname: 'example.com', url: 'https://example.com/blog/post', durationSeconds: 420 },
       },
       // Not browser activity, and must never be offered for attaching here.
+      // Far enough away that it says nothing about the pages above.
       {
         activityId: 'note-x',
         type: 'note.saved',
-        occurredAt: '2026-07-22T12:00:00Z',
+        occurredAt: '2026-07-22T18:00:00Z',
         workspaceRootPath: 'Project',
         payload: { workspaceRootPath: 'Project' },
       },
@@ -754,6 +755,98 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
     throw new Error('browser time attached to one Deal must not be offered to another');
   }
 
+  // A rule answers for every future page at an address, so the user answers
+  // once per address rather than once per page.
+  const ruleApi = makeApi({}, {
+    'activity-events': [
+      { activityId: 'k-dash', type: 'browser.activity.domain', occurredAt: '2026-07-25T09:20:00Z', hostname: 'dash.example.com', url: 'https://dash.example.com/projects/42/settings', durationSeconds: 900, workspaceRootPath: '', payload: {} },
+      { activityId: 'k-other-page', type: 'browser.activity.domain', occurredAt: '2026-07-25T10:20:00Z', hostname: 'dash.example.com', url: 'https://dash.example.com/help', durationSeconds: 900, workspaceRootPath: '', payload: {} },
+      { activityId: 'k-social', type: 'browser.activity.domain', occurredAt: '2026-07-25T11:20:00Z', hostname: 'chat.example.net', url: 'https://chat.example.net/rooms/1', durationSeconds: 900, workspaceRootPath: '', payload: {} },
+      // A different project whose number merely starts with the ruled one.
+      { activityId: 'k-neighbour', type: 'browser.activity.domain', occurredAt: '2026-07-25T12:20:00Z', hostname: 'dash.example.com', url: 'https://dash.example.com/projects/420', durationSeconds: 900, workspaceRootPath: '', payload: {} },
+    ],
+  });
+  await activateWithApi(ruleApi);
+  const listRules = ruleApi.commandHandlers.get('verstak.activity.listBrowserActivityRules');
+  const setRule = ruleApi.commandHandlers.get('verstak.activity.setBrowserActivityRule');
+  const removeRule = ruleApi.commandHandlers.get('verstak.activity.removeBrowserActivityRule');
+  const listRuled = ruleApi.commandHandlers.get('verstak.activity.listBrowserActivity');
+  if (typeof listRules !== 'function' || typeof setRule !== 'function' || typeof removeRule !== 'function') {
+    throw new Error('rules cannot be listed, taught or removed');
+  }
+  if ((await listRules()).rules.length !== 0) throw new Error('a fresh vault has no rules');
+
+  await setRule({ pattern: 'https://dash.example.com/projects/42', workspaceRootPath: 'Project', workspaceId: 'deal-project' });
+  await setRule({ pattern: 'chat.example.net', notWork: true });
+  const taught = (await listRules()).rules;
+  if (taught.length !== 2) throw new Error(`expected two rules, got ${JSON.stringify(taught)}`);
+  // Stored without the scheme, so http and https are one rule.
+  if (!taught.some((rule) => rule.pattern === 'dash.example.com/projects/42')) {
+    throw new Error(`a rule must be stored as a plain address: ${JSON.stringify(taught)}`);
+  }
+
+  const ruled = (await listRuled({})).activities;
+  const dashPage = ruled.find((item) => item.activityId === 'k-dash');
+  if (!dashPage || dashPage.workspaceRootPath !== 'Project') throw new Error('the rule did not reach the page it covers');
+  if (dashPage.assignedBy !== 'rule') throw new Error('the user must be able to tell a rule from their own answer');
+  // The rule is for one part of the site, not the whole site.
+  const helpPage = ruled.find((item) => item.activityId === 'k-other-page');
+  if (!helpPage || helpPage.workspaceRootPath !== '') throw new Error('a rule for one page must not claim the whole site');
+  // Matching has to stop at a path boundary, or project 42 swallows 420.
+  const neighbour = ruled.find((item) => item.activityId === 'k-neighbour');
+  if (!neighbour || neighbour.workspaceRootPath !== '') {
+    throw new Error(`a rule must match whole path segments: ${JSON.stringify(neighbour)}`);
+  }
+  if (ruled.some((item) => item.activityId === 'k-social')) throw new Error('a page ruled out as not work must leave the list');
+  const withNotWork = (await listRuled({ includeNotWork: true })).activities;
+  const social = withNotWork.find((item) => item.activityId === 'k-social');
+  if (!social || social.notWork !== true) throw new Error('not work is a state, not a deletion, and must stay findable');
+
+  // An answer given by hand is never overwritten by a rule taught afterwards.
+  await ruleApi.commandHandlers.get('verstak.activity.assignBrowserActivity')({
+    activityIds: ['k-other-page'], workspaceRootPath: 'ClientA', workspaceId: 'deal-client',
+  });
+  await setRule({ pattern: 'dash.example.com', workspaceRootPath: 'Project', workspaceId: 'deal-project' });
+  const afterBroadRule = (await listRuled({})).activities.find((item) => item.activityId === 'k-other-page');
+  if (afterBroadRule.workspaceRootPath !== 'ClientA' || afterBroadRule.assignedBy !== 'user') {
+    throw new Error('a rule must not overwrite an answer the user gave by hand');
+  }
+
+  if ((await removeRule({ pattern: 'https://chat.example.net/' })).removed !== 1) {
+    throw new Error('a rule must be removable by the address it was taught with');
+  }
+  if ((await listRules()).rules.some((rule) => rule.pattern === 'chat.example.net')) {
+    throw new Error('the removed rule is still there');
+  }
+
+  // A page opened while the user was demonstrably working in one Deal was
+  // almost certainly for that Deal. Where two Deals are in play there is no
+  // guess: the wrong Deal is worse than none.
+  const guessApi = makeApi({}, {
+    'activity-events': [
+      { activityId: 'g-note', type: 'note.saved', occurredAt: '2026-07-26T09:00:00Z', workspaceRootPath: 'Project', workspaceId: 'deal-project', payload: { workspaceRootPath: 'Project', workspaceId: 'deal-project' } },
+      { activityId: 'g-page', type: 'browser.activity.domain', occurredAt: '2026-07-26T09:10:00Z', hostname: 'docs.example.com', url: 'https://docs.example.com/a', durationSeconds: 900, workspaceRootPath: '', payload: {} },
+      { activityId: 'g-far', type: 'browser.activity.domain', occurredAt: '2026-07-26T20:00:00Z', hostname: 'docs.example.com', url: 'https://docs.example.com/b', durationSeconds: 900, workspaceRootPath: '', payload: {} },
+      { activityId: 'g-a', type: 'note.saved', occurredAt: '2026-07-26T14:00:00Z', workspaceRootPath: 'Project', workspaceId: 'deal-project', payload: { workspaceRootPath: 'Project', workspaceId: 'deal-project' } },
+      { activityId: 'g-page-two', type: 'browser.activity.domain', occurredAt: '2026-07-26T14:05:00Z', hostname: 'docs.example.com', url: 'https://docs.example.com/c', durationSeconds: 900, workspaceRootPath: '', payload: {} },
+      { activityId: 'g-b', type: 'file.changed', occurredAt: '2026-07-26T14:10:00Z', workspaceRootPath: 'ClientA', workspaceId: 'deal-client', payload: { workspaceRootPath: 'ClientA', workspaceId: 'deal-client' } },
+    ],
+  });
+  await activateWithApi(guessApi);
+  const guessed = (await guessApi.commandHandlers.get('verstak.activity.listBrowserActivity')({ includeNotWork: true })).activities;
+  const nearWork = guessed.find((item) => item.activityId === 'g-page');
+  if (!nearWork || nearWork.workspaceRootPath !== 'Project' || nearWork.assignedBy !== 'guess') {
+    throw new Error(`a page opened inside work on one Deal must be guessed to it: ${JSON.stringify(nearWork)}`);
+  }
+  const between = guessed.find((item) => item.activityId === 'g-page-two');
+  if (!between || between.workspaceRootPath !== '') {
+    throw new Error('a page between work on two Deals must not be guessed at all');
+  }
+  const alone = guessed.find((item) => item.activityId === 'g-far');
+  if (!alone || alone.workspaceRootPath !== '') {
+    throw new Error('a page with no work around it has nothing to guess from');
+  }
+
   // Attached browser time joins the work it happened during, rather than
   // standing beside it as a session of its own. Everything recorded in a Deal
   // carries the Deal's id, and sessions are grouped by it.
@@ -776,6 +869,24 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   }
   if (joined[0].activityIds.slice().sort().join(',') !== 'j-file,j-note,j-page') {
     throw new Error(`the session must cover all three: ${joined[0].activityIds}`);
+  }
+
+  // A proposal is identified by its session id. Only the view used to save
+  // those, so a Journal that never opened Activity saw a new id for the same
+  // session on every read -- and an accepted proposal came straight back.
+  const stableApi = makeApi({}, {
+    'activity-events': [
+      { activityId: 's-1', type: 'note.saved', occurredAt: '2026-07-28T09:00:00Z', workspaceRootPath: 'Project', workspaceId: 'deal-project', payload: { workspaceRootPath: 'Project', workspaceId: 'deal-project' } },
+      { activityId: 's-2', type: 'file.changed', occurredAt: '2026-07-28T09:12:00Z', workspaceRootPath: 'Project', workspaceId: 'deal-project', payload: { workspaceRootPath: 'Project', workspaceId: 'deal-project' } },
+    ],
+  });
+  await activateWithApi(stableApi);
+  const askTwice = stableApi.commandHandlers.get(WORKLOG_COMMAND_ID);
+  const firstAsk = (await askTwice({ workspaceRootPath: 'Project' })).candidates[0];
+  const secondAsk = (await askTwice({ workspaceRootPath: 'Project' })).candidates[0];
+  if (!firstAsk || !secondAsk) throw new Error('expected a candidate from both reads');
+  if (firstAsk.candidateId !== secondAsk.candidateId) {
+    throw new Error(`the same session must keep its identity between reads: ${firstAsk.candidateId} then ${secondAsk.candidateId}`);
   }
 
   // A breakdown whose parts do not add up to the total reads as a mistake.

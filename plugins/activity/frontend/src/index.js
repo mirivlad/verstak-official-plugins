@@ -26,6 +26,10 @@
   var LIST_BROWSER_COMMAND_ID = 'verstak.activity.listBrowserActivity';
   var ASSIGN_BROWSER_COMMAND_ID = 'verstak.activity.assignBrowserActivity';
   var BROWSER_ACTIVITY_TYPE = 'browser.activity.domain';
+  var RULES_KEY = 'browser-activity-rules-v1';
+  var LIST_RULES_COMMAND_ID = 'verstak.activity.listBrowserActivityRules';
+  var SET_RULE_COMMAND_ID = 'verstak.activity.setBrowserActivityRule';
+  var REMOVE_RULE_COMMAND_ID = 'verstak.activity.removeBrowserActivityRule';
   var MAX_BROWSER_ACTIVITY = 200;
   var MIN_SESSION_DURATION_MINUTES = 10;
   var MIN_SESSION_ACTIVITY_COUNT = 2;
@@ -202,6 +206,10 @@
         workspaceId: text(item.workspaceId || (item.sessionScope && item.sessionScope.workspaceId) || (item.payload && item.payload.workspaceId)),
         sessionScope: item.sessionScope && typeof item.sessionScope === 'object' ? item.sessionScope : {},
         durationSeconds: Math.max(0, Number(item.durationSeconds || (item.payload && item.payload.durationSeconds) || 0)),
+        // Carried through so a proposal can tell what the user decided from
+        // what was decided for them.
+        assignedBy: assignedByValue(item.assignedBy),
+        notWork: item.notWork === true,
         _storageKey: storageKey || '',
         payload: item.payload && typeof item.payload === 'object' ? item.payload : {}
       };
@@ -222,6 +230,8 @@
         workspaceId: item.workspaceId,
         sessionScope: item.sessionScope || {},
         durationSeconds: item.durationSeconds || 0,
+        assignedBy: item.assignedBy || '',
+        notWork: item.notWork === true,
         payload: item.payload || {}
       };
     });
@@ -289,13 +299,17 @@
   }
 
   function candidateActivity(activity) {
+    var payload = activity.payload && typeof activity.payload === 'object' ? activity.payload : {};
     return {
       activityId: text(activity.activityId),
       type: text(activity.type),
       occurredAt: toISOTime(eventTimeMs(activity)),
       sourcePluginId: text(activity.sourcePluginId),
       workspaceRootPath: candidateWorkspace(activity),
-      workspaceId: text(activity.workspaceId)
+      workspaceId: text(activity.workspaceId),
+      // Which page, for browser time. Without it a proposal lists "Activity"
+      // three times and the user cannot tell what they are agreeing to.
+      url: text(activity.url || payload.url)
     };
   }
 
@@ -457,6 +471,20 @@
         sessionsById[sessionId] = session;
         sessions.push(session);
       }
+      // A session is remembered by id, and what it was for can change under it:
+      // pages the user has since attached to a Deal are no longer the same work
+      // as the ones still belonging to nobody. The first activity of a
+      // remembered session sets what it is for; anything that disagrees leaves
+      // and forms its own.
+      if (session && session.scope !== scope) {
+        if (session.activities.length === 0) {
+          session.scope = scope;
+          if (registry.sessions[session.sessionId]) registry.sessions[session.sessionId].scope = scope;
+        } else {
+          delete registry.eventSessionIds[activityId];
+          session = null;
+        }
+      }
       // Moving to another Deal ends the session for the one before it, so time
       // spent elsewhere is not billed to both.
       if (!session && (!lastScope || lastScope === scope)) {
@@ -489,6 +517,10 @@
       session.lastTime = Math.max(session.lastTime, eventTimeMs(activity));
       if (candidateWorkspace(activity)) session.workspaceRootPath = candidateWorkspace(activity);
       if (activity.workspaceId) session.workspaceId = text(activity.workspaceId);
+      if (registry.sessions[session.sessionId]) {
+        registry.sessions[session.sessionId].workspaceRootPath = session.workspaceRootPath;
+        registry.sessions[session.sessionId].workspaceId = session.workspaceId;
+      }
       lastScope = scope;
     });
     return sessions;
@@ -524,6 +556,14 @@
       endedAt: toISOTime(eventTimeMs(last)),
       estimatedMinutes: duration,
       activityCount: activities.length,
+      // Whether any of this was placed here by a guess rather than by the user.
+      // The Journal asks about a guess instead of asserting it.
+      guessed: activities.some(function (activity) {
+        return assignedByValue(activity.assignedBy) === 'guess';
+      }),
+      guessedActivityIds: activities.filter(function (activity) {
+        return assignedByValue(activity.assignedBy) === 'guess';
+      }).map(function (activity) { return activity.activityId; }),
       breakdown: sessionBreakdown(activities, duration),
       activityIds: activities.map(function (activity) { return activity.activityId; }).filter(Boolean),
       activities: activities.map(candidateActivity)
@@ -705,9 +745,10 @@
   // than from a mounted view. The Journal asks for possible entries while the
   // user is looking at the Journal, so no Activity view is on screen to ask.
   function readCandidateState(api) {
-    var readRaw = api && api.storage && api.storage.data && typeof api.storage.data.readNDJSON === 'function'
-      ? api.storage.data.readNDJSON(RAW_DATA_NAME)
-      : Promise.resolve([]);
+    // Rules are applied before proposals are built, or a rule taught today
+    // would not reach yesterday's time until something else happened to read
+    // the list.
+    var readRaw = decidedRecords(api);
     return Promise.all([api.settings.read(), readRaw]).then(function (results) {
       var settings = results[0] || {};
       var rawRecords = Array.isArray(results[1]) ? results[1] : [];
@@ -736,8 +777,19 @@
       endedAt: text(record.endedAt || payload.endedAt || record.occurredAt),
       occurredAt: text(record.occurredAt),
       durationSeconds: Math.max(0, Number(record.durationSeconds || payload.durationSeconds) || 0),
-      workspaceRootPath: cleanWorkspace(record.workspaceRootPath)
+      workspaceRootPath: cleanWorkspace(record.workspaceRootPath),
+      // Not work is a state, not a deletion: a wrong answer has to be findable
+      // afterwards, and time that vanished cannot be.
+      notWork: record.notWork === true,
+      // Who decided. Without this the user cannot tell what they confirmed from
+      // what a rule decided for them, and a badly taught rule is unfindable.
+      assignedBy: assignedByValue(record.assignedBy)
     };
+  }
+
+  function assignedByValue(value) {
+    var raw = text(value).trim();
+    return raw === 'user' || raw === 'rule' || raw === 'guess' ? raw : '';
   }
 
   function isBrowserActivity(record) {
@@ -753,13 +805,127 @@
     });
   }
 
+  // The longest matching address wins, so a rule for one page of a site beats a
+  // rule for the site.
+  function matchingRule(rules, record) {
+    var address = normalizeRulePattern(record && (record.url || record.hostname));
+    if (!address) return null;
+    var best = null;
+    rules.forEach(function (rule) {
+      if (address !== rule.pattern && address.indexOf(rule.pattern) !== 0) return;
+      if (address !== rule.pattern) {
+        var next = address.charAt(rule.pattern.length);
+        if (next !== '/' && next !== '') return;
+      }
+      if (!best || rule.pattern.length > best.pattern.length) best = rule;
+    });
+    return best;
+  }
+
+  // A rule decides only what nobody has decided by hand. An answer the user
+  // gave is never overwritten by a rule they taught later.
+  function applyRules(api, records, rules) {
+    if (!rules.length) return Promise.resolve(records);
+    var changed = 0;
+    var updated = records.map(function (record) {
+      if (!isBrowserActivity(record)) return record;
+      if (assignedByValue(record.assignedBy) === 'user') return record;
+      var rule = matchingRule(rules, browserActivityRecord(record));
+      if (!rule) return record;
+      var wantsWorkspace = rule.notWork ? '' : rule.workspaceRootPath;
+      if (cleanWorkspace(record.workspaceRootPath) === wantsWorkspace
+        && (record.notWork === true) === rule.notWork
+        && assignedByValue(record.assignedBy) === 'rule') {
+        return record;
+      }
+      changed += 1;
+      var payload = record.payload && typeof record.payload === 'object' ? record.payload : {};
+      return Object.assign({}, record, {
+        workspaceRootPath: wantsWorkspace,
+        workspaceId: rule.notWork ? '' : rule.workspaceId,
+        notWork: rule.notWork,
+        assignedBy: 'rule',
+        sessionScope: !rule.notWork && rule.workspaceId ? { kind: 'workspace', workspaceId: rule.workspaceId } : {},
+        payload: Object.assign({}, payload, { workspaceRootPath: wantsWorkspace, workspaceId: rule.notWork ? '' : rule.workspaceId })
+      });
+    });
+    if (!changed) return Promise.resolve(records);
+    if (!api.storage || !api.storage.data || typeof api.storage.data.writeNDJSON !== 'function') {
+      return Promise.resolve(updated);
+    }
+    return api.storage.data.writeNDJSON(RAW_DATA_NAME, updated).then(function () { return updated; });
+  }
+
+  // A page opened while the user was demonstrably working in one Deal -- files
+  // changing, notes saving -- was almost certainly for that Deal. Where the
+  // surrounding work points at exactly one Deal, that is the guess; where it
+  // points at two, there is no guess, because the wrong Deal is worse than
+  // none.
+  function guessedWorkspace(records, record) {
+    var time = eventTimeMs(record);
+    if (!time) return null;
+    var window = MAX_IDLE_GAP_MINUTES * 60 * 1000;
+    var found = null;
+    for (var index = 0; index < records.length; index += 1) {
+      var other = records[index];
+      if (other === record || isBrowserActivity(other) || isServiceActivity(other)) continue;
+      var root = cleanWorkspace(other.workspaceRootPath);
+      if (!root) continue;
+      var otherTime = eventTimeMs(other);
+      if (!otherTime || Math.abs(otherTime - time) > window) continue;
+      if (found && found.workspaceRootPath !== root) return null;
+      if (!found) {
+        found = {
+          workspaceRootPath: root,
+          workspaceId: text(other.workspaceId || (other.payload && other.payload.workspaceId))
+        };
+      }
+    }
+    return found;
+  }
+
+  function applyGuesses(api, records) {
+    var changed = 0;
+    var updated = records.map(function (record) {
+      if (!isBrowserActivity(record) || record.notWork === true) return record;
+      var decided = assignedByValue(record.assignedBy);
+      if (decided === 'user' || decided === 'rule') return record;
+      var guess = guessedWorkspace(records, record);
+      if (!guess) return record;
+      if (cleanWorkspace(record.workspaceRootPath) === guess.workspaceRootPath && decided === 'guess') return record;
+      changed += 1;
+      var payload = record.payload && typeof record.payload === 'object' ? record.payload : {};
+      return Object.assign({}, record, {
+        workspaceRootPath: guess.workspaceRootPath,
+        workspaceId: guess.workspaceId,
+        assignedBy: 'guess',
+        sessionScope: guess.workspaceId ? { kind: 'workspace', workspaceId: guess.workspaceId } : {},
+        payload: Object.assign({}, payload, { workspaceRootPath: guess.workspaceRootPath, workspaceId: guess.workspaceId })
+      });
+    });
+    if (!changed) return Promise.resolve(records);
+    if (!api.storage || !api.storage.data || typeof api.storage.data.writeNDJSON !== 'function') {
+      return Promise.resolve(updated);
+    }
+    return api.storage.data.writeNDJSON(RAW_DATA_NAME, updated).then(function () { return updated; });
+  }
+
+  function decidedRecords(api) {
+    return Promise.all([readRawRecords(api), readRules(api)]).then(function (results) {
+      return applyRules(api, results[0], results[1]);
+    }).then(function (records) {
+      return applyGuesses(api, records);
+    });
+  }
+
   function listBrowserActivity(api, args) {
     args = args || {};
     var workspace = cleanWorkspace(args.workspaceRootPath);
     var onlyUnassigned = args.onlyUnassigned === true;
-    return readRawRecords(api).then(function (records) {
+    return decidedRecords(api).then(function (records) {
       var activities = records.filter(isBrowserActivity).map(browserActivityRecord).filter(function (item) {
         if (!item.activityId) return false;
+        if (item.notWork) return args.includeNotWork === true;
         if (onlyUnassigned) return !item.workspaceRootPath;
         if (workspace) return item.workspaceRootPath === workspace;
         return true;
@@ -774,10 +940,15 @@
     });
   }
 
+  // One command for every decision about a page: which Deal, no Deal at all, or
+  // not work. They are the same edit to the same record, and splitting them
+  // into three commands would only make each one able to disagree.
   function assignBrowserActivity(api, args) {
     args = args || {};
     var workspace = cleanWorkspace(args.workspaceRootPath);
     var workspaceId = text(args.workspaceId).trim();
+    var notWork = args.notWork === true;
+    var assignedBy = assignedByValue(args.assignedBy) || 'user';
     var wanted = {};
     (Array.isArray(args.activityIds) ? args.activityIds : []).forEach(function (id) {
       var value = text(id).trim();
@@ -798,19 +969,111 @@
         // attached browser time formed a session of its own beside the work it
         // belonged to instead of joining it.
         return Object.assign({}, record, {
-          workspaceRootPath: workspace,
-          workspaceId: workspaceId,
-          sessionScope: workspaceId ? { kind: 'workspace', workspaceId: workspaceId } : {},
-          payload: Object.assign({}, payload, { workspaceRootPath: workspace, workspaceId: workspaceId })
+          workspaceRootPath: notWork ? '' : workspace,
+          workspaceId: notWork ? '' : workspaceId,
+          notWork: notWork,
+          assignedBy: notWork || workspace ? assignedBy : '',
+          sessionScope: !notWork && workspaceId ? { kind: 'workspace', workspaceId: workspaceId } : {},
+          payload: Object.assign({}, payload, {
+            workspaceRootPath: notWork ? '' : workspace,
+            workspaceId: notWork ? '' : workspaceId
+          })
         });
       });
       if (!assigned) return { assigned: 0 };
       return api.storage.data.writeNDJSON(RAW_DATA_NAME, updated).then(function () {
-        return { assigned: assigned, workspaceRootPath: workspace };
+        return { assigned: assigned, workspaceRootPath: notWork ? '' : workspace, notWork: notWork };
       });
     }).catch(function (err) {
       console.warn('[verstak.activity] assign browser activity:', err);
       return { assigned: 0 };
+    });
+  }
+
+  // A rule says where pages at an address belong, so the user answers once per
+  // address instead of once per page. Rules are stored, listed and removable:
+  // a rule nobody can see is the worst kind of automation, because the time
+  // goes to the wrong Deal and the reason is nowhere.
+  function normalizeRule(value) {
+    if (!value || typeof value !== 'object') return null;
+    var pattern = normalizeRulePattern(value.pattern);
+    if (!pattern) return null;
+    var notWork = value.notWork === true;
+    var workspace = cleanWorkspace(value.workspaceRootPath);
+    if (!notWork && !workspace) return null;
+    return {
+      pattern: pattern,
+      workspaceRootPath: notWork ? '' : workspace,
+      workspaceId: notWork ? '' : text(value.workspaceId).trim(),
+      notWork: notWork,
+      createdBy: assignedByValue(value.createdBy) || 'user',
+      createdAt: text(value.createdAt) || new Date().toISOString()
+    };
+  }
+
+  // The address without its scheme, so http and https are one rule and a rule
+  // can be read aloud.
+  function normalizeRulePattern(value) {
+    var raw = text(value).trim().toLowerCase();
+    if (!raw) return '';
+    raw = raw.replace(/^https?:\/\//, '');
+    raw = raw.replace(/[?#].*$/, '');
+    raw = raw.replace(/\/+$/, '');
+    return raw;
+  }
+
+  function normalizeRules(value) {
+    var seen = {};
+    return (Array.isArray(value) ? value : []).map(normalizeRule).filter(function (rule) {
+      if (!rule || seen[rule.pattern]) return false;
+      seen[rule.pattern] = true;
+      return true;
+    });
+  }
+
+  function readRules(api) {
+    if (!api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve([]);
+    return api.settings.read(RULES_KEY).then(normalizeRules).catch(function () { return []; });
+  }
+
+  function writeRules(api, rules) {
+    if (!api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve(rules);
+    return api.settings.write(RULES_KEY, rules).then(function () { return rules; });
+  }
+
+  function listBrowserActivityRules(api) {
+    return readRules(api).then(function (rules) {
+      return {
+        rules: rules.slice().sort(function (a, b) { return a.pattern.localeCompare(b.pattern); })
+      };
+    });
+  }
+
+  function setBrowserActivityRule(api, args) {
+    var rule = normalizeRule(args || {});
+    if (!rule) return Promise.resolve({ saved: false });
+    return readRules(api).then(function (rules) {
+      var next = rules.filter(function (item) { return item.pattern !== rule.pattern; });
+      next.push(rule);
+      return writeRules(api, next);
+    }).then(function () {
+      return { saved: true, rule: rule };
+    }).catch(function (err) {
+      console.warn('[verstak.activity] save rule:', err);
+      return { saved: false };
+    });
+  }
+
+  function removeBrowserActivityRule(api, args) {
+    var pattern = normalizeRulePattern(args && args.pattern);
+    if (!pattern) return Promise.resolve({ removed: 0 });
+    return readRules(api).then(function (rules) {
+      var next = rules.filter(function (item) { return item.pattern !== pattern; });
+      if (next.length === rules.length) return { removed: 0 };
+      return writeRules(api, next).then(function () { return { removed: 1, pattern: pattern }; });
+    }).catch(function (err) {
+      console.warn('[verstak.activity] remove rule:', err);
+      return { removed: 0 };
     });
   }
 
@@ -820,7 +1083,16 @@
       return Promise.resolve({ candidates: [] });
     }
     return readCandidateState(api).then(function (state) {
-      return { candidates: visibleCandidates(state.source, workspace, state.sessionRegistry, state.dismissed, state.handled) };
+      var candidates = visibleCandidates(state.source, workspace, state.sessionRegistry, state.dismissed, state.handled);
+      // Session ids are learned while the candidates are built, and they are
+      // what a proposal is identified by. Only the view used to save them, so
+      // a Journal that never opened Activity saw a new id for the same session
+      // on every read -- and an accepted proposal came straight back.
+      return api.settings.write(SESSION_REGISTRY_KEY, state.sessionRegistry).catch(function (err) {
+        console.warn('[verstak.activity] save session registry:', err);
+      }).then(function () {
+        return { candidates: candidates };
+      });
     }).catch(function (err) {
       console.warn('[verstak.activity] list possible journal entries:', err);
       return { candidates: [] };
@@ -1279,6 +1551,15 @@
         }),
         api.commands.register(ASSIGN_BROWSER_COMMAND_ID, function (args) {
           return assignBrowserActivity(api, args);
+        }),
+        api.commands.register(LIST_RULES_COMMAND_ID, function () {
+          return listBrowserActivityRules(api);
+        }),
+        api.commands.register(SET_RULE_COMMAND_ID, function (args) {
+          return setBrowserActivityRule(api, args);
+        }),
+        api.commands.register(REMOVE_RULE_COMMAND_ID, function (args) {
+          return removeBrowserActivityRule(api, args);
         })
       ]).catch(function (err) {
         console.warn('[verstak.activity] activity commands are unavailable:', err);
