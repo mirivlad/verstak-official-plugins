@@ -290,7 +290,9 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   const candidateNode = walk(container, (node) => node.getAttribute && node.getAttribute('data-work-session-candidate'));
   if (!candidateNode) throw new Error('work session candidate data attribute was not rendered');
   if (!candidateNode.textContent.includes('Deal: Project')) throw new Error('candidate Deal was not rendered');
-  if (!candidateNode.textContent.includes('Estimated duration: 20 min')) throw new Error('candidate duration was not rendered');
+  // 20 minutes between the first and last event, plus the five-minute lead-in
+  // credited to the work that produced the first one.
+  if (!candidateNode.textContent.includes('Estimated duration: 25 min')) throw new Error('candidate duration was not rendered');
   if (!candidateNode.textContent.includes('Activities: 3')) throw new Error('candidate activity count was not rendered');
   if (!walk(candidateNode, (node) => node.getAttribute && node.getAttribute('data-work-session-action') === 'review')) throw new Error('candidate review action was not rendered');
   if (!walk(candidateNode, (node) => node.getAttribute && node.getAttribute('data-work-session-action') === 'dismiss')) throw new Error('candidate dismiss action was not rendered');
@@ -302,7 +304,7 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   if (!candidate.candidateId) throw new Error('candidate id is missing');
   if (candidate.workspaceRootPath !== 'Project') throw new Error('candidate workspace mismatch');
   if (candidate.startedAt !== '2026-06-27T00:00:00.000Z' || candidate.endedAt !== '2026-06-27T00:30:00.000Z') throw new Error('candidate range mismatch');
-  if (candidate.estimatedMinutes !== 20) throw new Error(`expected 20 candidate minutes, got ${candidate.estimatedMinutes}`);
+  if (candidate.estimatedMinutes !== 25) throw new Error(`expected 25 candidate minutes, got ${candidate.estimatedMinutes}`);
   if (candidate.activityCount !== 3) throw new Error(`expected three candidate activities, got ${candidate.activityCount}`);
   if (candidate.activityIds.join(',') !== 'capture-1,note-1,capture-1:browser.capture.converted') throw new Error('candidate activity ids mismatch');
   if (!Array.isArray(candidate.activities) || candidate.activities.length !== 3) throw new Error('candidate activity list is missing');
@@ -471,6 +473,56 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   }
   component.unmount && component.unmount(sessionView.container);
 
+  // Bulk writers -- an import publishing a run, sync applying a pull -- record
+  // files appearing, not work done. One import produced 497 events in a single
+  // minute across 44 Deals, which drowned the log and could have become journal
+  // entries for work nobody did.
+  const serviceApi = makeApi({
+    'events:workspace:Project': [
+      { activityId: 'user-a', type: 'note.saved', occurredAt: '2026-07-20T10:00:00Z', workspaceRootPath: 'Project' },
+      { activityId: 'user-b', type: 'file.changed', occurredAt: '2026-07-20T10:12:00Z', workspaceRootPath: 'Project' },
+      // Flagged at the source.
+      { activityId: 'svc-a', type: 'file.changed', occurredAt: '2026-07-20T10:01:00Z', workspaceRootPath: 'Project', payload: { service: true, operation: 'external.create', path: 'Project/Files/a.md' } },
+      // Recorded before the flag existed. The external marker alone is enough,
+      // whatever the operation is called...
+      { activityId: 'svc-b', type: 'file.changed', occurredAt: '2026-07-20T10:02:00Z', workspaceRootPath: 'Project', payload: { external: true, operation: 'update', path: 'Project/Files/b.md' } },
+      // ...and so is the operation prefix on its own.
+      { activityId: 'svc-c', type: 'file.changed', occurredAt: '2026-07-20T10:03:00Z', workspaceRootPath: 'Project', payload: { operation: 'external.update', path: 'Project/Files/c.md' } },
+    ],
+  });
+  const serviceView = await mountWithApi(serviceApi, { workspaceNode: { name: 'Project' }, workspaceRootPath: 'Project' });
+  const serviceRows = () => {
+    const found = [];
+    walk(serviceView.container, (node) => {
+      if (node.getAttribute && node.getAttribute('data-activity-id')) found.push(node.getAttribute('data-activity-id'));
+      return false;
+    });
+    return found;
+  };
+  const hiddenRows = serviceRows();
+  if (hiddenRows.length !== 2 || !hiddenRows.includes('user-a') || !hiddenRows.includes('user-b')) {
+    throw new Error(`service activity must be hidden by default, listed ${JSON.stringify(hiddenRows)}`);
+  }
+
+  const serviceCheckbox = walk(serviceView.container, (node) => node.getAttribute && node.getAttribute('data-activity-show-service') !== undefined);
+  if (!serviceCheckbox) throw new Error('no control for showing service activity');
+  serviceCheckbox.checked = true;
+  serviceCheckbox.dispatchEvent('change');
+  const shownRows = serviceRows();
+  if (shownRows.length !== 5) {
+    throw new Error(`the filter must reveal service activity, listed ${JSON.stringify(shownRows)}`);
+  }
+
+  // Whether the filter is on or off, service activity is never work.
+  const serviceCandidates = (await serviceApi.commandHandlers.get(WORKLOG_COMMAND_ID)({ workspaceRootPath: 'Project' })).candidates;
+  if (!Array.isArray(serviceCandidates) || serviceCandidates.length !== 1) {
+    throw new Error(`expected one candidate from the two real events, got ${serviceCandidates && serviceCandidates.length}`);
+  }
+  if (serviceCandidates[0].activityIds.join(',') !== 'user-a,user-b') {
+    throw new Error(`service activity leaked into a journal proposal: ${serviceCandidates[0].activityIds}`);
+  }
+  component.unmount && component.unmount(serviceView.container);
+
   const lateApi = makeApi({
     'events:workspace:Project': [
       { activityId: 'late-a', type: 'note.saved', occurredAt: '2026-07-12T10:00:00Z', workspaceRootPath: 'Project' },
@@ -480,7 +532,8 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   const lateView = await mountWithApi(lateApi);
   const lateCommand = lateApi.commandHandlers.get(WORKLOG_COMMAND_ID);
   const firstLateCandidate = (await lateCommand({ workspaceRootPath: 'Project' })).candidates[0];
-  if (!firstLateCandidate || !firstLateCandidate.sessionId || firstLateCandidate.estimatedMinutes !== 10) {
+  // 10 minutes between the two events, plus the five-minute lead-in.
+  if (!firstLateCandidate || !firstLateCandidate.sessionId || firstLateCandidate.estimatedMinutes !== 15) {
     throw new Error('file activity duration must use the capped adjacent-event algorithm');
   }
   await lateApi.settings.write('events:workspace:Project', [
