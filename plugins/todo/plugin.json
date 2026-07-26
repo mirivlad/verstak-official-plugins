@@ -47,6 +47,7 @@
         "id": "verstak.todo.workspace",
         "title": "Todos",
         "icon": "list-todo",
+        "order": 30,
         "component": "TodoView"
       }
     ]

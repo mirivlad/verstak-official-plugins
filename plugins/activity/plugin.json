@@ -45,6 +45,7 @@
         "id": "verstak.activity.workspace",
         "title": "Activity",
         "icon": "activity",
+        "order": 40,
         "component": "ActivityView"
       }
     ],

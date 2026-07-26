@@ -49,6 +49,7 @@
         "id": "verstak.browser-inbox.workspace",
         "title": "Browser",
         "icon": "inbox",
+        "order": 50,
         "component": "BrowserInboxView"
       }
     ],
