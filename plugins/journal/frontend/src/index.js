@@ -8,6 +8,9 @@
 
   var PLUGIN_ID = 'verstak.journal';
   var WORKLOG_PREFIX = 'worklog:workspace:';
+  var ACTIVITY_PLUGIN_ID = 'verstak.activity';
+  var ASSIGN_ACTIVITY_COMMAND = 'verstak.activity.assignBrowserActivity';
+  var SET_RULE_COMMAND = 'verstak.activity.setBrowserActivityRule';
 
   function injectStyles() {
     if (document.getElementById('journal-style-injected')) return;
@@ -40,6 +43,7 @@
     '.journal-proposals{flex-shrink:0;max-height:40%;overflow:auto;padding:.5rem .75rem .6rem;border-bottom:1px solid var(--vt-color-border,#202b46);background:var(--vt-color-surface-muted,#111629)}',
     '.journal-proposals[hidden]{display:none}',
     '.journal-proposals-title{font-size:.74rem;font-weight:600;color:var(--vt-color-text-secondary,#b7c0d4);margin-bottom:.4rem}',
+    '.journal-proposal-actions{display:flex;gap:.35rem;flex-wrap:wrap;justify-content:flex-end}',
     '.journal-proposal{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:.7rem;align-items:center;margin-top:.4rem;padding:.6rem .7rem;border:1px solid rgba(78,204,163,.34);border-radius:var(--vt-radius-md,6px);background:var(--vt-color-surface,#15152c)}',
     '.journal-list{flex:1;min-height:0;overflow:auto;background:var(--vt-color-background,#101020)}',
     '.journal-empty{height:100%;display:flex;align-items:center;justify-content:center;color:var(--vt-color-text-muted,#7f8aa3);font-size:.86rem;padding:2rem;text-align:center}',
@@ -226,7 +230,8 @@
         activityId: text(activity.activityId),
         type: text(activity.type || 'activity.event'),
         occurredAt: text(activity.occurredAt),
-        sourcePluginId: text(activity.sourcePluginId)
+        sourcePluginId: text(activity.sourcePluginId),
+        url: text(activity.url)
       };
     }) : [];
     var activityIds = Array.isArray(value.activityIds) ? value.activityIds.map(text).filter(Boolean) : activities.map(function (activity) { return activity.activityId; });
@@ -247,6 +252,10 @@
       activityIds: activityIds,
       activities: activities,
       breakdown: normalizeBreakdown(value.breakdown),
+      // A guess is asked about, never asserted: the Deal came from what the
+      // user was doing around the time, not from anything they said.
+      guessed: value.guessed === true,
+      guessedActivityIds: Array.isArray(value.guessedActivityIds) ? value.guessedActivityIds.map(text).filter(Boolean) : [],
       providerLabel: '',
       providerPluginId: ''
     };
@@ -314,6 +323,8 @@
     var entries = [];
     var proposals = [];
     var workspaceOptions = [];
+    var workspaceIds = {};
+    var lastAnswer = null;
     // Filters over what an entry already records. Nothing here invents a
     // taxonomy: the Deal, whether it is billable and where it came from are
     // all fields the entry carries.
@@ -432,6 +443,11 @@
       if (!api || !api.workspaces || typeof api.workspaces.list !== 'function') return Promise.resolve();
       return api.workspaces.list().then(function (entries) {
         var seen = {};
+        workspaceIds = {};
+        (Array.isArray(entries) ? entries : []).forEach(function (entry) {
+          var root = cleanWorkspace(entry && entry.rootPath);
+          if (root && entry && entry.id) workspaceIds[root] = text(entry.id);
+        });
         workspaceOptions = (Array.isArray(entries) ? entries : []).map(function (entry) {
           return cleanWorkspace(entry && entry.rootPath);
         }).filter(function (workspaceRoot) {
@@ -528,6 +544,12 @@
         'workspace.created': ['ui.activity.dealCreated', 'Deal created'],
         'workspace.renamed': ['ui.activity.dealRenamed', 'Deal renamed']
       };
+      // Browser time is named by the page it was spent on: "Activity" repeated
+      // three times tells the user nothing about what they are agreeing to.
+      if (type === 'browser.activity.domain') {
+        var address = text(activity && activity.url).trim();
+        if (address) return address;
+      }
       var label = labels[type] || ['ui.activity.generic', 'Activity'];
       return tr(label[0], null, label[1]);
     }
@@ -788,6 +810,112 @@
       return clauses.join('; ') + '. ' + total + '.';
     }
 
+    // Answering teaches: the Deal for these pages, and a rule for the address
+    // so the same question is not asked again tomorrow.
+    function answerProposal(candidate, decision) {
+      if (!api || !api.commands || typeof api.commands.executeFor !== 'function') return Promise.resolve();
+      var ids = candidate.guessedActivityIds.length ? candidate.guessedActivityIds : candidate.activityIds;
+      return api.commands.executeFor(ACTIVITY_PLUGIN_ID, ASSIGN_ACTIVITY_COMMAND, {
+        activityIds: ids,
+        workspaceRootPath: decision.notWork ? '' : decision.workspaceRootPath,
+        workspaceId: decision.notWork ? '' : decision.workspaceId,
+        notWork: decision.notWork === true,
+        assignedBy: 'user'
+      }).then(function () {
+        return Promise.all(proposalAddresses(candidate).map(function (address) {
+          return api.commands.executeFor(ACTIVITY_PLUGIN_ID, SET_RULE_COMMAND, {
+            pattern: address,
+            workspaceRootPath: decision.notWork ? '' : decision.workspaceRootPath,
+            workspaceId: decision.notWork ? '' : decision.workspaceId,
+            notWork: decision.notWork === true,
+            createdBy: 'user'
+          }).catch(function (err) {
+            console.warn('[verstak.journal] teach rule for ' + address + ':', err);
+          });
+        }));
+      }).then(function () {
+        lastAnswer = { candidate: candidate, ids: ids };
+        statusText = decision.notWork
+          ? tr('ui.proposals.markedNotWork', null, 'Marked as not work')
+          : tr('ui.proposals.answered', { deal: decision.workspaceRootPath }, 'Attached to ' + decision.workspaceRootPath);
+        statusClass = '';
+        return loadProposals();
+      }).then(render).catch(function (err) {
+        reportError('ui.proposals.answerError', 'Could not save that answer. Please try again.', err);
+      });
+    }
+
+    // The addresses this proposal is made of, so the answer becomes a rule
+    // about them rather than about this one stretch of time.
+    function proposalAddresses(candidate) {
+      var seen = {};
+      var addresses = [];
+      // The pages themselves, not the sites they are on. Teaching a whole site
+      // from one page would quietly claim every other page on it.
+      (candidate.activities || []).forEach(function (activity) {
+        var address = text(activity && activity.url).trim();
+        if (!address || seen[address]) return;
+        seen[address] = true;
+        addresses.push(address);
+      });
+      return addresses;
+    }
+
+    function confirmProposal(candidate) {
+      return answerProposal(candidate, {
+        workspaceRootPath: candidate.workspaceRootPath,
+        workspaceId: candidate.workspaceId,
+        notWork: false
+      }).then(function () {
+        showEntryModal(null, Object.assign({}, candidate, { guessed: false }));
+      });
+    }
+
+    function rejectProposal(candidate) {
+      return answerProposal(candidate, { notWork: true });
+    }
+
+    function showProposalDealPicker(candidate) {
+      var select = el('select', { className: 'journal-input journal-select', 'data-journal-proposal-deal': '' },
+        workspaceOptions.map(function (workspace) {
+          return el('option', { value: workspace, textContent: workspace });
+        }));
+      select.value = candidate.workspaceRootPath;
+      modalHost.innerHTML = '';
+      if (typeof modalHost.removeAttribute === 'function') modalHost.removeAttribute('hidden');
+      else delete modalHost.attributes.hidden;
+      modalHost.appendChild(el('div', { className: 'journal-modal-overlay', onClick: function (event) {
+        if (event.target === event.currentTarget) closeEntryModal();
+      } }, [
+        el('div', { className: 'journal-modal' }, [
+          el('div', { className: 'journal-modal-title', textContent: tr('ui.proposals.pickDeal', null, 'Which Deal was this?') }),
+          el('div', { className: 'journal-candidate-context' }, [
+            el('div', { textContent: breakdownSentence(candidate) })
+          ]),
+          el('label', { className: 'journal-field wide' }, [tr('ui.workspace', null, 'Deal'), select]),
+          el('div', { className: 'journal-modal-actions' }, [
+            el('button', { className: 'journal-btn ghost', type: 'button', textContent: tr('ui.cancel', null, 'Cancel'), onClick: closeEntryModal }),
+            el('button', {
+              className: 'journal-btn primary',
+              type: 'button',
+              'data-journal-action': 'save-proposal-deal',
+              textContent: tr('ui.proposals.attachHere', null, 'Attach here'),
+              onClick: function () {
+                var chosen = cleanWorkspace(select.value);
+                closeEntryModal();
+                if (!chosen) return;
+                answerProposal(candidate, {
+                  workspaceRootPath: chosen,
+                  workspaceId: workspaceIds[chosen] || '',
+                  notWork: false
+                });
+              }
+            })
+          ])
+        ])
+      ]));
+    }
+
     function proposalMeta(candidate) {
       var facts = [candidate.workspaceRootPath];
       if (candidate.activityCount) {
@@ -829,13 +957,37 @@
             el('div', { className: 'journal-meta', textContent: proposalMeta(candidate) })
           ]),
           el('div', { className: 'journal-minutes', textContent: tr('ui.minutesValue', { minutes: candidate.estimatedMinutes }, candidate.estimatedMinutes + ' min') }),
-          el('button', {
-            className: 'journal-btn',
-            type: 'button',
-            'data-journal-action': 'review-proposal',
-            textContent: tr('ui.proposals.review', null, 'Review'),
-            onClick: function () { showEntryModal(null, candidate); }
-          })
+          el('div', { className: 'journal-proposal-actions' }, candidate.guessed ? [
+            el('button', {
+              className: 'journal-btn primary',
+              type: 'button',
+              'data-journal-action': 'confirm-guess',
+              textContent: tr('ui.proposals.confirmDeal', { deal: candidate.workspaceRootPath }, 'Yes, ' + candidate.workspaceRootPath),
+              onClick: function () { confirmProposal(candidate); }
+            }),
+            el('button', {
+              className: 'journal-btn',
+              type: 'button',
+              'data-journal-action': 'reassign-guess',
+              textContent: tr('ui.proposals.otherDeal', null, 'Another Deal…'),
+              onClick: function () { showProposalDealPicker(candidate); }
+            }),
+            el('button', {
+              className: 'journal-btn',
+              type: 'button',
+              'data-journal-action': 'not-work',
+              textContent: tr('ui.proposals.notWork', null, 'Not work'),
+              onClick: function () { rejectProposal(candidate); }
+            })
+          ] : [
+            el('button', {
+              className: 'journal-btn',
+              type: 'button',
+              'data-journal-action': 'review-proposal',
+              textContent: tr('ui.proposals.review', null, 'Review'),
+              onClick: function () { showEntryModal(null, candidate); }
+            })
+          ])
         ]));
       });
     }

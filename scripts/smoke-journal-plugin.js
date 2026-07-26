@@ -151,6 +151,8 @@ function makeApi(initialSettings = {}, locale = null, proposals = []) {
     commands: {
       executeFor: async (pluginId, handler, args) => {
         providerCalls.push({ pluginId, handler, args });
+        if (handler === 'verstak.activity.assignBrowserActivity') return { status: 'handled', result: { assigned: (args.activityIds || []).length } };
+        if (handler === 'verstak.activity.setBrowserActivityRule') return { status: 'handled', result: { saved: true } };
         const workspace = String((args && args.workspaceRootPath) || '');
         return {
           status: 'handled',
@@ -305,6 +307,22 @@ function byData(container, attr, value) {
     throw new Error(`the proposal did not add its work up: ${proposedBody}`);
   }
   if (byData(candidateView.container, 'data-journal-input', 'minutes').value !== '51') throw new Error('candidate review must prefill the factual duration');
+  // Browser time is named by the page it was spent on.
+  const pageCandidate = Object.assign({}, candidate, {
+    candidateId: 'work-session:page:1',
+    activityIds: ['page-1'],
+    activities: [{ activityId: 'page-1', type: 'browser.activity.domain', occurredAt: '2026-06-27T10:12:00.000Z', url: 'https://dash.example.com/projects/42' }],
+  });
+  const pageView = await mountWithApi(makeApi(), {
+    workspaceNode: { name: 'Project' },
+    workspaceRootPath: 'Project',
+    toolRequest: { type: 'work-session-candidate', candidate: pageCandidate },
+  });
+  if (!pageView.container.textContent.includes('https://dash.example.com/projects/42')) {
+    throw new Error('a proposal must name the page the time was spent on, not just "Activity"');
+  }
+  component.unmount && component.unmount(pageView.container);
+
   const linkedActivityInputs = walkAll(candidateView.container, (node) => node.getAttribute && node.getAttribute('data-journal-candidate-activity'));
   if (linkedActivityInputs.length !== 2 || linkedActivityInputs.some((node) => node.checked !== true)) throw new Error('candidate activities were not available for review');
   byData(candidateView.container, 'data-journal-input', 'title').value = 'Review research capture';
@@ -594,6 +612,64 @@ function byData(container, attr, value) {
     throw new Error('a proposal that became an entry must leave the proposal list');
   }
   component.unmount && component.unmount(proposalView.container);
+
+  // A guessed Deal is asked about, not asserted, and the answer teaches a rule
+  // so the same question is not asked again tomorrow.
+  const guessedProposal = Object.assign({}, projectProposal, {
+    candidateId: 'work-session:guessed:1',
+    guessed: true,
+    guessedActivityIds: ['p-a'],
+    breakdown: [{ kind: 'browser', count: 1, minutes: 25, sites: ['dash.example.com'] }],
+    activities: [
+      { activityId: 'p-a', type: 'browser.activity.domain', occurredAt: '2026-07-20T09:00:00.000Z', url: 'https://dash.example.com/projects/42' },
+      { activityId: 'p-b', type: 'file.updated', occurredAt: '2026-07-20T09:20:00.000Z' },
+    ],
+  });
+  const guessApi = makeApi({}, null, [guessedProposal]);
+  const guessView = await mountWithApi(guessApi, {});
+  const guessRow = byData(guessView.container, 'data-journal-proposal', guessedProposal.candidateId);
+  if (!walk(guessRow, (node) => node.getAttribute && node.getAttribute('data-journal-action') === 'confirm-guess')) {
+    throw new Error('a guessed proposal must offer the Deal it guessed');
+  }
+  if (!walk(guessRow, (node) => node.getAttribute && node.getAttribute('data-journal-action') === 'reassign-guess')) {
+    throw new Error('a guessed proposal must offer another Deal');
+  }
+  const notWorkButton = walk(guessRow, (node) => node.getAttribute && node.getAttribute('data-journal-action') === 'not-work');
+  if (!notWorkButton) throw new Error('a guessed proposal must offer "not work"');
+  if (!guessRow.textContent.includes('Yes, Project')) throw new Error('the guessed Deal must be named on the button');
+
+  notWorkButton.click();
+  await flush();
+  const notWorkCall = guessApi.providerCalls.find((call) => call.handler === 'verstak.activity.assignBrowserActivity');
+  if (!notWorkCall || notWorkCall.args.notWork !== true) throw new Error('"not work" did not reach the record');
+  if (notWorkCall.args.assignedBy !== 'user') throw new Error('an answer must be recorded as the user\'s own');
+  const notWorkRule = guessApi.providerCalls.find((call) => call.handler === 'verstak.activity.setBrowserActivityRule');
+  // The page, not the site: teaching a whole site from one page would quietly
+  // claim every other page on it. Activity normalizes the address it stores.
+  if (!notWorkRule || notWorkRule.args.pattern !== 'https://dash.example.com/projects/42' || notWorkRule.args.notWork !== true) {
+    throw new Error(`the answer must teach a rule about the address: ${JSON.stringify(notWorkRule && notWorkRule.args)}`);
+  }
+  component.unmount && component.unmount(guessView.container);
+
+  // Choosing another Deal teaches that Deal instead.
+  const pickApi = makeApi({}, null, [guessedProposal]);
+  const pickView = await mountWithApi(pickApi, {});
+  walk(byData(pickView.container, 'data-journal-proposal', guessedProposal.candidateId),
+    (node) => node.getAttribute && node.getAttribute('data-journal-action') === 'reassign-guess').click();
+  await flush();
+  const dealPicker = byData(pickView.container, 'data-journal-proposal-deal', '');
+  dealPicker.value = 'Client';
+  byData(pickView.container, 'data-journal-action', 'save-proposal-deal').click();
+  await flush();
+  const pickedCall = pickApi.providerCalls.find((call) => call.handler === 'verstak.activity.assignBrowserActivity');
+  if (!pickedCall || pickedCall.args.workspaceRootPath !== 'Client') {
+    throw new Error(`choosing another Deal must reach the record: ${JSON.stringify(pickedCall && pickedCall.args)}`);
+  }
+  const pickedRule = pickApi.providerCalls.find((call) => call.handler === 'verstak.activity.setBrowserActivityRule');
+  if (!pickedRule || pickedRule.args.workspaceRootPath !== 'Client') {
+    throw new Error('choosing another Deal must teach that Deal');
+  }
+  component.unmount && component.unmount(pickView.container);
 
   component.unmount && component.unmount(container);
   component.unmount && component.unmount(candidateView.container);

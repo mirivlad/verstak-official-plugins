@@ -156,9 +156,10 @@ function loadComponent(document) {
   return component;
 }
 
-function makeApi(initialSettings = {}, locale = 'en', browserActivity = []) {
+function makeApi(initialSettings = {}, locale = 'en', browserActivity = [], rules = []) {
   const settings = { ...initialSettings };
   const activityRecords = browserActivity.map((item) => ({ ...item }));
+  const activityRules = rules.map((rule) => ({ ...rule }));
   const commandCalls = [];
   const handlers = {};
   const unsubscribed = [];
@@ -239,6 +240,7 @@ function makeApi(initialSettings = {}, locale = 'en', browserActivity = []) {
     publishedEvents,
     commandCalls,
     activityRecords,
+    activityRules,
     // Stands in for the Activity plugin, which owns this data and answers
     // through its own commands. The real handlers are covered by the activity
     // smoke; what is tested here is that the Browser tool asks correctly.
@@ -247,6 +249,17 @@ function makeApi(initialSettings = {}, locale = 'en', browserActivity = []) {
         commandCalls.push({ pluginId, command, args });
         if (command === 'verstak.activity.listBrowserActivity') {
           return { status: 'handled', result: { activities: activityRecords.map((item) => ({ ...item })) } };
+        }
+        if (command === 'verstak.activity.listBrowserActivityRules') {
+          return { status: 'handled', result: { rules: activityRules.map((rule) => ({ ...rule })) } };
+        }
+        if (command === 'verstak.activity.removeBrowserActivityRule') {
+          const before = activityRules.length;
+          const pattern = (args && args.pattern) || '';
+          for (let i = activityRules.length - 1; i >= 0; i -= 1) {
+            if (activityRules[i].pattern === pattern) activityRules.splice(i, 1);
+          }
+          return { status: 'handled', result: { removed: before - activityRules.length } };
         }
         if (command === 'verstak.activity.assignBrowserActivity') {
           const wanted = new Set((args && args.activityIds) || []);
@@ -1222,6 +1235,65 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
     throw new Error(`the toggle must reveal unattached pages and nothing else, listed ${JSON.stringify(scopedIds())}`);
   }
   component.unmount && component.unmount(scopedView.container);
+
+  // Every answer is reversible, and every rule is visible and removable.
+  const undoApi = makeApi({}, 'en', [
+    { activityId: 'u-1', url: 'https://dash.example.com/projects/42', hostname: 'dash.example.com', endedAt: '2026-07-27T09:00:00Z', durationSeconds: 900, workspaceRootPath: 'Project', assignedBy: 'rule' },
+    { activityId: 'u-2', url: 'https://chat.example.net/rooms/1', hostname: 'chat.example.net', endedAt: '2026-07-27T10:00:00Z', durationSeconds: 900, workspaceRootPath: '', notWork: true, assignedBy: 'user' },
+  ], [
+    { pattern: 'dash.example.com/projects/42', workspaceRootPath: 'Project', createdBy: 'user' },
+    { pattern: 'chat.example.net', workspaceRootPath: '', notWork: true, createdBy: 'user' },
+  ]);
+  const undoView = await mountWithApi(undoApi, {});
+  const undoRows = () => walkAll(undoView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-id'))
+    .map((node) => node.getAttribute('data-browser-activity-id'));
+
+  const undoShowAttached = walk(undoView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-show-attached') === '');
+  undoShowAttached.checked = true;
+  undoShowAttached.dispatchEvent('change');
+  await flush();
+
+  // The user must be able to tell what they decided from what a rule decided.
+  const ruledMeta = walk(undoView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-source') === 'rule');
+  if (!ruledMeta || !ruledMeta.textContent.includes('by a rule')) {
+    throw new Error('a page placed by a rule must say so');
+  }
+
+  // Detaching puts it back where nothing has been decided.
+  const undoBox = walk(undoView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-id') === 'u-1');
+  undoBox.checked = true;
+  undoBox.dispatchEvent('change');
+  await flush();
+  walk(undoView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-action') === 'detach').click();
+  await flush();
+  const detachCall = undoApi.commandCalls.filter((call) => call.command === 'verstak.activity.assignBrowserActivity').pop();
+  if (!detachCall || detachCall.args.workspaceRootPath !== '' || detachCall.args.notWork === true) {
+    throw new Error(`detaching must clear the Deal without calling it not work: ${JSON.stringify(detachCall && detachCall.args)}`);
+  }
+  if (detachCall.args.assignedBy !== 'user') throw new Error('an answer must be recorded as the user\'s own');
+
+  // Not work is a state with its own filter, so a wrong answer stays findable.
+  if (undoRows().indexOf('u-2') !== -1) throw new Error('not-work pages are not in the working list');
+  const notWorkToggle = walk(undoView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-show-not-work') === '');
+  if (!notWorkToggle) throw new Error('there is no way to see what was called not work');
+  notWorkToggle.checked = true;
+  notWorkToggle.dispatchEvent('change');
+  await flush();
+  if (undoRows().join(',') !== 'u-2') throw new Error(`the filter must show exactly what was called not work, got ${JSON.stringify(undoRows())}`);
+
+  // Rules are listed and removable.
+  const ruleRow = walk(undoView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-rule') === 'dash.example.com/projects/42');
+  if (!ruleRow) throw new Error('a rule that decides where time goes must be visible');
+  if (!ruleRow.textContent.includes('Project')) throw new Error('a rule must say which Deal it sends time to');
+  walk(ruleRow, (node) => node.getAttribute && node.getAttribute('data-browser-activity-action') === 'remove-rule').click();
+  await flush();
+  if (undoApi.activityRules.some((rule) => rule.pattern === 'dash.example.com/projects/42')) {
+    throw new Error('the rule was not removed');
+  }
+  if (!walk(undoView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-rule') === 'chat.example.net')) {
+    throw new Error('removing one rule must not remove another');
+  }
+  component.unmount && component.unmount(undoView.container);
   component.unmount && component.unmount(activityView.container);
 
   console.log('browser inbox plugin smoke passed');
