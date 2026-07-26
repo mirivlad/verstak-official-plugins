@@ -231,7 +231,10 @@
         type: text(activity.type || 'activity.event'),
         occurredAt: text(activity.occurredAt),
         sourcePluginId: text(activity.sourcePluginId),
-        url: text(activity.url)
+        url: text(activity.url),
+        hostname: text(activity.hostname),
+        title: text(activity.title),
+        durationSeconds: Math.max(0, Number(activity.durationSeconds) || 0)
       };
     }) : [];
     var activityIds = Array.isArray(value.activityIds) ? value.activityIds.map(text).filter(Boolean) : activities.map(function (activity) { return activity.activityId; });
@@ -547,7 +550,7 @@
       // Browser time is named by the page it was spent on: "Activity" repeated
       // three times tells the user nothing about what they are agreeing to.
       if (type === 'browser.activity.domain') {
-        var address = text(activity && activity.url).trim();
+        var address = text(activity && (activity.url || activity.hostname)).trim();
         if (address) return address;
       }
       var label = labels[type] || ['ui.activity.generic', 'Activity'];
@@ -662,7 +665,14 @@
       var candidateActivities = reviewingCandidate ? el('fieldset', { className: 'journal-candidate-activities' }, [
         el('legend', { textContent: tr('ui.candidate.linkedActivities', null, 'Linked activities') })
       ].concat(activityInputs.map(function (item) {
-        var detail = (item.activity.occurredAt ? candidateTime(item.activity.occurredAt) + ' · ' : '') + activityLabel(item.activity);
+        // Time, what it was, and how long it took. A row that says only the
+        // time leaves the user ticking boxes with no idea what is in them.
+        var minutes = Math.round(Math.max(0, Number(item.activity.durationSeconds) || 0) / 60);
+        var detail = [
+          item.activity.occurredAt ? candidateTime(item.activity.occurredAt) : '',
+          activityLabel(item.activity),
+          minutes > 0 ? tr('ui.minutesValue', { minutes: minutes }, minutes + ' min') : ''
+        ].filter(Boolean).join(' · ');
         return el('label', { className: 'journal-candidate-activity' }, [item.input, detail]);
       }))) : null;
       var todoContext = reviewingTodo ? el('div', { className: 'journal-candidate-context', 'data-journal-todo': completedTodo.id }, [

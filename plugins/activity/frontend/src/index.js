@@ -308,8 +308,13 @@
       workspaceRootPath: candidateWorkspace(activity),
       workspaceId: text(activity.workspaceId),
       // Which page, for browser time. Without it a proposal lists "Activity"
-      // three times and the user cannot tell what they are agreeing to.
-      url: text(activity.url || payload.url)
+      // three times and the user cannot tell what they are agreeing to. Time
+      // recorded before addresses were kept knows only the site, and the site
+      // still says more than nothing.
+      url: text(activity.url || payload.url),
+      hostname: text(activity.hostname || payload.hostname),
+      durationSeconds: Math.max(0, Number(activity.durationSeconds || payload.durationSeconds) || 0),
+      title: text(activity.title)
     };
   }
 
