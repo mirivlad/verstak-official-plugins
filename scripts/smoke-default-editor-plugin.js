@@ -19,12 +19,44 @@ class FakeNode {
     this.parentNode = null;
     this._textContent = '';
     this._innerHTML = '';
+    this.style = {};
+    // Enough of a textarea for caret-aware behaviour to be testable: the
+    // wiki-link completion and the outline both work from the selection.
+    this.selectionStart = 0;
+    this.selectionEnd = 0;
+    this.scrollTop = 0;
+    this.scrollHeight = 100;
+    this.scrolledIntoView = false;
   }
 
   appendChild(node) {
     this.children.push(node);
     node.parentNode = this;
     return node;
+  }
+
+  removeChild(node) {
+    this.children = this.children.filter((child) => child !== node);
+    node.parentNode = null;
+    return node;
+  }
+
+  setSelectionRange(start, end) {
+    this.selectionStart = start;
+    this.selectionEnd = end;
+  }
+
+  focus() {}
+
+  scrollIntoView() {
+    this.scrolledIntoView = true;
+  }
+
+  // Supports the one shape the editor uses: [attribute="value"].
+  querySelector(selector) {
+    const match = /^\[([a-zA-Z-]+)="(.*)"\]$/.exec(selector);
+    if (!match) return null;
+    return walk(this, (node) => node.getAttribute && node.getAttribute(match[1]) === match[2].replace(/\\(.)/g, '$1'));
   }
 
   setAttribute(name, value) {
@@ -120,16 +152,21 @@ async function flush() {
   }
 }
 
-async function mountEditor(secretProviderEnabled, translations, settings = {}) {
+async function mountEditor(secretProviderEnabled, translations, settings = {}, options = {}) {
   const document = makeDocument();
   const component = loadComponent(document);
   const opened = [];
   const written = [];
+  const listed = [];
   const api = {
     files: {
-      readText: async () => '[DB password](verstak-secret://client-a.db)\n',
+      readText: async () => options.content || '[DB password](verstak-secret://client-a.db)\n',
       writeText: async (path, content) => {
         written.push({ path, content });
+      },
+      list: async (dir) => {
+        listed.push(dir);
+        return (options.notes || []).map((name) => ({ name, type: 'file', relativePath: dir + '/' + name }));
       },
     },
     settings: {
@@ -167,10 +204,16 @@ async function mountEditor(secretProviderEnabled, translations, settings = {}) {
   };
   const container = document.createElement('div');
   component.mount(container, {
-    request: { kind: 'vault-file', path: 'Project/Notes/Secret.md', extension: '.md', mode: 'view' },
+    request: {
+      kind: 'vault-file',
+      path: 'Project/Notes/Secret.md',
+      extension: '.md',
+      mode: 'view',
+      context: options.context,
+    },
   }, api);
   await flush();
-  return { container, opened, written, settings };
+  return { container, opened, written, listed, settings, document };
 }
 
 (async () => {
@@ -250,6 +293,139 @@ async function mountEditor(secretProviderEnabled, translations, settings = {}) {
   const remountedTextarea = walk(remounted.container, (node) => node.getAttribute && node.getAttribute('data-editor-textarea') === '');
   if (remountedWrapButton.getAttribute('aria-pressed') !== 'false' || remountedTextarea.getAttribute('wrap') !== 'off') {
     throw new Error('persisted soft wrap state was not restored');
+  }
+
+  // ── Outline (navigation by headings) ──────────────────────────────────
+  const noteWithHeadings = [
+    '# Overview',
+    'body',
+    '## Details',
+    '```',
+    '# not a heading, this is code',
+    '```',
+    '## Details',
+    'more',
+  ].join('\n');
+
+  const outline = await mountEditor(false, {}, { outlineVisible: true }, { content: noteWithHeadings });
+  const outlinePane = walk(outline.container, (node) => node.getAttribute && node.getAttribute('data-outline') === '');
+  if (!outlinePane) throw new Error('outline pane did not appear when the stored preference asked for it');
+  const outlineEntries = [];
+  walk(outlinePane, (node) => {
+    if (node.getAttribute && node.getAttribute('data-outline-slug')) outlineEntries.push(node);
+    return false;
+  });
+  if (outlineEntries.length !== 3) {
+    throw new Error(`outline should list three headings, got ${outlineEntries.length}: ${outlineEntries.map((n) => n.textContent)}`);
+  }
+  if (outlineEntries.map((node) => node.textContent).join('|') !== 'Overview|Details|Details') {
+    throw new Error(`outline entries = ${outlineEntries.map((node) => node.textContent)}`);
+  }
+  // A heading inside a fenced block is code, not a section.
+  if (outlineEntries.some((node) => node.textContent.includes('not a heading'))) {
+    throw new Error('outline included a heading from inside a code fence');
+  }
+  // Two sections with the same title must remain separately reachable.
+  const slugs = outlineEntries.map((node) => node.getAttribute('data-outline-slug'));
+  if (new Set(slugs).size !== slugs.length) {
+    throw new Error(`duplicate heading titles produced duplicate anchors: ${slugs}`);
+  }
+
+  const outlinePreview = walk(outline.container, (node) => node.className === 'de-preview');
+  slugs.forEach((slug) => {
+    if (!outlinePreview.innerHTML.includes(`id="${slug}"`)) {
+      throw new Error(`rendered note has no anchor for outline entry ${slug}`);
+    }
+  });
+
+  // Clicking an entry has to move the reader, not merely look clickable. In
+  // split view the editor pane is present, so the caret is what can be checked
+  // here; the preview side is layout and belongs to a browser test.
+  walk(outline.container, (node) => node.getAttribute && node.getAttribute('data-editor-mode-button') === 'split').dispatchEvent('click');
+  await flush();
+  const outlineAfterSplit = [];
+  walk(outline.container, (node) => {
+    if (node.getAttribute && node.getAttribute('data-outline-slug')) outlineAfterSplit.push(node);
+    return false;
+  });
+  const outlineTextarea = walk(outline.container, (node) => node.getAttribute && node.getAttribute('data-editor-textarea') === '');
+  if (!outlineTextarea) throw new Error('split view has no textarea');
+  // '# Overview\n' (11) + 'body\n' (5) puts '## Details' at offset 16.
+  outlineAfterSplit[1].dispatchEvent('click');
+  await flush();
+  if (outlineTextarea.selectionStart !== 16) {
+    throw new Error(`clicking an outline entry put the caret at ${outlineTextarea.selectionStart}, expected the heading at 16`);
+  }
+  if (!outlineAfterSplit[1].className.includes('is-current')) throw new Error('the outline did not mark the section jumped to');
+  // The second "Details" must reach the second occurrence, not the first.
+  outlineAfterSplit[2].dispatchEvent('click');
+  await flush();
+  if (outlineTextarea.selectionStart === 16) {
+    throw new Error('the repeated heading jumped to the first occurrence');
+  }
+
+  // ── Wiki-link completion ──────────────────────────────────────────────
+  const linking = await mountEditor(false, {}, {}, {
+    content: 'start\n',
+    notes: ['Meeting notes.md', 'Budget.md', 'Secret.md'],
+    context: { notesMode: true, isInsideNotesFolder: true },
+  });
+  walk(linking.container, (node) => node.getAttribute && node.getAttribute('data-editor-mode-button') === 'edit').dispatchEvent('click');
+  const linkTextarea = walk(linking.container, (node) => node.getAttribute && node.getAttribute('data-editor-textarea') === '');
+  if (!linkTextarea) throw new Error('edit mode has no textarea');
+
+  linkTextarea.value = 'see [[me';
+  linkTextarea.setSelectionRange(8, 8);
+  linkTextarea.dispatchEvent('input');
+  await flush();
+  const suggest = walk(linking.container, (node) => node.getAttribute && node.getAttribute('data-note-suggest') === '');
+  if (!suggest) throw new Error('typing [[ offered no note suggestions');
+  const suggestions = [];
+  walk(suggest, (node) => {
+    if (node.getAttribute && node.getAttribute('data-note-suggestion')) suggestions.push(node.getAttribute('data-note-suggestion'));
+    return false;
+  });
+  if (suggestions.join('|') !== 'Meeting notes') {
+    throw new Error(`suggestions should be filtered by what was typed, got ${suggestions}`);
+  }
+
+  // With nothing typed yet the whole list shows -- and the note being edited
+  // must not be in it, since a note linking to itself is never what was meant.
+  linkTextarea.value = 'see [[';
+  linkTextarea.setSelectionRange(6, 6);
+  linkTextarea.dispatchEvent('input');
+  await flush();
+  const allSuggest = walk(linking.container, (node) => node.getAttribute && node.getAttribute('data-note-suggest') === '');
+  const allSuggestions = [];
+  walk(allSuggest, (node) => {
+    if (node.getAttribute && node.getAttribute('data-note-suggestion')) allSuggestions.push(node.getAttribute('data-note-suggestion'));
+    return false;
+  });
+  if (allSuggestions.join('|') !== 'Budget|Meeting notes') {
+    throw new Error(`unfiltered suggestions = ${allSuggestions}`);
+  }
+
+  linkTextarea.value = 'see [[me';
+  linkTextarea.setSelectionRange(8, 8);
+  linkTextarea.dispatchEvent('input');
+  await flush();
+
+  linkTextarea.dispatchEvent('keydown', { key: 'Enter', preventDefault() {} });
+  await flush();
+  if (linkTextarea.value !== 'see [[Meeting notes]]') {
+    throw new Error(`accepting a suggestion produced ${JSON.stringify(linkTextarea.value)}`);
+  }
+  if (walk(linking.container, (node) => node.getAttribute && node.getAttribute('data-note-suggest') === '')) {
+    throw new Error('the suggestion list stayed open after a choice was made');
+  }
+
+  // A caret past a closed link is not inside one.
+  linkTextarea.value = 'see [[Budget]] and more';
+  linkTextarea.setSelectionRange(23, 23);
+  linkTextarea.dispatchEvent('input');
+  await flush();
+  if (walk(linking.container, (node) => node.getAttribute && node.getAttribute('data-note-suggest') === '')) {
+    throw new Error('suggestions appeared with the caret outside a wiki link');
   }
 
   console.log('default editor smoke passed');

@@ -30,7 +30,7 @@
     '.de-editor-wrap{flex:1;display:flex;min-height:0;overflow:hidden;background:#0d0d1a}',
     '.de-pane{flex:1;min-width:0;min-height:0;display:flex;overflow:hidden}',
     '.de-pane+.de-pane{border-left:1px solid #16213e}',
-    '.de-editor-shell{flex:1;display:flex;min-width:0;min-height:0;overflow:hidden;background:#0d0d1a}',
+    '.de-editor-shell{position:relative;flex:1;display:flex;min-width:0;min-height:0;overflow:hidden;background:#0d0d1a}',
     '.de-lines{flex:0 0 auto;min-width:3rem;padding:.75rem .45rem;text-align:right;background:#0a0a15;color:#555;font-family:"SF Mono","Fira Code","Cascadia Code",Consolas,monospace;font-size:.82rem;line-height:1.6;user-select:none;overflow:hidden;white-space:pre}',
     '.de-textarea{flex:1;width:100%;height:100%;resize:none;border:0;outline:0;padding:.75rem;font-family:"SF Mono","Fira Code","Cascadia Code",Consolas,monospace;font-size:.86rem;line-height:1.6;background:#0d0d1a;color:#e0e0e0;tab-size:2;white-space:pre;overflow:auto}',
     '.de-textarea.de-textarea-wrap{white-space:pre-wrap;overflow-wrap:anywhere;overflow-x:hidden}',
@@ -44,6 +44,20 @@
     '.de-preview a{color:#4ecca3;text-decoration:none}.de-preview a:hover{text-decoration:underline}',
     '.de-preview table{border-collapse:collapse;margin:.8rem 0;max-width:100%;display:block;overflow:auto}.de-preview th,.de-preview td{border:1px solid #333;padding:.35rem .6rem;text-align:left}.de-preview th{background:#1a1a2e}',
     '.de-preview img{max-width:100%;height:auto;border-radius:4px}.de-preview .task{margin-right:.4rem}',
+    '.de-outline{flex:0 0 15rem;max-width:40%;min-height:0;display:flex;flex-direction:column;border-right:1px solid #16213e;background:#0a0a15}',
+    '.de-outline-title{flex:0 0 auto;padding:.5rem .75rem;font-size:.7rem;letter-spacing:.04em;text-transform:uppercase;color:#8b8ba8;border-bottom:1px solid #16213e}',
+    '.de-outline-list{flex:1;min-height:0;overflow:auto;padding:.35rem 0}',
+    '.de-outline-item{display:block;width:100%;text-align:left;border:0;background:transparent;color:#b8b8d0;cursor:pointer;font-size:.78rem;line-height:1.35;padding:.22rem .75rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.de-outline-item:hover{background:#16213e;color:#f0f0ff}',
+    '.de-outline-item.is-current{color:#4ecca3;background:#101f1a}',
+    '.de-outline-item[data-level="2"]{padding-left:1.5rem}.de-outline-item[data-level="3"]{padding-left:2.25rem}',
+    '.de-outline-item[data-level="4"]{padding-left:3rem}.de-outline-item[data-level="5"]{padding-left:3.75rem}.de-outline-item[data-level="6"]{padding-left:4.5rem}',
+    '.de-outline-empty{padding:.6rem .75rem;font-size:.75rem;color:#6b6b85;line-height:1.4}',
+    '@media(max-width:780px){.de-outline{flex-basis:auto;max-width:none;max-height:9rem;border-right:0;border-bottom:1px solid #16213e}}',
+    '.de-suggest{position:absolute;z-index:40;min-width:12rem;max-width:22rem;max-height:13rem;overflow:auto;border:1px solid #2c456a;border-radius:5px;background:#12122a;box-shadow:0 8px 22px rgba(0,0,0,.5);padding:.2rem 0}',
+    '.de-suggest-item{display:block;width:100%;text-align:left;border:0;background:transparent;color:#d8d8e8;cursor:pointer;font-size:.8rem;padding:.28rem .6rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.de-suggest-item:hover,.de-suggest-item.is-active{background:#1a3a2a;color:#4ecca3}',
+    '.de-suggest-empty{padding:.35rem .6rem;font-size:.76rem;color:#6b6b85}',
     '.de-notes-badge{font-size:.65rem;padding:.1rem .4rem;border-radius:3px;background:#2a1a3a;color:#b388ff}',
     '.de-loading,.de-error{flex:1;display:flex;align-items:center;justify-content:center;color:#777;padding:2rem}.de-error{color:#e74c3c;flex-direction:column;gap:.5rem}.de-error-msg{font-size:.85rem;color:#aaa;max-width:420px;text-align:center}',
     '@media(max-width:780px){.de-editor-wrap{flex-direction:column}.de-pane+.de-pane{border-left:0;border-top:1px solid #16213e}.de-toolbar-context{max-width:100%}}'
@@ -83,6 +97,13 @@
     return escapeHtml(s).replace(/"/g, '&quot;');
   }
 
+  // Heading slugs come from user text, so they reach querySelector as data.
+  // CSS.escape is not available in every host this bundle runs in.
+  function cssEscape(value) {
+    if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(value);
+    return String(value).replace(/["\\]/g, '\\$&');
+  }
+
   function cleanPath(path) {
     return String(path || '').split('/').filter(Boolean).join('/');
   }
@@ -106,6 +127,48 @@
     return out + '.md';
   }
 
+  // A heading's anchor. Both the rendered preview and the outline derive it
+  // from the same function, because an outline entry that scrolls nowhere is
+  // worse than no outline. Repeated headings get a numeric suffix so two
+  // sections called "Notes" remain separately reachable.
+  function headingSlug(text, counts) {
+    var base = String(text || '')
+      .replace(/`([^`]*)`/g, '$1')
+      .replace(/\*\*?([^*]*)\*?\*/g, '$1')
+      .replace(/\[\[([^\]]+)\]\]/g, '$1')
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+      .trim()
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, '-')
+      .replace(/^-+|-+$/g, '');
+    if (!base) base = 'section';
+    var seen = counts[base] || 0;
+    counts[base] = seen + 1;
+    return seen === 0 ? base : base + '-' + seen;
+  }
+
+  // The outline of a document: every heading, its level, its anchor and the
+  // line it sits on. Fenced code is skipped, so a commented-out '# heading'
+  // inside a code block does not appear as a section.
+  function headingOutline(text) {
+    var counts = {};
+    var entries = [];
+    var inCode = false;
+    String(text || '').split(/\r?\n/).forEach(function (line, index) {
+      if (/^```/.test(line.trim())) { inCode = !inCode; return; }
+      if (inCode) return;
+      var match = line.match(/^(#{1,6})\s+(.+)$/);
+      if (!match) return;
+      entries.push({
+        level: match[1].length,
+        title: match[2].replace(/\s*#+\s*$/, '').trim(),
+        slug: headingSlug(match[2], counts),
+        line: index
+      });
+    });
+    return entries;
+  }
+
   function renderInline(text, isNotesContext, secretLinksAvailable) {
     var html = escapeHtml(text);
     // Internal wiki links [[Title]] — only render in notes context
@@ -125,6 +188,7 @@
   }
 
   function renderMarkdown(text, isNotesContext, secretLinksAvailable) {
+    var slugCounts = {};
     var lines = String(text || '').split(/\r?\n/);
     var out = [];
     var inCode = false;
@@ -183,7 +247,12 @@
       if (heading) {
         closeList();
         closeTable();
-        out.push('<h' + heading[1].length + '>' + renderInline(heading[2], isNotesContext, secretLinksAvailable) + '</h' + heading[1].length + '>');
+        var level = heading[1].length;
+        // The anchor is what the outline scrolls to, so it has to be derived
+        // the same way in both places — see headingOutline below.
+        var slug = headingSlug(heading[2], slugCounts);
+        out.push('<h' + level + ' id="' + escapeAttr(slug) + '" data-heading-slug="' + escapeAttr(slug) + '">'
+          + renderInline(heading[2], isNotesContext, secretLinksAvailable) + '</h' + level + '>');
         return;
       }
 
@@ -325,11 +394,18 @@
       var reloadBtn = el('button', { className: 'de-toolbar-btn', 'data-editor-action': 'reload' }, [tr('ui.reload', null, 'Reload')]);
       var saveBtn = el('button', { className: 'de-toolbar-btn', 'data-editor-action': 'save' }, [tr('ui.save', null, 'Save')]);
       var wrapBtn = el('button', { className: 'de-toolbar-btn', type: 'button', 'data-editor-action': 'toggle-wrap', 'aria-pressed': 'true' }, [tr('ui.wrapLongLines', null, 'Wrap long lines')]);
+      var outlineBtn = isMarkdown ? el('button', {
+        className: 'de-toolbar-btn',
+        type: 'button',
+        'data-editor-action': 'toggle-outline',
+        'aria-pressed': 'false',
+        title: tr('ui.outlineHint', null, 'Show the headings of this note as a navigable outline')
+      }, [tr('ui.outline', null, 'Outline')]) : null;
       var statusEl = el('span', { className: 'de-status', 'data-save-state': '' });
       var toolbarChildren = [contextLabel];
       if (notesBadge) toolbarChildren.push(notesBadge);
       toolbarChildren.push(spacer);
-      [editBtn, previewBtn, splitBtn, wrapBtn, reloadBtn, saveBtn, statusEl].forEach(function (node) { if (node) toolbarChildren.push(node); });
+      [editBtn, previewBtn, splitBtn, outlineBtn, wrapBtn, reloadBtn, saveBtn, statusEl].forEach(function (node) { if (node) toolbarChildren.push(node); });
       containerEl.appendChild(el('div', { className: 'de-toolbar' }, toolbarChildren));
 
       var mdToolbar = null;
@@ -354,6 +430,75 @@
 
       var editorWrap = el('div', { className: 'de-editor-wrap' });
       containerEl.appendChild(editorWrap);
+
+      var outlineVisible = false;
+      var outlineListEl = null;
+
+      // Long notes are navigated by their headings. Without this the only way
+      // to reach a section is to scroll and read, which is exactly the problem
+      // in the notes worth having an outline for.
+      function makeOutlinePane() {
+        var pane = el('div', { className: 'de-outline', 'data-outline': '' });
+        pane.appendChild(el('div', { className: 'de-outline-title' }, [tr('ui.outline', null, 'Outline')]));
+        outlineListEl = el('div', { className: 'de-outline-list' });
+        pane.appendChild(outlineListEl);
+        renderOutline();
+        return pane;
+      }
+
+      function renderOutline() {
+        if (!outlineListEl) return;
+        outlineListEl.innerHTML = '';
+        var entries = headingOutline(currentContent);
+        if (entries.length === 0) {
+          outlineListEl.appendChild(el('div', { className: 'de-outline-empty' }, [
+            tr('ui.outlineEmpty', null, 'No headings yet. Start a line with # to create one.')
+          ]));
+          return;
+        }
+        entries.forEach(function (entry) {
+          outlineListEl.appendChild(el('button', {
+            className: 'de-outline-item',
+            type: 'button',
+            'data-outline-slug': entry.slug,
+            'data-outline-line': String(entry.line),
+            'data-level': String(entry.level),
+            title: entry.title,
+            onClick: function () { goToHeading(entry); }
+          }, [entry.title]));
+        });
+      }
+
+      // Jump to a heading in whichever pane the reader is actually looking at.
+      function goToHeading(entry) {
+        if (previewEl) {
+          var target = previewEl.querySelector('[data-heading-slug="' + cssEscape(entry.slug) + '"]');
+          if (target && typeof target.scrollIntoView === 'function') {
+            target.scrollIntoView({ block: 'start' });
+          }
+        }
+        if (textarea) {
+          var lines = textarea.value.split('\n');
+          var offset = 0;
+          for (var i = 0; i < entry.line && i < lines.length; i += 1) offset += lines[i].length + 1;
+          textarea.focus();
+          textarea.setSelectionRange(offset, offset + (lines[entry.line] || '').length);
+          // Put the heading near the top rather than wherever the caret lands.
+          var lineHeight = textarea.scrollHeight / Math.max(lines.length, 1);
+          textarea.scrollTop = Math.max(0, entry.line * lineHeight - lineHeight);
+          if (linesEl) linesEl.scrollTop = textarea.scrollTop;
+        }
+        markCurrentHeading(entry.slug);
+      }
+
+      function markCurrentHeading(slug) {
+        if (!outlineListEl) return;
+        Array.prototype.forEach.call(outlineListEl.children, function (node) {
+          if (!node.getAttribute) return;
+          var isCurrent = node.getAttribute('data-outline-slug') === slug;
+          node.className = 'de-outline-item' + (isCurrent ? ' is-current' : '');
+        });
+      }
 
       function updateLineNumbers() {
         if (!linesEl || !textarea) return;
@@ -411,6 +556,7 @@
         updateLineNumbers();
         updateStatus();
         updatePreview();
+        renderOutline();
       }
 
       function updateWrapPresentation() {
@@ -422,6 +568,148 @@
         }
       }
 
+      // ── Wiki-link completion ────────────────────────────────────────────
+      // Typing [[ offers the notes of this Deal. Without it a link is only
+      // usable by someone who already remembers the exact title, which is not
+      // how anyone actually writes notes.
+      var noteTitles = null;
+      var noteTitlesPromise = null;
+      var suggestEl = null;
+      var suggestItems = [];
+      var suggestIndex = 0;
+      var suggestStart = -1;
+
+      function notesFolderPath() {
+        var current = cleanPath(resourcePath);
+        var index = current.indexOf('/Notes/');
+        if (index !== -1) return current.slice(0, index) + '/Notes';
+        return current.indexOf('/') === -1 ? 'Notes' : current.slice(0, current.lastIndexOf('/'));
+      }
+
+      function loadNoteTitles() {
+        if (noteTitlesPromise) return noteTitlesPromise;
+        noteTitlesPromise = api.files.list(notesFolderPath()).then(function (entries) {
+          noteTitles = (entries || [])
+            .filter(function (entry) { return entry.type === 'file' && /\.md$/i.test(entry.name || ''); })
+            .map(function (entry) { return String(entry.name).replace(/\.md$/i, ''); })
+            .filter(function (title) { return title && title !== fileName(resourcePath).replace(/\.md$/i, ''); })
+            .sort(function (a, b) { return a.localeCompare(b); });
+          return noteTitles;
+        }).catch(function () {
+          noteTitles = [];
+          return noteTitles;
+        });
+        return noteTitlesPromise;
+      }
+
+      function hideSuggestions() {
+        if (suggestEl && suggestEl.parentNode) suggestEl.parentNode.removeChild(suggestEl);
+        suggestEl = null;
+        suggestItems = [];
+        suggestIndex = 0;
+        suggestStart = -1;
+      }
+
+      function suggestionsOpen() {
+        return Boolean(suggestEl);
+      }
+
+      // The query is the text between the nearest unclosed [[ and the caret.
+      function activeLinkQuery() {
+        if (!textarea) return null;
+        var caret = textarea.selectionStart;
+        if (caret !== textarea.selectionEnd) return null;
+        var before = textarea.value.slice(0, caret);
+        var open = before.lastIndexOf('[[');
+        if (open === -1) return null;
+        var fragment = before.slice(open + 2);
+        // A closed link or a line break means the caret is no longer inside it.
+        if (fragment.indexOf(']]') !== -1 || fragment.indexOf('\n') !== -1) return null;
+        return { start: open + 2, query: fragment };
+      }
+
+      function refreshSuggestions() {
+        if (editorMode !== 'notes-markdown' || !textarea) { hideSuggestions(); return; }
+        var active = activeLinkQuery();
+        if (!active) { hideSuggestions(); return; }
+        loadNoteTitles().then(function (titles) {
+          if (disposed || !textarea) return;
+          // The caret may have moved while the listing was in flight.
+          var current = activeLinkQuery();
+          if (!current) { hideSuggestions(); return; }
+          var needle = current.query.trim().toLowerCase();
+          var matches = (titles || []).filter(function (title) {
+            return !needle || title.toLowerCase().indexOf(needle) !== -1;
+          }).slice(0, 12);
+          showSuggestions(current.start, matches);
+        });
+      }
+
+      function showSuggestions(start, matches) {
+        hideSuggestions();
+        if (!textarea || !textarea.parentNode) return;
+        suggestStart = start;
+        suggestItems = matches;
+        suggestIndex = 0;
+        suggestEl = el('div', { className: 'de-suggest', 'data-note-suggest': '', role: 'listbox' });
+        if (matches.length === 0) {
+          suggestEl.appendChild(el('div', { className: 'de-suggest-empty' }, [
+            tr('ui.linkNoMatches', null, 'No matching note in this Deal')
+          ]));
+        } else {
+          matches.forEach(function (title, index) {
+            suggestEl.appendChild(el('button', {
+              className: 'de-suggest-item' + (index === 0 ? ' is-active' : ''),
+              type: 'button',
+              role: 'option',
+              'data-note-suggestion': title,
+              onMouseDown: function (event) { event.preventDefault(); acceptSuggestion(index); }
+            }, [title]));
+          });
+        }
+        positionSuggestions();
+        textarea.parentNode.appendChild(suggestEl);
+      }
+
+      // Placed under the caret's line. Column-accurate placement would need a
+      // mirrored copy of the textarea; the line is enough to keep the list out
+      // of the way of what is being typed.
+      function positionSuggestions() {
+        if (!suggestEl || !textarea) return;
+        var upToCaret = textarea.value.slice(0, textarea.selectionStart);
+        var line = upToCaret.split('\n').length - 1;
+        var totalLines = Math.max(textarea.value.split('\n').length, 1);
+        var lineHeight = textarea.scrollHeight / totalLines;
+        var top = (line + 1) * lineHeight - textarea.scrollTop + 4;
+        suggestEl.style.top = Math.max(4, top) + 'px';
+        suggestEl.style.left = '3.5rem';
+      }
+
+      function moveSuggestion(delta) {
+        if (!suggestEl || suggestItems.length === 0) return;
+        suggestIndex = (suggestIndex + delta + suggestItems.length) % suggestItems.length;
+        Array.prototype.forEach.call(suggestEl.children, function (node, index) {
+          if (!node.className) return;
+          node.className = 'de-suggest-item' + (index === suggestIndex ? ' is-active' : '');
+        });
+      }
+
+      function acceptSuggestion(index) {
+        if (!textarea || suggestStart < 0) return;
+        var title = suggestItems[typeof index === 'number' ? index : suggestIndex];
+        if (!title) return;
+        var caret = textarea.selectionStart;
+        var before = textarea.value.slice(0, suggestStart);
+        var after = textarea.value.slice(caret);
+        // Swallow a closing ]] the user already typed rather than doubling it.
+        var closing = after.slice(0, 2) === ']]' ? 2 : 0;
+        textarea.value = before + title + ']]' + after.slice(closing);
+        var position = before.length + title.length + 2;
+        textarea.setSelectionRange(position, position);
+        hideSuggestions();
+        syncFromTextarea();
+      }
+
       function makeEditorPane() {
         var pane = el('div', { className: 'de-pane' });
         var shell = el('div', { className: 'de-editor-shell' });
@@ -429,9 +717,29 @@
         textarea = el('textarea', { className: 'de-textarea', spellcheck: 'false', 'data-editor-textarea': '' });
         textarea.value = currentContent;
         updateWrapPresentation();
-        textarea.addEventListener('input', syncFromTextarea);
-        textarea.addEventListener('scroll', function () { if (linesEl) linesEl.scrollTop = textarea.scrollTop; });
+        textarea.addEventListener('input', function () {
+          syncFromTextarea();
+          refreshSuggestions();
+        });
+        textarea.addEventListener('scroll', function () {
+          if (linesEl) linesEl.scrollTop = textarea.scrollTop;
+          positionSuggestions();
+        });
+        textarea.addEventListener('blur', hideSuggestions);
+        textarea.addEventListener('click', hideSuggestions);
         textarea.addEventListener('keydown', function (event) {
+          // The completion list owns these keys while it is open, so arrows do
+          // not move the caret out from under the list the user is reading.
+          if (suggestionsOpen()) {
+            if (event.key === 'ArrowDown') { event.preventDefault(); moveSuggestion(1); return; }
+            if (event.key === 'ArrowUp') { event.preventDefault(); moveSuggestion(-1); return; }
+            if (event.key === 'Escape') { event.preventDefault(); hideSuggestions(); return; }
+            if ((event.key === 'Enter' || event.key === 'Tab') && suggestItems.length > 0) {
+              event.preventDefault();
+              acceptSuggestion();
+              return;
+            }
+          }
           if (matchesShortcut(event, { code: 'KeyS', ctrlOrMeta: true })) {
             event.preventDefault();
             save();
@@ -457,10 +765,13 @@
       }
 
       function rebuildEditorArea() {
+        hideSuggestions();
         editorWrap.innerHTML = '';
         textarea = null;
         linesEl = null;
         previewEl = null;
+        outlineListEl = null;
+        if (isMarkdown && outlineVisible) editorWrap.appendChild(makeOutlinePane());
         if (!isMarkdown || viewMode === 'edit') editorWrap.appendChild(makeEditorPane());
         if (isMarkdown && viewMode === 'preview') editorWrap.appendChild(makePreviewPane());
         if (isMarkdown && viewMode === 'split') {
@@ -470,6 +781,10 @@
         if (editBtn) editBtn.className = 'de-toolbar-btn' + (viewMode === 'edit' ? ' active' : '');
         if (previewBtn) previewBtn.className = 'de-toolbar-btn' + (viewMode === 'preview' ? ' active' : '');
         if (splitBtn) splitBtn.className = 'de-toolbar-btn' + (viewMode === 'split' ? ' active' : '');
+        if (outlineBtn) {
+          outlineBtn.className = 'de-toolbar-btn' + (outlineVisible ? ' active' : '');
+          outlineBtn.setAttribute('aria-pressed', outlineVisible ? 'true' : 'false');
+        }
         updateStatus();
       }
 
@@ -557,6 +872,13 @@
       if (editBtn) editBtn.addEventListener('click', function () { setMode('edit'); });
       if (previewBtn) previewBtn.addEventListener('click', function () { setMode('preview'); });
       if (splitBtn) splitBtn.addEventListener('click', function () { setMode('split'); });
+      if (outlineBtn) outlineBtn.addEventListener('click', function () {
+        outlineVisible = !outlineVisible;
+        rebuildEditorArea();
+        if (api.settings && typeof api.settings.write === 'function') {
+          api.settings.write('outlineVisible', outlineVisible).catch(function () {});
+        }
+      });
       if (mdToolbar) {
         mdToolbar.addEventListener('click', function (event) {
           var button = event.target.closest('[data-md-action]');
@@ -575,6 +897,11 @@
           wrapLongLines = true;
           updateWrapPresentation();
         });
+        api.settings.read('outlineVisible').then(function (stored) {
+          if (disposed || stored !== true) return;
+          outlineVisible = true;
+          rebuildEditorArea();
+        }).catch(function () {});
       }
       reloadFromDisk();
       var localeUnsubscribe = api.i18n && typeof api.i18n.onDidChangeLocale === 'function'
@@ -650,6 +977,7 @@
 
       containerEl.__deCleanup = function () {
         disposed = true;
+        hideSuggestions();
         if (typeof localeUnsubscribe === 'function') localeUnsubscribe();
         if (saveTimer) clearTimeout(saveTimer);
       };
