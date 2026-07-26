@@ -264,6 +264,10 @@ function byData(container, attr, value) {
     estimatedMinutes: 51,
     activityCount: 2,
     activityIds: ['capture-1', 'note-1'],
+    breakdown: [
+      { kind: 'note', count: 1, minutes: 41, sites: [] },
+      { kind: 'capture', count: 1, minutes: 10, sites: [] },
+    ],
     activities: [
       { activityId: 'capture-1', type: 'browser.capture.selection', occurredAt: '2026-06-27T10:12:00.000Z', sourcePluginId: 'verstak.browser-inbox' },
       { activityId: 'note-1', type: 'note.saved', occurredAt: '2026-06-27T11:03:00.000Z', sourcePluginId: 'verstak.notes' },
@@ -280,8 +284,16 @@ function byData(container, attr, value) {
   if (candidateView.container.textContent.includes('browser.capture.selection') || candidateView.container.textContent.includes('verstak.browser-inbox') || candidateView.container.textContent.includes('capture-1')) {
     throw new Error('candidate review exposed technical Activity identifiers');
   }
+  // Only the user knows what the work was for, so the title stays theirs to
+  // write. The body arrives with what the time actually went on.
   if (byData(candidateView.container, 'data-journal-input', 'title').value !== '') throw new Error('candidate review must start with an empty title');
-  if (byData(candidateView.container, 'data-journal-input', 'summary').value !== '') throw new Error('candidate review must start with an empty body');
+  const proposedBody = byData(candidateView.container, 'data-journal-input', 'summary').value;
+  if (!proposedBody.includes('notes (1) \u2014 41 min') || !proposedBody.includes('saved from the browser (1) \u2014 10 min')) {
+    throw new Error(`the proposal did not say what the time went on: ${proposedBody}`);
+  }
+  if (!proposedBody.includes('51 min in total')) {
+    throw new Error(`the proposal did not add its work up: ${proposedBody}`);
+  }
   if (byData(candidateView.container, 'data-journal-input', 'minutes').value !== '51') throw new Error('candidate review must prefill the factual duration');
   const linkedActivityInputs = walkAll(candidateView.container, (node) => node.getAttribute && node.getAttribute('data-journal-candidate-activity'));
   if (linkedActivityInputs.length !== 2 || linkedActivityInputs.some((node) => node.checked !== true)) throw new Error('candidate activities were not available for review');
@@ -487,6 +499,10 @@ function byData(container, attr, value) {
     endedAt: '2026-07-20T09:20:00.000Z',
     estimatedMinutes: 25,
     activityCount: 2,
+    breakdown: [
+      { kind: 'browser', count: 1, minutes: 18, sites: ['dash.example.com'] },
+      { kind: 'note', count: 1, minutes: 7, sites: [] },
+    ],
     activityIds: ['p-a', 'p-b'],
     activities: [
       { activityId: 'p-a', type: 'note.saved', occurredAt: '2026-07-20T09:00:00.000Z', sourcePluginId: 'verstak.notes' },
@@ -515,6 +531,15 @@ function byData(container, attr, value) {
   const projectRow = byData(proposalView.container, 'data-journal-proposal', projectProposal.candidateId);
   if (!projectRow.textContent.includes('25 min')) throw new Error('a proposal must show the time it accounts for');
   if (!projectRow.textContent.includes('Project')) throw new Error('a proposal must show which Deal it belongs to');
+  // "25 min" alone leaves the user to remember what those minutes were.
+  const proposalBreakdown = walk(projectRow, (node) => node.getAttribute && node.getAttribute('data-journal-proposal-breakdown') === '');
+  if (!proposalBreakdown) throw new Error('a proposal does not say what the time went on');
+  if (!proposalBreakdown.textContent.includes('browser: dash.example.com \u2014 18 min')) {
+    throw new Error(`the breakdown must name the sites: ${proposalBreakdown.textContent}`);
+  }
+  if (!proposalBreakdown.textContent.includes('notes (1) \u2014 7 min')) {
+    throw new Error(`the breakdown must name the other work: ${proposalBreakdown.textContent}`);
+  }
 
   const proposalDealFilter = byData(proposalView.container, 'data-journal-filter-deal', '');
   proposalDealFilter.value = 'Client';

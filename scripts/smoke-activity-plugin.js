@@ -316,6 +316,13 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   // credited to the work that produced the first one.
   if (!candidateNode.textContent.includes('Estimated duration: 25 min')) throw new Error('candidate duration was not rendered');
   if (!candidateNode.textContent.includes('Activities: 3')) throw new Error('candidate activity count was not rendered');
+  // A card that reports only minutes makes the user open the list to find out
+  // what those minutes were.
+  const breakdownNode = walk(candidateNode, (node) => node.getAttribute && node.getAttribute('data-work-session-breakdown') === '');
+  if (!breakdownNode) throw new Error('the candidate does not say what the time went on');
+  if (!breakdownNode.textContent.includes('notes (1)') || !breakdownNode.textContent.includes('saved from the browser (2)')) {
+    throw new Error(`the breakdown must name each kind of work: ${breakdownNode.textContent}`);
+  }
   if (!walk(candidateNode, (node) => node.getAttribute && node.getAttribute('data-work-session-action') === 'review')) throw new Error('candidate review action was not rendered');
   if (!walk(candidateNode, (node) => node.getAttribute && node.getAttribute('data-work-session-action') === 'dismiss')) throw new Error('candidate dismiss action was not rendered');
 
@@ -739,6 +746,28 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   }
   if ((await browserWorklog({ workspaceRootPath: 'ClientA' })).candidates.length !== 0) {
     throw new Error('browser time attached to one Deal must not be offered to another');
+  }
+
+  // A breakdown whose parts do not add up to the total reads as a mistake.
+  // Here the session is a whole 13 minutes while notes and files each own half
+  // a minute, which is exactly where flooring each part separately loses one.
+  const roundingApi = makeApi({
+    'events:workspace:Project': [
+      { activityId: 'r-a', type: 'note.saved', occurredAt: '2026-07-23T09:00:00Z', workspaceRootPath: 'Project' },
+      { activityId: 'r-b', type: 'note.saved', occurredAt: '2026-07-23T09:05:00Z', workspaceRootPath: 'Project' },
+      { activityId: 'r-c', type: 'file.changed', occurredAt: '2026-07-23T09:06:30Z', workspaceRootPath: 'Project' },
+      { activityId: 'r-d', type: 'note.saved', occurredAt: '2026-07-23T09:08:00Z', workspaceRootPath: 'Project' },
+    ],
+  });
+  await activateWithApi(roundingApi);
+  const rounded = (await roundingApi.commandHandlers.get(WORKLOG_COMMAND_ID)({ workspaceRootPath: 'Project' })).candidates[0];
+  if (!rounded) throw new Error('expected a candidate from three events three minutes apart');
+  const breakdownTotal = rounded.breakdown.reduce((total, part) => total + part.minutes, 0);
+  if (breakdownTotal !== rounded.estimatedMinutes) {
+    throw new Error(`the breakdown must add up to ${rounded.estimatedMinutes}, got ${breakdownTotal}: ${JSON.stringify(rounded.breakdown)}`);
+  }
+  if (rounded.breakdown.reduce((total, part) => total + part.count, 0) !== rounded.activityCount) {
+    throw new Error('every activity must be counted somewhere in the breakdown');
   }
 
   // The Journal's situation exactly: no Activity view has ever been mounted
