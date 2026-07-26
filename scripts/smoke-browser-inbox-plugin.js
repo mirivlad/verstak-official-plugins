@@ -98,6 +98,12 @@ function walk(node, fn) {
   return null;
 }
 
+function walkAll(node, fn, matches = []) {
+  if (fn(node)) matches.push(node);
+  for (const child of node.children) walkAll(child, fn, matches);
+  return matches;
+}
+
 function makeDocument() {
   return {
     body: new FakeNode('body'),
@@ -150,8 +156,10 @@ function loadComponent(document) {
   return component;
 }
 
-function makeApi(initialSettings = {}, locale = 'en') {
+function makeApi(initialSettings = {}, locale = 'en', browserActivity = []) {
   const settings = { ...initialSettings };
+  const activityRecords = browserActivity.map((item) => ({ ...item }));
+  const commandCalls = [];
   const handlers = {};
   const unsubscribed = [];
   const fileWrites = [];
@@ -229,6 +237,30 @@ function makeApi(initialSettings = {}, locale = 'en') {
     fileByteWrites,
     openedURLs,
     publishedEvents,
+    commandCalls,
+    activityRecords,
+    // Stands in for the Activity plugin, which owns this data and answers
+    // through its own commands. The real handlers are covered by the activity
+    // smoke; what is tested here is that the Browser tool asks correctly.
+    commands: {
+      executeFor: async (pluginId, command, args) => {
+        commandCalls.push({ pluginId, command, args });
+        if (command === 'verstak.activity.listBrowserActivity') {
+          return { status: 'handled', result: { activities: activityRecords.map((item) => ({ ...item })) } };
+        }
+        if (command === 'verstak.activity.assignBrowserActivity') {
+          const wanted = new Set((args && args.activityIds) || []);
+          let assigned = 0;
+          activityRecords.forEach((item) => {
+            if (!wanted.has(item.activityId)) return;
+            item.workspaceRootPath = (args && args.workspaceRootPath) || '';
+            assigned += 1;
+          });
+          return { status: 'handled', result: { assigned } };
+        }
+        throw new Error(`unexpected command ${command}`);
+      },
+    },
     i18n: {
       getLocale: () => locale,
       t: translate,
@@ -1031,6 +1063,89 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   if (!technicalErrors.some((entry) => entry.includes('file already exists'))) {
     throw new Error('failed conversion did not retain its technical details in the console log');
   }
+
+  // Browser activity. The extension records time against a page without
+  // knowing which Deal it was for; this is where the user picks several at once
+  // and says.
+  const activityApi = makeApi({}, 'en', [
+    {
+      activityId: 'browser-domain:b1:0',
+      url: 'https://dash.example.com/projects/42',
+      hostname: 'dash.example.com',
+      endedAt: '2026-07-22T11:20:00Z',
+      durationSeconds: 1080,
+      workspaceRootPath: '',
+    },
+    {
+      activityId: 'browser-domain:b1:1',
+      url: 'https://example.com/blog/post',
+      hostname: 'example.com',
+      endedAt: '2026-07-22T11:40:00Z',
+      durationSeconds: 420,
+      workspaceRootPath: '',
+    },
+    {
+      activityId: 'browser-domain:b0:0',
+      url: 'https://already.example.com/done',
+      hostname: 'already.example.com',
+      endedAt: '2026-07-21T09:00:00Z',
+      durationSeconds: 600,
+      workspaceRootPath: 'ClientA',
+    },
+  ]);
+  const activityView = await mountWithApi(activityApi, {});
+  const activityRows = () => walkAll(activityView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-id'))
+    .map((node) => node.getAttribute('data-browser-activity-id'));
+  if (!activityApi.commandCalls.some((call) => call.command === 'verstak.activity.listBrowserActivity')) {
+    throw new Error('the Browser tool never asked for browser activity');
+  }
+  if (activityRows().length !== 2) {
+    throw new Error(`unattached browser activity must be listed, got ${JSON.stringify(activityRows())}`);
+  }
+  const activitySection = walk(activityView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-section') === '');
+  if (!activitySection) throw new Error('there is no browser activity section');
+  if (!activitySection.textContent.includes('https://dash.example.com/projects/42')) {
+    throw new Error('browser activity must show which page the time was spent on');
+  }
+  if (!activitySection.textContent.includes('18 min')) {
+    throw new Error('browser activity must show how much time it accounts for');
+  }
+
+  const showAttached = walk(activityView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-show-attached') === '');
+  if (!showAttached) throw new Error('attached browser activity cannot be revealed');
+  showAttached.checked = true;
+  showAttached.dispatchEvent('change');
+  await flush();
+  if (activityRows().length !== 3) throw new Error('the filter did not reveal attached browser activity');
+  showAttached.checked = false;
+  showAttached.dispatchEvent('change');
+  await flush();
+
+  // Select several at once and attach them in one go.
+  walk(activityView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-action') === 'select-all').click();
+  await flush();
+  const attachButton = () => walk(activityView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-action') === 'attach');
+  if (attachButton().disabled !== true) throw new Error('attaching must wait until a Deal is chosen');
+  const dealSelect = walk(activityView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-deal') === '');
+  if (!dealSelect) throw new Error('there is no Deal to attach browser activity to');
+  dealSelect.value = 'Project';
+  dealSelect.dispatchEvent('change', { target: { value: 'Project' } });
+  await flush();
+  if (attachButton().disabled === true) throw new Error('a Deal is chosen and pages are selected, so attaching must be possible');
+  attachButton().click();
+  await flush();
+
+  const assignCall = activityApi.commandCalls.find((call) => call.command === 'verstak.activity.assignBrowserActivity');
+  if (!assignCall) throw new Error('attaching never reached the Activity plugin');
+  if (assignCall.args.workspaceRootPath !== 'Project') throw new Error('attaching used the wrong Deal');
+  if (assignCall.args.activityIds.slice().sort().join(',') !== 'browser-domain:b1:0,browser-domain:b1:1') {
+    throw new Error(`attaching sent the wrong pages: ${JSON.stringify(assignCall.args.activityIds)}`);
+  }
+  if (activityRows().length !== 0) throw new Error('pages that were attached must leave the unattached list');
+  if (!activityView.container.textContent.includes('Attached 2 to Project')) {
+    throw new Error('the user was not told what was attached');
+  }
+  component.unmount && component.unmount(activityView.container);
 
   console.log('browser inbox plugin smoke passed');
 })().catch((err) => {

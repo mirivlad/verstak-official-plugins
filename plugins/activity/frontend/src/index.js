@@ -23,6 +23,10 @@
   var SESSION_REGISTRY_KEY = 'activity-session-registry-v2';
   var SESSION_HANDLING_KEY = 'activity-session-handling-v2';
   var WORKLOG_COMMAND_ID = 'verstak.activity.suggestWorklog';
+  var LIST_BROWSER_COMMAND_ID = 'verstak.activity.listBrowserActivity';
+  var ASSIGN_BROWSER_COMMAND_ID = 'verstak.activity.assignBrowserActivity';
+  var BROWSER_ACTIVITY_TYPE = 'browser.activity.domain';
+  var MAX_BROWSER_ACTIVITY = 200;
   var MIN_SESSION_DURATION_MINUTES = 10;
   var MIN_SESSION_ACTIVITY_COUNT = 2;
   var MAX_IDLE_GAP_MINUTES = 20;
@@ -429,12 +433,26 @@
     return sessions;
   }
 
+  // Two events are needed before a stretch of moments counts as work: one note
+  // being saved says nothing about how long anyone spent. A measured interval
+  // is different -- its duration was observed, not inferred from the gap to a
+  // neighbour -- so one attached page is enough on its own.
+  function hasMeasuredTime(activities) {
+    return activities.some(function (activity) {
+      return Math.max(0, Number(activity && activity.durationSeconds) || 0) > 0;
+    });
+  }
+
+  function enoughToPropose(activities) {
+    return activities.length >= MIN_SESSION_ACTIVITY_COUNT || hasMeasuredTime(activities);
+  }
+
   function buildCandidate(session) {
     var activities = session.activities.slice().sort(function (a, b) { return eventTimeMs(a) - eventTimeMs(b); });
     var first = activities[0];
     var last = activities[activities.length - 1];
     var duration = sessionDurationMinutes(session);
-    if (session.scope === 'unassigned' || !session.workspaceRootPath || activities.length < MIN_SESSION_ACTIVITY_COUNT || duration < MIN_SESSION_DURATION_MINUTES) return null;
+    if (session.scope === 'unassigned' || !session.workspaceRootPath || !enoughToPropose(activities) || duration < MIN_SESSION_DURATION_MINUTES) return null;
     return {
       candidateId: 'work-session:' + encodeKey(session.sessionId) + ':' + encodeKey(last.activityId),
       sessionId: session.sessionId,
@@ -571,7 +589,7 @@
     var handledTime = Date.parse(watermark.handledThrough || '');
     if (!Number.isFinite(handledTime)) return candidate;
     var additions = candidate.activities.filter(function (activity) { return eventTimeMs(activity) > handledTime; });
-    if (eventTimeMs({ occurredAt: candidate.endedAt }) <= handledTime || additions.length < MIN_SESSION_ACTIVITY_COUNT || eventTimeMs(additions[additions.length - 1]) - handledTime < MIN_SESSION_DURATION_MINUTES * 60 * 1000) return null;
+    if (eventTimeMs({ occurredAt: candidate.endedAt }) <= handledTime || !enoughToPropose(additions) || eventTimeMs(additions[additions.length - 1]) - handledTime < MIN_SESSION_DURATION_MINUTES * 60 * 1000) return null;
     var duration = sessionDurationMinutes({ activities: additions });
     if (duration < MIN_SESSION_DURATION_MINUTES) return null;
     return Object.assign({}, candidate, {
@@ -617,6 +635,90 @@
           ? settings[SESSION_HANDLING_KEY]
           : {}
       };
+    });
+  }
+
+  // Browser time is recorded before anyone knows which Deal it belongs to --
+  // the extension cannot know. These two commands are how the Browser tool
+  // shows that time and how the user says what it was for.
+  function browserActivityRecord(record) {
+    var payload = record && record.payload && typeof record.payload === 'object' ? record.payload : {};
+    return {
+      activityId: text(record.activityId),
+      url: text(record.url || payload.url),
+      hostname: text(record.hostname || payload.hostname),
+      startedAt: text(record.startedAt || payload.startedAt),
+      endedAt: text(record.endedAt || payload.endedAt || record.occurredAt),
+      occurredAt: text(record.occurredAt),
+      durationSeconds: Math.max(0, Number(record.durationSeconds || payload.durationSeconds) || 0),
+      workspaceRootPath: cleanWorkspace(record.workspaceRootPath)
+    };
+  }
+
+  function isBrowserActivity(record) {
+    return text(record && record.type) === BROWSER_ACTIVITY_TYPE;
+  }
+
+  function readRawRecords(api) {
+    if (!api || !api.storage || !api.storage.data || typeof api.storage.data.readNDJSON !== 'function') {
+      return Promise.resolve([]);
+    }
+    return api.storage.data.readNDJSON(RAW_DATA_NAME).then(function (records) {
+      return Array.isArray(records) ? records : [];
+    });
+  }
+
+  function listBrowserActivity(api, args) {
+    args = args || {};
+    var workspace = cleanWorkspace(args.workspaceRootPath);
+    var onlyUnassigned = args.onlyUnassigned === true;
+    return readRawRecords(api).then(function (records) {
+      var activities = records.filter(isBrowserActivity).map(browserActivityRecord).filter(function (item) {
+        if (!item.activityId) return false;
+        if (onlyUnassigned) return !item.workspaceRootPath;
+        if (workspace) return item.workspaceRootPath === workspace;
+        return true;
+      });
+      activities.sort(function (a, b) {
+        return text(b.endedAt).localeCompare(text(a.endedAt)) || text(a.activityId).localeCompare(text(b.activityId));
+      });
+      return { activities: activities.slice(0, MAX_BROWSER_ACTIVITY) };
+    }).catch(function (err) {
+      console.warn('[verstak.activity] list browser activity:', err);
+      return { activities: [] };
+    });
+  }
+
+  function assignBrowserActivity(api, args) {
+    args = args || {};
+    var workspace = cleanWorkspace(args.workspaceRootPath);
+    var wanted = {};
+    (Array.isArray(args.activityIds) ? args.activityIds : []).forEach(function (id) {
+      var value = text(id).trim();
+      if (value) wanted[value] = true;
+    });
+    if (!Object.keys(wanted).length) return Promise.resolve({ assigned: 0 });
+    if (!api || !api.storage || !api.storage.data || typeof api.storage.data.writeNDJSON !== 'function') {
+      return Promise.resolve({ assigned: 0 });
+    }
+    return readRawRecords(api).then(function (records) {
+      var assigned = 0;
+      var updated = records.map(function (record) {
+        if (!record || !wanted[text(record.activityId)] || !isBrowserActivity(record)) return record;
+        assigned += 1;
+        var payload = record.payload && typeof record.payload === 'object' ? record.payload : {};
+        return Object.assign({}, record, {
+          workspaceRootPath: workspace,
+          payload: Object.assign({}, payload, { workspaceRootPath: workspace })
+        });
+      });
+      if (!assigned) return { assigned: 0 };
+      return api.storage.data.writeNDJSON(RAW_DATA_NAME, updated).then(function () {
+        return { assigned: assigned, workspaceRootPath: workspace };
+      });
+    }).catch(function (err) {
+      console.warn('[verstak.activity] assign browser activity:', err);
+      return { assigned: 0 };
     });
   }
 
@@ -1070,10 +1172,18 @@
     // entries exactly when the user was looking at Activity instead.
     activate: function (api) {
       if (!api || !api.commands || typeof api.commands.register !== 'function') return Promise.resolve();
-      return api.commands.register(WORKLOG_COMMAND_ID, function (args) {
-        return listWorkSessionCandidates(api, args);
-      }).catch(function (err) {
-        console.warn('[verstak.activity] possible journal entries are unavailable:', err);
+      return Promise.all([
+        api.commands.register(WORKLOG_COMMAND_ID, function (args) {
+          return listWorkSessionCandidates(api, args);
+        }),
+        api.commands.register(LIST_BROWSER_COMMAND_ID, function (args) {
+          return listBrowserActivity(api, args);
+        }),
+        api.commands.register(ASSIGN_BROWSER_COMMAND_ID, function (args) {
+          return assignBrowserActivity(api, args);
+        })
+      ]).catch(function (err) {
+        console.warn('[verstak.activity] activity commands are unavailable:', err);
       });
     }
   });
