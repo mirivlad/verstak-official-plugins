@@ -367,6 +367,77 @@ function byData(container, attr, value) {
   }
   if (!globalView.container.textContent.includes('Prepare client summary')) throw new Error('global Journal did not render the created entry');
 
+  // ── Filters, and editing outside a single Deal ────────────────────────
+  // A journal you cannot narrow is a pile, and a global one you cannot edit in
+  // is a report. Both were the case.
+  const filterApi = makeApi({
+    'worklog:workspace:Alpha': [
+      { entryId: 'a-manual', workspaceRootPath: 'Alpha', date: '2026-07-01', title: 'Alpha by hand', minutes: 30, billable: true },
+      { entryId: 'a-proposal', workspaceRootPath: 'Alpha', date: '2026-07-02', title: 'Alpha from proposal', minutes: 15, billable: false, sourceCandidateId: 'work-session:x' },
+    ],
+    'worklog:workspace:Beta': [
+      { entryId: 'b-todo', workspaceRootPath: 'Beta', date: '2026-07-03', title: 'Beta from todo', minutes: 45, billable: true, sourceTodoId: 'todo-1' },
+    ],
+  });
+  const filterView = await mountWithApi(filterApi, {});
+  const titles = () => {
+    const found = [];
+    walk(filterView.container, (node) => {
+      if (node.getAttribute && node.getAttribute('data-journal-entry')) found.push(node.textContent);
+      return false;
+    });
+    return found.join(' | ');
+  };
+  const totalText = () => byData(filterView.container, 'data-journal-total', '').textContent;
+
+  if (!titles().includes('Alpha by hand') || !titles().includes('Beta from todo')) {
+    throw new Error('the global Journal must list entries from every Deal');
+  }
+  if (!totalText().includes('90')) throw new Error(`total should be 90 minutes, got ${totalText()}`);
+
+  const dealFilter = byData(filterView.container, 'data-journal-filter-deal', '');
+  if (!dealFilter) throw new Error('the global Journal has no Deal filter');
+  dealFilter.value = 'Alpha';
+  dealFilter.dispatchEvent('change');
+  if (titles().includes('Beta from todo')) throw new Error('the Deal filter did not narrow the list');
+  if (!totalText().includes('45')) throw new Error(`Alpha totals 45 minutes, got ${totalText()}`);
+
+  dealFilter.value = '';
+  dealFilter.dispatchEvent('change');
+  const billableFilter = byData(filterView.container, 'data-journal-filter-billable', '');
+  billableFilter.value = 'billable';
+  billableFilter.dispatchEvent('change');
+  if (titles().includes('Alpha from proposal')) throw new Error('the billable filter kept a non-billable entry');
+  if (!totalText().includes('75')) throw new Error(`billable work totals 75 minutes, got ${totalText()}`);
+
+  billableFilter.value = 'all';
+  billableFilter.dispatchEvent('change');
+  const sourceFilter = byData(filterView.container, 'data-journal-filter-source', '');
+  sourceFilter.value = 'proposal';
+  sourceFilter.dispatchEvent('change');
+  if (!titles().includes('Alpha from proposal') || titles().includes('Alpha by hand') || titles().includes('Beta from todo')) {
+    throw new Error(`the source filter did not isolate entries made from a proposal: ${titles()}`);
+  }
+  sourceFilter.value = 'todo';
+  sourceFilter.dispatchEvent('change');
+  if (!titles().includes('Beta from todo') || titles().includes('Alpha by hand')) {
+    throw new Error('the source filter did not isolate entries made from a todo');
+  }
+  sourceFilter.value = 'manual';
+  sourceFilter.dispatchEvent('change');
+  if (!titles().includes('Alpha by hand') || titles().includes('Alpha from proposal')) {
+    throw new Error('the source filter did not isolate hand-written entries');
+  }
+
+  sourceFilter.value = 'all';
+  sourceFilter.dispatchEvent('change');
+  const editButton = walk(filterView.container, (node) => node.getAttribute && node.getAttribute('data-journal-action') === 'edit');
+  if (!editButton) throw new Error('entries cannot be edited outside a single Deal');
+  const deleteButton = walk(filterView.container, (node) => node.getAttribute && node.getAttribute('data-journal-action') === 'delete');
+  if (!deleteButton) throw new Error('entries cannot be deleted outside a single Deal');
+
+  component.unmount && component.unmount(filterView.container);
+
   component.unmount && component.unmount(container);
   component.unmount && component.unmount(candidateView.container);
   component.unmount && component.unmount(russianCandidateView.container);
