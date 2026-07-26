@@ -777,6 +777,7 @@
   function assignBrowserActivity(api, args) {
     args = args || {};
     var workspace = cleanWorkspace(args.workspaceRootPath);
+    var workspaceId = text(args.workspaceId).trim();
     var wanted = {};
     (Array.isArray(args.activityIds) ? args.activityIds : []).forEach(function (id) {
       var value = text(id).trim();
@@ -792,9 +793,15 @@
         if (!record || !wanted[text(record.activityId)] || !isBrowserActivity(record)) return record;
         assigned += 1;
         var payload = record.payload && typeof record.payload === 'object' ? record.payload : {};
+        // The Deal's own id as well as its path. Everything else recorded in a
+        // Deal carries the id, and a session is grouped by it -- without it,
+        // attached browser time formed a session of its own beside the work it
+        // belonged to instead of joining it.
         return Object.assign({}, record, {
           workspaceRootPath: workspace,
-          payload: Object.assign({}, payload, { workspaceRootPath: workspace })
+          workspaceId: workspaceId,
+          sessionScope: workspaceId ? { kind: 'workspace', workspaceId: workspaceId } : {},
+          payload: Object.assign({}, payload, { workspaceRootPath: workspace, workspaceId: workspaceId })
         });
       });
       if (!assigned) return { assigned: 0 };

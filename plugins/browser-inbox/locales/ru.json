@@ -23,6 +23,7 @@
   "ui.browserActivity.minutes": "{minutes} мин",
   "ui.browserActivity.selectAll": "Выбрать все",
   "ui.browserActivity.showAttached": "Показывать привязанные",
+  "ui.browserActivity.showUnattached": "Показывать непривязанные",
   "ui.browserActivity.title": "Активность браузера",
   "ui.captureArchived": "Материал архивирован",
   "ui.captureDeleted": "Материал удалён навсегда",

@@ -425,14 +425,25 @@
       });
     }
 
+    // Deals, not folders. Listing the vault root offered every top-level
+    // folder whether or not it was a Deal, and hid every Deal inside one --
+    // which is where most of them are.
     function loadWorkspaceOptions() {
-      if (!api || !api.files || typeof api.files.list !== 'function') return Promise.resolve();
-      return api.files.list('').then(function (items) {
-        workspaceOptions = (Array.isArray(items) ? items : []).filter(function (item) {
-          return text(item && item.type).toLowerCase() === 'folder';
-        }).map(function (item) { return cleanWorkspace(item.relativePath || item.name); }).filter(function (value) {
-          return value && value.indexOf('/') === -1;
+      if (!api || !api.workspaces || typeof api.workspaces.list !== 'function') return Promise.resolve();
+      return api.workspaces.list().then(function (entries) {
+        var seen = {};
+        workspaceOptions = (Array.isArray(entries) ? entries : []).map(function (entry) {
+          return cleanWorkspace(entry && entry.rootPath);
+        }).filter(function (workspaceRoot) {
+          if (!workspaceRoot || seen[workspaceRoot]) return false;
+          seen[workspaceRoot] = true;
+          return true;
+        }).sort(function (a, b) {
+          return a.localeCompare(b, undefined, { sensitivity: 'base' });
         });
+      }).catch(function (err) {
+        workspaceOptions = [];
+        console.warn('[verstak.journal] list Deals:', err);
       });
     }
 

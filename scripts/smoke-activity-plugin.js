@@ -711,7 +711,7 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
     throw new Error('browser time that belongs to no Deal must not be proposed as work');
   }
 
-  const assignResult = await assignBrowser({ activityIds: ['browser-domain:b1:0', 'note-x'], workspaceRootPath: 'Project' });
+  const assignResult = await assignBrowser({ activityIds: ['browser-domain:b1:0', 'note-x'], workspaceRootPath: 'Project', workspaceId: 'deal-project' });
   if (assignResult.assigned !== 1) throw new Error(`only browser activity may be attached, assigned ${assignResult.assigned}`);
   const storedBrowser = browserApi.storedData('activity-events');
   const attached = storedBrowser.find((item) => item.activityId === 'browser-domain:b1:0');
@@ -720,6 +720,12 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   }
   if (storedBrowser.find((item) => item.activityId === 'browser-domain:b1:1').workspaceRootPath !== '') {
     throw new Error('attaching one page must not touch another');
+  }
+  // Sessions are grouped by the Deal's id, which everything else recorded in a
+  // Deal carries. Without it the attached time forms a session of its own
+  // beside the work it belongs to.
+  if (attached.workspaceId !== 'deal-project' || attached.payload.workspaceId !== 'deal-project') {
+    throw new Error(`attaching must record the Deal's id: ${JSON.stringify(attached)}`);
   }
   const afterAttach = (await listBrowser({ onlyUnassigned: true })).activities;
   if (afterAttach.length !== 1 || afterAttach[0].activityId !== 'browser-domain:b1:1') {
@@ -746,6 +752,30 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   }
   if ((await browserWorklog({ workspaceRootPath: 'ClientA' })).candidates.length !== 0) {
     throw new Error('browser time attached to one Deal must not be offered to another');
+  }
+
+  // Attached browser time joins the work it happened during, rather than
+  // standing beside it as a session of its own. Everything recorded in a Deal
+  // carries the Deal's id, and sessions are grouped by it.
+  const joinApi = makeApi({}, {
+    'activity-events': [
+      { activityId: 'j-note', type: 'note.saved', occurredAt: '2026-07-24T11:00:00Z', workspaceRootPath: 'Project', workspaceId: 'deal-project', payload: { workspaceRootPath: 'Project', workspaceId: 'deal-project' } },
+      { activityId: 'j-page', type: 'browser.activity.domain', occurredAt: '2026-07-24T11:20:00Z', hostname: 'dash.example.com', url: 'https://dash.example.com/x', durationSeconds: 1080, workspaceRootPath: '', payload: { durationSeconds: 1080 } },
+      { activityId: 'j-file', type: 'file.changed', occurredAt: '2026-07-24T11:30:00Z', workspaceRootPath: 'Project', workspaceId: 'deal-project', payload: { workspaceRootPath: 'Project', workspaceId: 'deal-project' } },
+    ],
+  });
+  await activateWithApi(joinApi);
+  await joinApi.commandHandlers.get('verstak.activity.assignBrowserActivity')({
+    activityIds: ['j-page'],
+    workspaceRootPath: 'Project',
+    workspaceId: 'deal-project',
+  });
+  const joined = (await joinApi.commandHandlers.get(WORKLOG_COMMAND_ID)({ workspaceRootPath: 'Project' })).candidates;
+  if (joined.length !== 1) {
+    throw new Error(`attached browser time must join the work around it, got ${JSON.stringify(joined.map((c) => c.activityIds))}`);
+  }
+  if (joined[0].activityIds.slice().sort().join(',') !== 'j-file,j-note,j-page') {
+    throw new Error(`the session must cover all three: ${joined[0].activityIds}`);
   }
 
   // A breakdown whose parts do not add up to the total reads as a mistake.

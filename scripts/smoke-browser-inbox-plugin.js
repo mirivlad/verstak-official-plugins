@@ -1138,6 +1138,12 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   const assignCall = activityApi.commandCalls.find((call) => call.command === 'verstak.activity.assignBrowserActivity');
   if (!assignCall) throw new Error('attaching never reached the Activity plugin');
   if (assignCall.args.workspaceRootPath !== 'Project') throw new Error('attaching used the wrong Deal');
+  // Everything else recorded in a Deal carries its id, and sessions are grouped
+  // by it. Without the id, attached browser time formed a session beside the
+  // work it belonged to instead of joining it.
+  if (assignCall.args.workspaceId !== 'deal-project') {
+    throw new Error(`attaching must carry the Deal's own id, got ${JSON.stringify(assignCall.args.workspaceId)}`);
+  }
   if (assignCall.args.activityIds.slice().sort().join(',') !== 'browser-domain:b1:0,browser-domain:b1:1') {
     throw new Error(`attaching sent the wrong pages: ${JSON.stringify(assignCall.args.activityIds)}`);
   }
@@ -1145,6 +1151,77 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   if (!activityView.container.textContent.includes('Attached 2 to Project')) {
     throw new Error('the user was not told what was attached');
   }
+
+  // Shift takes everything between the last tick and this one. Ticking twenty
+  // pages one at a time is not selecting them in bulk, which is what this list
+  // is for.
+  const rangeApi = makeApi({}, 'en', [
+    { activityId: 'r-1', url: 'https://a.example.com/1', hostname: 'a.example.com', endedAt: '2026-07-22T15:00:00Z', durationSeconds: 600, workspaceRootPath: '' },
+    { activityId: 'r-2', url: 'https://a.example.com/2', hostname: 'a.example.com', endedAt: '2026-07-22T14:00:00Z', durationSeconds: 600, workspaceRootPath: '' },
+    { activityId: 'r-3', url: 'https://a.example.com/3', hostname: 'a.example.com', endedAt: '2026-07-22T13:00:00Z', durationSeconds: 600, workspaceRootPath: '' },
+    { activityId: 'r-4', url: 'https://a.example.com/4', hostname: 'a.example.com', endedAt: '2026-07-22T12:00:00Z', durationSeconds: 600, workspaceRootPath: '' },
+  ]);
+  const rangeView = await mountWithApi(rangeApi, {});
+  const activityBox = (id) => walk(rangeView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-id') === id);
+  const chosenCount = () => walkAll(rangeView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-id') && node.checked === true).length;
+  const first = activityBox('r-1');
+  first.checked = true;
+  first.dispatchEvent('change');
+  await flush();
+  if (chosenCount() !== 1) throw new Error('a single tick must select one page');
+  const third = activityBox('r-3');
+  third.checked = true;
+  third.dispatchEvent('click', { shiftKey: true });
+  third.dispatchEvent('change');
+  await flush();
+  if (chosenCount() !== 3) throw new Error(`shift must take everything between, selected ${chosenCount()}`);
+  const fourth = activityBox('r-4');
+  fourth.checked = true;
+  fourth.dispatchEvent('change');
+  await flush();
+  if (chosenCount() !== 4) throw new Error('a plain tick after a range must still add one');
+  // Unticking a range clears it.
+  const second = activityBox('r-2');
+  second.checked = false;
+  second.dispatchEvent('click', { shiftKey: true });
+  second.dispatchEvent('change');
+  await flush();
+  if (chosenCount() !== 1) throw new Error(`shift-unticking must clear the range, ${chosenCount()} left`);
+  component.unmount && component.unmount(rangeView.container);
+
+  // Inside a Deal the list is that Deal's. Showing every unattached page in
+  // every Deal made all the tabs look the same and none of them about the Deal
+  // being looked at.
+  const scopedApi = makeApi({}, 'en', [
+    { activityId: 's-mine', url: 'https://mine.example.com/x', hostname: 'mine.example.com', endedAt: '2026-07-22T11:00:00Z', durationSeconds: 600, workspaceRootPath: 'Project' },
+    { activityId: 's-other', url: 'https://other.example.com/x', hostname: 'other.example.com', endedAt: '2026-07-22T11:10:00Z', durationSeconds: 600, workspaceRootPath: 'ClientA' },
+    { activityId: 's-loose', url: 'https://loose.example.com/x', hostname: 'loose.example.com', endedAt: '2026-07-22T11:20:00Z', durationSeconds: 600, workspaceRootPath: '' },
+  ]);
+  const scopedView = await mountWithApi(scopedApi);
+  const scopedIds = () => walkAll(scopedView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-id'))
+    .map((node) => node.getAttribute('data-browser-activity-id'));
+  if (scopedIds().join(',') !== 's-mine') {
+    throw new Error(`a Deal must show its own browser activity, listed ${JSON.stringify(scopedIds())}`);
+  }
+  // Attaching a page to the Deal it is already in changes nothing, so it must
+  // not be offered.
+  const scopedAttach = () => walk(scopedView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-action') === 'attach');
+  const mineBox = walk(scopedView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-id') === 's-mine');
+  mineBox.checked = true;
+  mineBox.dispatchEvent('change');
+  await flush();
+  if (scopedAttach().disabled !== true) {
+    throw new Error('a page already attached to this Deal must not be offered for attaching to it again');
+  }
+
+  const scopedToggle = walk(scopedView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-show-attached') === '');
+  scopedToggle.checked = true;
+  scopedToggle.dispatchEvent('change');
+  await flush();
+  if (scopedIds().sort().join(',') !== 's-loose,s-mine') {
+    throw new Error(`the toggle must reveal unattached pages and nothing else, listed ${JSON.stringify(scopedIds())}`);
+  }
+  component.unmount && component.unmount(scopedView.container);
   component.unmount && component.unmount(activityView.container);
 
   console.log('browser inbox plugin smoke passed');
