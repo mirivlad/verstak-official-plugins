@@ -62,6 +62,12 @@
     '.files-notice{display:flex;align-items:flex-start;gap:.5rem;margin:.4rem .6rem 0;padding:.45rem .55rem;border:1px solid rgba(233,69,96,.55);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-danger-muted,rgba(233,69,96,.14));color:var(--vt-color-danger-foreground,#ffc6ce);font-size:.78rem;line-height:1.35}',
     '.files-notice-text{flex:1;min-width:0}',
     '.files-notice-close{flex-shrink:0;min-height:0;padding:0 .3rem;border:0;background:transparent;color:inherit;cursor:pointer}',
+    '.files-progress{display:flex;align-items:center;gap:.6rem;margin:.4rem .6rem 0;padding:.45rem .55rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-surface-muted,#111629);font-size:.78rem}',
+    '.files-progress-text{flex-shrink:0;color:var(--vt-color-text-secondary,#b7c0d4)}',
+    '.files-progress-track{flex:1;min-width:0;height:.35rem;border-radius:999px;background:var(--vt-color-surface-hover,#1b2440);overflow:hidden}',
+    '.files-progress-bar{height:100%;width:0;border-radius:999px;background:var(--vt-color-accent,#4ecca3);transition:width .12s linear}',
+    '.files-progress-cancel{flex-shrink:0;padding:.15rem .5rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:transparent;color:var(--vt-color-text-secondary,#b7c0d4);cursor:pointer;font-size:.75rem}',
+    '.files-progress-cancel:hover{border-color:var(--vt-color-accent,#4ecca3);color:var(--vt-color-text-primary,#f4f7fb)}',
     '.files-error{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--vt-color-danger,#e94560);gap:.5rem;padding:1rem}',
     '.files-error-msg{font-size:.85rem;color:var(--vt-color-text-secondary,#b7c0d4);max-width:420px;text-align:center}',
     '@container(max-width:1120px){.files-filter-group{order:10;flex:1 0 100%;width:100%;border-right:0;padding-right:0}.files-filter-group .files-filter{flex:1;min-width:0;width:auto}}',
@@ -363,6 +369,7 @@
       var entries = [];
       var selectedPaths = {};
       var lastClickedPath = '';
+      var activeTransferId = null;
       var filterText = '';
       var sortMode = 'folder-name';
       var createMode = '';
@@ -480,6 +487,36 @@
       function hideNotice() {
         noticeTextEl.textContent = '';
         noticeEl.style.display = 'none';
+      }
+
+      // A bulk paste used to give no sign it was running. This shows how far it
+      // has got and offers a way out, which matters most on exactly the large
+      // pastes that take long enough to worry about.
+      var progressEl = el('div', { className: 'files-progress', 'data-files-progress': '' });
+      var progressTextEl = el('span', { className: 'files-progress-text', 'data-files-progress-text': '' });
+      var progressBarEl = el('div', { className: 'files-progress-bar' });
+      var progressCancelEl = el('button', {
+        className: 'files-progress-cancel',
+        type: 'button',
+        'data-files-progress-cancel': '',
+        onClick: function () { cancelActiveTransfer(); }
+      }, [tr('ui.cancel', null, 'Cancel')]);
+      progressEl.appendChild(progressTextEl);
+      progressEl.appendChild(el('div', { className: 'files-progress-track' }, [progressBarEl]));
+      progressEl.appendChild(progressCancelEl);
+      progressEl.style.display = 'none';
+      containerEl.appendChild(progressEl);
+
+      function showProgress(completed, total) {
+        progressTextEl.textContent = tr('ui.transferProgress', { completed: completed, total: total }, completed + ' of ' + total);
+        progressBarEl.style.width = total > 0 ? Math.round((completed / total) * 100) + '%' : '0';
+        progressCancelEl.disabled = false;
+        progressEl.style.display = '';
+      }
+
+      function hideProgress() {
+        progressEl.style.display = 'none';
+        progressBarEl.style.width = '0';
       }
 
       var listContainer = el('div', { className: 'files-list', 'data-files-list': '' });
@@ -1297,34 +1334,75 @@
         return base + ' (' + Date.now() + ')' + ext;
       }
 
+      function cancelActiveTransfer() {
+        if (!activeTransferId) return;
+        progressCancelEl.disabled = true;
+        api.files.cancelTransfer(activeTransferId).catch(function () {});
+      }
+
       function pasteEntry() {
         var clip = window.__filesClipboard;
         if (!clip || !clip.items || clip.items.length === 0) return;
+        if (activeTransferId) return;
         var crossWorkspace = !!(clip.workspaceRoot && clip.workspaceRoot !== workspaceRoot);
         var destinationDir = crossWorkspace ? scopedPath(currentPath || 'Files') : scopedPath(currentPath);
+        var cutting = clip.action === 'cut';
 
         api.files.list(destinationDir).then(function (destinationEntries) {
           var occupied = {};
           (destinationEntries || []).forEach(function (entry) { occupied[entry.name] = true; });
-          var tasks = clip.items.map(function (item) {
+          var transfers = [];
+          clip.items.forEach(function (item) {
             var newName = uniqueDestinationName(item.name, occupied);
             occupied[newName] = true;
             var to = destinationDir ? destinationDir + '/' + newName : newName;
-            if (clip.action === 'cut') {
-              if (item.path === to || to.indexOf(item.path + '/') === 0) return Promise.resolve();
-              return api.files.move(item.path, to, { overwrite: false });
-            }
-            return api.files.copy(item.path, to, { overwrite: false });
+            // Moving something onto itself, or into itself, is not a paste.
+            if (cutting && (item.path === to || to.indexOf(item.path + '/') === 0)) return;
+            transfers.push({ from: item.path, to: to });
           });
-          return Promise.all(tasks);
-        }).then(function () {
-          if (clip.action === 'cut') {
+          if (transfers.length === 0) return null;
+
+          // One call for the whole list. Issuing one per file made the backend
+          // record the change once per file, each time under a global lock,
+          // which is what made a large paste look like a freeze.
+          activeTransferId = 'files-paste-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+          showProgress(0, transfers.length);
+          var options = { overwrite: false, transferId: activeTransferId };
+          return (cutting ? api.files.moveMany(transfers, options) : api.files.copyMany(transfers, options));
+        }).then(function (outcome) {
+          if (outcome && cutting && !outcome.cancelled && outcome.failed === 0) {
             window.__filesClipboard = null;
           }
+          if (outcome) describeTransferOutcome(outcome);
           loadEntries();
         }).catch(function (err) {
           showNotice(reportError('ui.pasteError', 'Could not paste these items. Check the destination and try again.', err));
+        }).then(function () {
+          activeTransferId = null;
+          hideProgress();
         });
+      }
+
+      function describeTransferOutcome(outcome) {
+        if (outcome.cancelled) {
+          showNotice(tr('ui.transferCancelled', { succeeded: outcome.succeeded },
+            'Stopped after ' + outcome.succeeded + ' item(s). What was already moved stays where it is.'));
+          return;
+        }
+        if (outcome.failed === 0) {
+          hideNotice();
+          return;
+        }
+        // Name what failed rather than reporting that "something" did: the
+        // successful items already landed and the user needs to know which
+        // ones did not.
+        var failedNames = outcome.results
+          .filter(function (result) { return result.error; })
+          .map(function (result) { return result.from.split('/').pop(); });
+        var shown = failedNames.slice(0, 3).join(', ');
+        if (failedNames.length > 3) shown += ', …';
+        showNotice(tr('ui.transferPartial', { failed: outcome.failed, succeeded: outcome.succeeded, names: shown },
+          outcome.succeeded + ' item(s) pasted, ' + outcome.failed + ' failed: ' + shown));
       }
 
       var onDocClick = function (e) {
@@ -1656,12 +1734,21 @@
         });
       }
 
+      var transferProgressUnsubscribe = null;
+      if (api.files && typeof api.files.onTransferProgress === 'function') {
+        transferProgressUnsubscribe = api.files.onTransferProgress(function (progress) {
+          if (disposed || !activeTransferId || progress.transferId !== activeTransferId) return;
+          showProgress(progress.completed, progress.total);
+        });
+      }
+
       containerEl.__filesCleanup = function () {
         disposed = true;
         cancelCreate();
         cancelRename();
         if (typeof localeUnsubscribe === 'function') localeUnsubscribe();
         if (typeof fileChangedUnsubscribe === 'function') fileChangedUnsubscribe();
+        if (typeof transferProgressUnsubscribe === 'function') transferProgressUnsubscribe();
         document.removeEventListener('click', onDocClick);
         document.removeEventListener('keydown', onDocKeydown);
         window.removeEventListener('mousedown', handleMouseHistory, true);
