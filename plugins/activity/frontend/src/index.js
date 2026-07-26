@@ -336,21 +336,82 @@
   // four saves over four minutes measured four, when the work plainly started
   // before the first one. Every session of real events is credited with the
   // work that led to its first event.
-  function sessionDurationMinutes(session) {
-    var events = session.activities.slice().sort(function (a, b) { return eventTimeMs(a) - eventTimeMs(b); });
-    if (events.length === 0) return 0;
-    var durationMs = 0;
+  // The same accounting, kept per event rather than as one number, so a
+  // proposal can say what the time was spent on and not just how much of it
+  // there was. A gap is credited to the event that ended it -- the work that
+  // produced it -- which is the same reasoning as the lead-in.
+  function activityCredits(activities) {
+    var events = (activities || []).slice().sort(function (a, b) { return eventTimeMs(a) - eventTimeMs(b); });
+    var credits = [];
     var hasMomentEvent = false;
     for (var index = 0; index < events.length; index += 1) {
       var explicit = Math.max(0, Number(events[index].durationSeconds || 0)) * 1000;
-      durationMs += explicit;
+      var creditedMs = explicit;
       if (explicit === 0) hasMomentEvent = true;
-      if (index === 0 || explicit > 0 || Number(events[index - 1].durationSeconds || 0) > 0) continue;
-      var gap = eventTimeMs(events[index]) - eventTimeMs(events[index - 1]);
-      if (gap > 0 && gap <= MAX_IDLE_GAP_MINUTES * 60 * 1000) durationMs += Math.min(gap, 10 * 60 * 1000);
+      if (!(index === 0 || explicit > 0 || Number(events[index - 1].durationSeconds || 0) > 0)) {
+        var gap = eventTimeMs(events[index]) - eventTimeMs(events[index - 1]);
+        if (gap > 0 && gap <= MAX_IDLE_GAP_MINUTES * 60 * 1000) creditedMs += Math.min(gap, 10 * 60 * 1000);
+      }
+      credits.push({ activity: events[index], ms: creditedMs });
     }
-    if (hasMomentEvent) durationMs += SESSION_LEAD_IN_MINUTES * 60 * 1000;
+    if (hasMomentEvent && credits.length) credits[0].ms += SESSION_LEAD_IN_MINUTES * 60 * 1000;
+    return credits;
+  }
+
+  function sessionDurationMinutes(session) {
+    var durationMs = activityCredits(session.activities).reduce(function (total, credit) {
+      return total + credit.ms;
+    }, 0);
     return Math.min(MAX_SESSION_DURATION_MINUTES, Math.floor(durationMs / 60000));
+  }
+
+  function activityKind(activity) {
+    var type = text(activity && activity.type).toLowerCase();
+    if (type === BROWSER_ACTIVITY_TYPE) return 'browser';
+    if (type.indexOf('browser.capture') === 0) return 'capture';
+    if (type.indexOf('note.') === 0) return 'note';
+    if (type.indexOf('file.') === 0) return 'file';
+    if (type.indexOf('workspace') !== -1 || type.indexOf('case.') === 0) return 'deal';
+    return 'other';
+  }
+
+  function activitySite(activity) {
+    var payload = activity && activity.payload && typeof activity.payload === 'object' ? activity.payload : {};
+    return text(activity && (activity.hostname || activity.url) || payload.hostname || payload.url);
+  }
+
+  // What the time went on, by kind of work, with the minutes adding up to the
+  // session total: a breakdown that does not add up reads as a mistake.
+  function sessionBreakdown(activities, totalMinutes) {
+    var byKind = {};
+    var order = [];
+    activityCredits(activities).forEach(function (credit) {
+      var kind = activityKind(credit.activity);
+      if (!byKind[kind]) {
+        byKind[kind] = { kind: kind, count: 0, ms: 0, sites: [], seenSites: {} };
+        order.push(kind);
+      }
+      var item = byKind[kind];
+      item.count += 1;
+      item.ms += credit.ms;
+      var site = activitySite(credit.activity);
+      if (site && !item.seenSites[site]) {
+        item.seenSites[site] = true;
+        item.sites.push(site);
+      }
+    });
+    var parts = order.map(function (kind) {
+      var item = byKind[kind];
+      return { kind: kind, count: item.count, minutes: Math.floor(item.ms / 60000), sites: item.sites, ms: item.ms };
+    }).sort(function (a, b) {
+      return b.ms - a.ms || b.count - a.count || a.kind.localeCompare(b.kind);
+    });
+    var counted = parts.reduce(function (total, part) { return total + part.minutes; }, 0);
+    var remainder = Math.max(0, Number(totalMinutes) || 0) - counted;
+    if (remainder > 0 && parts.length) parts[0].minutes += remainder;
+    return parts.map(function (part) {
+      return { kind: part.kind, count: part.count, minutes: part.minutes, sites: part.sites.slice(0, 6) };
+    });
   }
 
   function findCompatibleSession(sessions, scope, time) {
@@ -463,6 +524,7 @@
       endedAt: toISOTime(eventTimeMs(last)),
       estimatedMinutes: duration,
       activityCount: activities.length,
+      breakdown: sessionBreakdown(activities, duration),
       activityIds: activities.map(function (activity) { return activity.activityId; }).filter(Boolean),
       activities: activities.map(candidateActivity)
     };
@@ -476,6 +538,28 @@
     }).sort(function (a, b) {
       return b.endedAt.localeCompare(a.endedAt) || a.workspaceRootPath.localeCompare(b.workspaceRootPath);
     }).slice(0, MAX_CANDIDATES);
+  }
+
+  var BREAKDOWN_FALLBACKS = {
+    browser: 'browser ({count})',
+    capture: 'saved from the browser ({count})',
+    note: 'notes ({count})',
+    file: 'files ({count})',
+    deal: 'work on the Deal ({count})',
+    other: 'other ({count})'
+  };
+
+  // The same facts the Journal states, said here too: a card that only reports
+  // minutes makes the user open the list to find out what they were.
+  function breakdownText(candidate, translate) {
+    return (candidate.breakdown || []).map(function (part) {
+      var fallback = (BREAKDOWN_FALLBACKS[part.kind] || BREAKDOWN_FALLBACKS.other).replace('{count}', part.count);
+      var what = part.kind === 'browser' && part.sites && part.sites.length
+        ? translate('ui.breakdown.browserSites', { sites: part.sites.join(', ') }, 'browser: ' + part.sites.join(', '))
+        : translate('ui.breakdown.' + part.kind, { count: part.count }, fallback);
+      if (part.minutes <= 0) return what;
+      return translate('ui.breakdown.withTime', { what: what, minutes: part.minutes }, what + ' — ' + part.minutes + ' min');
+    }).join('; ');
   }
 
   function humanEventType(type, translate) {
@@ -596,6 +680,7 @@
       startedAt: toISOTime(eventTimeMs(additions[0])),
       estimatedMinutes: duration,
       activityCount: additions.length,
+      breakdown: sessionBreakdown(additions, duration),
       activityIds: additions.map(function (activity) { return activity.activityId; }),
       activities: additions.map(candidateActivity)
     });
@@ -1051,7 +1136,13 @@
               el('div', { textContent: tr('ui.candidateDeal', { deal: candidate.workspaceRootPath }, 'Deal: ' + candidate.workspaceRootPath) }),
               el('div', { textContent: tr('ui.candidateTime', { time: candidateTimeRange(candidate) }, 'Time: ' + candidateTimeRange(candidate)) }),
               el('div', { textContent: tr('ui.candidateDuration', { minutes: candidate.estimatedMinutes }, 'Estimated duration: ' + candidate.estimatedMinutes + ' min') }),
-              el('div', { textContent: tr('ui.candidateActivities', { count: candidate.activityCount }, 'Activities: ' + candidate.activityCount) })
+              el('div', { textContent: tr('ui.candidateActivities', { count: candidate.activityCount }, 'Activities: ' + candidate.activityCount) }),
+              candidate.breakdown && candidate.breakdown.length
+                ? el('div', {
+                  'data-work-session-breakdown': '',
+                  textContent: tr('ui.candidateBreakdown', { breakdown: breakdownText(candidate, tr) }, 'Time went on: ' + breakdownText(candidate, tr))
+                })
+                : null
             ]),
             el('details', { className: 'activity-candidate-activities' }, [
               el('summary', { textContent: tr('ui.includedActivities', { count: candidate.activityCount }, 'Included activities (' + candidate.activityCount + ')') })

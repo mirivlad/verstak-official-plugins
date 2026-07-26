@@ -246,9 +246,26 @@
       activityCount: Math.max(0, Number(value.activityCount || activities.length)),
       activityIds: activityIds,
       activities: activities,
+      breakdown: normalizeBreakdown(value.breakdown),
       providerLabel: '',
       providerPluginId: ''
     };
+  }
+
+  // What the time went on, by kind of work. A proposal that only says "25 min"
+  // leaves the user to remember what those minutes were.
+  function normalizeBreakdown(value) {
+    if (!Array.isArray(value)) return [];
+    return value.map(function (part) {
+      return {
+        kind: text(part && part.kind) || 'other',
+        count: Math.max(0, Number(part && part.count) || 0),
+        minutes: Math.max(0, Number(part && part.minutes) || 0),
+        sites: Array.isArray(part && part.sites) ? part.sites.map(text).filter(Boolean) : []
+      };
+    }).filter(function (part) {
+      return part.count > 0;
+    });
   }
 
   // A proposal handed over by another tool arrives for the Deal being looked at.
@@ -554,7 +571,11 @@
       var dateInput = el('input', { className: 'journal-input', type: 'date', value: editing ? existingEntry.date : (reviewingCandidate ? candidateDate(candidate.startedAt) : (reviewingTodo ? candidateDate(completedTodo.completedAt) : today())), 'data-journal-input': 'date' });
       var titleInput = el('input', { className: 'journal-input', type: 'text', placeholder: tr('ui.workItem', null, 'Work item'), value: editing ? existingEntry.title : (reviewingTodo ? completedTodo.title : ''), 'data-journal-input': 'title' });
       var summaryInput = el('textarea', { className: 'journal-input textarea', placeholder: tr('ui.body', null, 'Body'), 'data-journal-input': 'summary' });
-      summaryInput.value = editing ? existingEntry.summary : (reviewingTodo ? completedTodo.description : '');
+      // A proposal arrives with what the time went on already written out. The
+      // title stays empty: only the user knows what the work was for.
+      summaryInput.value = editing
+        ? existingEntry.summary
+        : (reviewingTodo ? completedTodo.description : (reviewingCandidate ? breakdownSentence(candidate) : ''));
       var minutesInput = el('input', { className: 'journal-input', type: 'number', min: '0', step: '1', value: editing ? existingEntry.minutes : (reviewingCandidate ? candidate.estimatedMinutes : (reviewingTodo ? '0' : '30')), 'data-journal-input': 'minutes' });
       var billableInput = el('input', { type: 'checkbox', 'data-journal-input': 'billable' });
       billableInput.checked = editing ? existingEntry.billable === true : false;
@@ -729,6 +750,33 @@
       })).then(render);
     }
 
+    var BREAKDOWN_FALLBACKS = {
+      browser: 'browser ({count})',
+      capture: 'saved from the browser ({count})',
+      note: 'notes ({count})',
+      file: 'files ({count})',
+      deal: 'work on the Deal ({count})',
+      other: 'other ({count})'
+    };
+
+    function breakdownClause(part) {
+      var fallback = BREAKDOWN_FALLBACKS[part.kind] || BREAKDOWN_FALLBACKS.other;
+      var what = part.kind === 'browser' && part.sites.length
+        ? tr('ui.breakdown.browserSites', { sites: part.sites.join(', ') }, 'browser: ' + part.sites.join(', '))
+        : tr('ui.breakdown.' + part.kind, { count: part.count }, fallback.replace('{count}', part.count));
+      if (part.minutes <= 0) return what;
+      return tr('ui.breakdown.withTime', { what: what, minutes: part.minutes }, what + ' — ' + part.minutes + ' min');
+    }
+
+    // The sentence a person would write about this stretch of work, from the
+    // facts the proposal carries and nothing invented.
+    function breakdownSentence(candidate) {
+      var clauses = (candidate.breakdown || []).map(breakdownClause).filter(Boolean);
+      var total = tr('ui.breakdown.total', { minutes: candidate.estimatedMinutes }, candidate.estimatedMinutes + ' min in total');
+      if (!clauses.length) return total;
+      return clauses.join('; ') + '. ' + total + '.';
+    }
+
     function proposalMeta(candidate) {
       var facts = [candidate.workspaceRootPath];
       if (candidate.activityCount) {
@@ -764,6 +812,9 @@
                 end: candidateTime(candidate.endedAt)
               }, 'Work between ' + candidateTime(candidate.startedAt) + ' and ' + candidateTime(candidate.endedAt))
             }),
+            candidate.breakdown.length
+              ? el('div', { className: 'journal-summary', 'data-journal-proposal-breakdown': '', textContent: breakdownSentence(candidate) })
+              : null,
             el('div', { className: 'journal-meta', textContent: proposalMeta(candidate) })
           ]),
           el('div', { className: 'journal-minutes', textContent: tr('ui.minutesValue', { minutes: candidate.estimatedMinutes }, candidate.estimatedMinutes + ' min') }),
