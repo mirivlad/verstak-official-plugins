@@ -1109,6 +1109,16 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   const activityView = await mountWithApi(activityApi, {});
   const activityRows = () => walkAll(activityView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-id'))
     .map((node) => node.getAttribute('data-browser-activity-id'));
+  // Recorded time is a long list, and the captures the user actually sent sit
+  // under it. It starts closed so they are not pushed off screen.
+  const activityToggle = (view) => walk(view.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-toggle'));
+  if (!activityToggle(activityView)) throw new Error('there is no way to open or close the recorded time');
+  if (activityToggle(activityView).getAttribute('data-browser-activity-toggle') !== 'collapsed') {
+    throw new Error('recorded time must start closed, or it buries the captures below it');
+  }
+  if (activityRows().length !== 0) throw new Error('a closed list shows no rows');
+  activityToggle(activityView).click();
+  await flush();
   if (!activityApi.commandCalls.some((call) => call.command === 'verstak.activity.listBrowserActivity')) {
     throw new Error('the Browser tool never asked for browser activity');
   }
@@ -1175,6 +1185,8 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
     { activityId: 'r-4', url: 'https://a.example.com/4', hostname: 'a.example.com', endedAt: '2026-07-22T12:00:00Z', durationSeconds: 600, workspaceRootPath: '' },
   ]);
   const rangeView = await mountWithApi(rangeApi, {});
+  walk(rangeView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-toggle')).click();
+  await flush();
   const activityBox = (id) => walk(rangeView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-id') === id);
   const chosenCount = () => walkAll(rangeView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-id') && node.checked === true).length;
   const first = activityBox('r-1');
@@ -1211,6 +1223,8 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
     { activityId: 's-loose', url: 'https://loose.example.com/x', hostname: 'loose.example.com', endedAt: '2026-07-22T11:20:00Z', durationSeconds: 600, workspaceRootPath: '' },
   ]);
   const scopedView = await mountWithApi(scopedApi);
+  walk(scopedView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-toggle')).click();
+  await flush();
   const scopedIds = () => walkAll(scopedView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-id'))
     .map((node) => node.getAttribute('data-browser-activity-id'));
   if (scopedIds().join(',') !== 's-mine') {
@@ -1245,6 +1259,8 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
     { pattern: 'chat.example.net', workspaceRootPath: '', notWork: true, createdBy: 'user' },
   ]);
   const undoView = await mountWithApi(undoApi, {});
+  walk(undoView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-toggle')).click();
+  await flush();
   const undoRows = () => walkAll(undoView.container, (node) => node.getAttribute && node.getAttribute('data-browser-activity-id'))
     .map((node) => node.getAttribute('data-browser-activity-id'));
 

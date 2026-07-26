@@ -46,6 +46,9 @@
     '.browser-inbox-btn.danger{border-color:rgba(233,69,96,.42);color:#ff9a9a;background:var(--vt-color-danger-muted,rgba(233,69,96,.14))}',
     '.browser-inbox-status{font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3);white-space:nowrap}',
     '.browser-inbox-status.error{display:inline-flex;border:1px solid rgba(233,69,96,.45);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-danger-muted,rgba(233,69,96,.14));color:#ffc6ce;padding:.18rem .4rem}',
+    '.browser-inbox-activity-disclosure{border:0;background:none;padding:0;font:inherit;font-size:.78rem;font-weight:600;color:var(--vt-color-text-secondary,#b7c0d4);cursor:pointer}',
+    '.browser-inbox-activity-disclosure:hover{color:var(--vt-color-text-primary,#f4f7fb)}',
+    '.browser-inbox-activity-list[hidden]{display:none}',
     '.browser-inbox-activity{flex-shrink:0;max-height:38%;display:flex;flex-direction:column;min-height:0;border-bottom:1px solid var(--vt-color-border,#202b46);background:var(--vt-color-surface-muted,#111629)}',
     '.browser-inbox-activity[hidden]{display:none}',
     '.browser-inbox-activity-head{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap;padding:.45rem .75rem;border-bottom:1px solid rgba(32,43,70,.72)}',
@@ -398,6 +401,7 @@
     var activityRules = [];
     var activitySelection = {};
     var showNotWorkActivity = false;
+    var activityCollapsed = true;
     var showAttachedActivity = false;
     var showUnattachedActivity = false;
     var activityAnchorId = '';
@@ -1028,6 +1032,7 @@
       activityListEl.innerHTML = '';
       var visible = visibleActivity();
       renderActivityRules();
+      if (activityCollapsed) activityRulesEl.setAttribute('hidden', 'hidden');
       if (!browserActivity.length && !activityRules.length) {
         activityEl.setAttribute('hidden', 'hidden');
         return;
@@ -1036,9 +1041,18 @@
       else delete activityEl.attributes.hidden;
 
       var chosen = selectedActivityIds();
-      activityHeadEl.appendChild(el('span', {
-        className: 'browser-inbox-activity-title',
-        textContent: tr('ui.browserActivity.title', null, 'Browser activity')
+      // Recorded time is a long list and the captures the user actually sent
+      // sit under it. It opens on request rather than pushing them off screen.
+      activityHeadEl.appendChild(el('button', {
+        className: 'browser-inbox-activity-disclosure',
+        type: 'button',
+        'data-browser-activity-toggle': activityCollapsed ? 'collapsed' : 'expanded',
+        'aria-expanded': activityCollapsed ? 'false' : 'true',
+        textContent: (activityCollapsed ? '\u25B8 ' : '\u25BE ') + tr('ui.browserActivity.title', null, 'Browser activity'),
+        onClick: function () {
+          activityCollapsed = !activityCollapsed;
+          renderActivity();
+        }
       }));
       activityHeadEl.appendChild(el('span', {
         className: 'browser-inbox-count',
@@ -1047,6 +1061,12 @@
           ? tr('ui.browserActivity.chosen', { count: chosen.length, total: visible.length }, chosen.length + ' of ' + visible.length + ' selected')
           : String(visible.length)
       }));
+      if (activityCollapsed) {
+        activityListEl.setAttribute('hidden', 'hidden');
+        return;
+      }
+      if (typeof activityListEl.removeAttribute === 'function') activityListEl.removeAttribute('hidden');
+      else delete activityListEl.attributes.hidden;
       var otherSetInput = el('input', {
         type: 'checkbox',
         'data-browser-activity-show-attached': '',

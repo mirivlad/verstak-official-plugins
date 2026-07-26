@@ -310,8 +310,12 @@ function byData(container, attr, value) {
   // Browser time is named by the page it was spent on.
   const pageCandidate = Object.assign({}, candidate, {
     candidateId: 'work-session:page:1',
-    activityIds: ['page-1'],
-    activities: [{ activityId: 'page-1', type: 'browser.activity.domain', occurredAt: '2026-06-27T10:12:00.000Z', url: 'https://dash.example.com/projects/42' }],
+    activityIds: ['page-1', 'page-2'],
+    activities: [
+      { activityId: 'page-1', type: 'browser.activity.domain', occurredAt: '2026-06-27T10:12:00.000Z', url: 'https://dash.example.com/projects/42', durationSeconds: 900 },
+      // Time recorded before addresses were kept knows only the site.
+      { activityId: 'page-2', type: 'browser.activity.domain', occurredAt: '2026-06-27T10:40:00.000Z', hostname: 'fantlab.ru', durationSeconds: 300 },
+    ],
   });
   const pageView = await mountWithApi(makeApi(), {
     workspaceNode: { name: 'Project' },
@@ -320,6 +324,13 @@ function byData(container, attr, value) {
   });
   if (!pageView.container.textContent.includes('https://dash.example.com/projects/42')) {
     throw new Error('a proposal must name the page the time was spent on, not just "Activity"');
+  }
+  if (!pageView.container.textContent.includes('fantlab.ru')) {
+    throw new Error('where only the site was recorded, the site still says more than "Activity"');
+  }
+  // A row that says only the time leaves the user ticking boxes blind.
+  if (!pageView.container.textContent.includes('15 min')) {
+    throw new Error('each linked activity must say how long it took');
   }
   component.unmount && component.unmount(pageView.container);
 
