@@ -1734,6 +1734,21 @@
         });
       }
 
+      // Back and forward reach the file list before the shell's view history.
+      // The shell used to find the toolbar buttons by DOM attribute and click
+      // them; it now asks, and this answers. The behaviour is deliberately the
+      // same as before: back leaves the current folder, forward replays the
+      // folder history.
+      var navigationUnregister = null;
+      if (api.navigation && typeof api.navigation.registerHandler === 'function') {
+        navigationUnregister = api.navigation.registerHandler({
+          canGoBack: function () { return !disposed && Boolean(currentPath); },
+          goBack: function () { goUp(); },
+          canGoForward: function () { return !disposed && historyIndex < historyStack.length - 1; },
+          goForward: function () { goForward(); }
+        });
+      }
+
       var transferProgressUnsubscribe = null;
       if (api.files && typeof api.files.onTransferProgress === 'function') {
         transferProgressUnsubscribe = api.files.onTransferProgress(function (progress) {
@@ -1749,6 +1764,7 @@
         if (typeof localeUnsubscribe === 'function') localeUnsubscribe();
         if (typeof fileChangedUnsubscribe === 'function') fileChangedUnsubscribe();
         if (typeof transferProgressUnsubscribe === 'function') transferProgressUnsubscribe();
+        if (typeof navigationUnregister === 'function') navigationUnregister();
         document.removeEventListener('click', onDocClick);
         document.removeEventListener('keydown', onDocKeydown);
         window.removeEventListener('mousedown', handleMouseHistory, true);

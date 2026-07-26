@@ -33,6 +33,7 @@
         "id": "verstak.search.workspace",
         "title": "Search",
         "icon": "search",
+        "order": 90,
         "component": "SearchView"
       }
     ],

@@ -32,6 +32,7 @@
         "id": "verstak.notes.workspace",
         "title": "Notes",
         "icon": "edit",
+        "order": 10,
         "component": "NotesView"
       }
     ]

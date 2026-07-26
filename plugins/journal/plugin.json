@@ -45,6 +45,7 @@
         "id": "verstak.journal.workspace",
         "title": "Journal",
         "icon": "book-open",
+        "order": 70,
         "component": "JournalView"
       }
     ]

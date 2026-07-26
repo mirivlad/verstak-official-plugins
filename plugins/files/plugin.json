@@ -33,6 +33,7 @@
         "id": "verstak.files.workspace",
         "title": "Files",
         "icon": "folder",
+        "order": 20,
         "component": "FilesView"
       }
     ]
