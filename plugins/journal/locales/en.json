@@ -55,6 +55,10 @@
   "ui.minutes": "Minutes",
   "ui.minutesValue": "{minutes} min",
   "ui.noMatches": "No entries match these filters.",
+  "ui.proposals.many": "{count} possible entries",
+  "ui.proposals.one": "{count} possible entry",
+  "ui.proposals.review": "Review",
+  "ui.proposals.rowTitle": "Work between {start} and {end}",
   "ui.ready": "Ready",
   "ui.reviewCandidate": "Review possible journal entry",
   "ui.saveChanges": "Save changes",
@@ -67,5 +71,6 @@
   "ui.totalMinutes": "{minutes} min total",
   "ui.updated": "Entry updated",
   "ui.workItem": "Work item",
+  "ui.workspace": "Deal",
   "ui.workspaceTitle": "Journal · {workspace}"
 }

@@ -55,6 +55,10 @@
   "ui.minutes": "Минуты",
   "ui.minutesValue": "{minutes} мин",
   "ui.noMatches": "Под фильтры ничего не подходит.",
+  "ui.proposals.many": "Возможных записей: {count}",
+  "ui.proposals.one": "{count} возможная запись",
+  "ui.proposals.review": "Разобрать",
+  "ui.proposals.rowTitle": "Работа с {start} по {end}",
   "ui.ready": "Готово",
   "ui.reviewCandidate": "Проверить возможную запись журнала",
   "ui.saveChanges": "Сохранить изменения",
@@ -67,5 +71,6 @@
   "ui.totalMinutes": "всего {minutes} мин",
   "ui.updated": "Запись обновлена",
   "ui.workItem": "Выполненная работа",
+  "ui.workspace": "Дело",
   "ui.workspaceTitle": "Журнал · {workspace}"
 }

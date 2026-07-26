@@ -133,11 +133,33 @@ function loadComponent(document) {
   return component;
 }
 
-function makeApi(initialSettings = {}, locale = null) {
+function makeApi(initialSettings = {}, locale = null, proposals = []) {
   const settings = { ...initialSettings };
   const publishedEvents = [];
+  const providerCalls = [];
   return {
     publishedEvents,
+    providerCalls,
+    contributions: {
+      list: async (point) => (point === 'worklogProviders' ? [{
+        pluginId: 'verstak.activity',
+        id: 'verstak.activity.worklog',
+        label: 'Activity',
+        handler: 'verstak.activity.suggestWorklog',
+      }] : []),
+    },
+    commands: {
+      executeFor: async (pluginId, handler, args) => {
+        providerCalls.push({ pluginId, handler, args });
+        const workspace = String((args && args.workspaceRootPath) || '');
+        return {
+          status: 'handled',
+          result: {
+            candidates: proposals.filter((item) => !workspace || item.workspaceRootPath === workspace),
+          },
+        };
+      },
+    },
     settings: {
       read: async (key) => (key ? settings[key] : { ...settings }),
       write: async (key, value) => {
@@ -157,6 +179,7 @@ function makeApi(initialSettings = {}, locale = null) {
       ],
     },
     i18n: locale ? {
+      getLocale: () => 'ru',
       t(key, params, fallback) {
         return String(locale[key] || fallback || key).replace(/\{(\w+)\}/g, (_match, name) => String((params || {})[name] ?? ''));
       },
@@ -168,7 +191,7 @@ function makeApi(initialSettings = {}, locale = null) {
 }
 
 async function flush() {
-  for (let i = 0; i < 12; i += 1) await Promise.resolve();
+  for (let i = 0; i < 40; i += 1) await Promise.resolve();
 }
 
 async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, workspaceRootPath: 'Project' }, document = makeDocument()) {
@@ -436,7 +459,98 @@ function byData(container, attr, value) {
   const deleteButton = walk(filterView.container, (node) => node.getAttribute && node.getAttribute('data-journal-action') === 'delete');
   if (!deleteButton) throw new Error('entries cannot be deleted outside a single Deal');
 
+  // The button existing is not the same as it working: an entry is stored under
+  // its own Deal, which in the global Journal is not the one being looked at.
+  const betaRow = byData(filterView.container, 'data-journal-entry', 'b-todo');
+  walk(betaRow, (node) => node.getAttribute && node.getAttribute('data-journal-action') === 'delete').click();
+  await flush();
+  if (filterApi.storedEntries('worklog:workspace:Beta').length !== 0) {
+    throw new Error('deleting from the global Journal did not reach the entry\'s own Deal');
+  }
+  if (filterApi.storedEntries('worklog:workspace:Alpha').length !== 2) {
+    throw new Error('deleting one entry disturbed another Deal');
+  }
+  if (titles().includes('Beta from todo')) throw new Error('the deleted entry is still listed');
+
   component.unmount && component.unmount(filterView.container);
+
+  // Proposals. The Journal asks whoever declares a worklogProviders
+  // contribution, so it lists possible entries with no Activity view on screen
+  // -- which is the only situation the user is ever in while reading the
+  // Journal.
+  const projectProposal = {
+    candidateId: 'work-session:project:1',
+    sessionId: 'session-project-1',
+    handledThrough: '2026-07-20T09:20:00.000Z',
+    workspaceRootPath: 'Project',
+    startedAt: '2026-07-20T09:00:00.000Z',
+    endedAt: '2026-07-20T09:20:00.000Z',
+    estimatedMinutes: 25,
+    activityCount: 2,
+    activityIds: ['p-a', 'p-b'],
+    activities: [
+      { activityId: 'p-a', type: 'note.saved', occurredAt: '2026-07-20T09:00:00.000Z', sourcePluginId: 'verstak.notes' },
+      { activityId: 'p-b', type: 'file.updated', occurredAt: '2026-07-20T09:20:00.000Z', sourcePluginId: 'verstak.files' },
+    ],
+  };
+  const clientProposal = Object.assign({}, projectProposal, {
+    candidateId: 'work-session:client:1',
+    sessionId: 'session-client-1',
+    workspaceRootPath: 'Client',
+    estimatedMinutes: 40,
+    activityIds: ['c-a', 'c-b'],
+    activities: [
+      { activityId: 'c-a', type: 'note.saved', occurredAt: '2026-07-20T11:00:00.000Z', sourcePluginId: 'verstak.notes' },
+      { activityId: 'c-b', type: 'file.updated', occurredAt: '2026-07-20T11:40:00.000Z', sourcePluginId: 'verstak.files' },
+    ],
+  });
+  const proposalApi = makeApi({}, null, [projectProposal, clientProposal]);
+  const proposalView = await mountWithApi(proposalApi, {});
+  const proposalIds = () => walkAll(proposalView.container, (node) => node.getAttribute && node.getAttribute('data-journal-proposal'))
+    .map((node) => node.getAttribute('data-journal-proposal'));
+  if (proposalIds().length !== 2) throw new Error(`the global Journal must list proposals from every Deal, listed ${JSON.stringify(proposalIds())}`);
+  if (!proposalApi.providerCalls.some((call) => call.pluginId === 'verstak.activity' && call.handler === 'verstak.activity.suggestWorklog')) {
+    throw new Error('the Journal did not ask the declared worklog provider');
+  }
+  const projectRow = byData(proposalView.container, 'data-journal-proposal', projectProposal.candidateId);
+  if (!projectRow.textContent.includes('25 min')) throw new Error('a proposal must show the time it accounts for');
+  if (!projectRow.textContent.includes('Project')) throw new Error('a proposal must show which Deal it belongs to');
+
+  const proposalDealFilter = byData(proposalView.container, 'data-journal-filter-deal', '');
+  proposalDealFilter.value = 'Client';
+  proposalDealFilter.dispatchEvent('change');
+  if (proposalIds().join(',') !== clientProposal.candidateId) {
+    throw new Error(`the Deal filter must narrow proposals too, listed ${JSON.stringify(proposalIds())}`);
+  }
+  const proposalSourceFilter = byData(proposalView.container, 'data-journal-filter-source', '');
+  proposalSourceFilter.value = 'manual';
+  proposalSourceFilter.dispatchEvent('change');
+  if (proposalIds().length !== 0) throw new Error('proposals are not hand-written entries and must not survive that filter');
+  proposalSourceFilter.value = 'all';
+  proposalSourceFilter.dispatchEvent('change');
+  proposalDealFilter.value = '';
+  proposalDealFilter.dispatchEvent('change');
+
+  const reviewButton = walk(byData(proposalView.container, 'data-journal-proposal', projectProposal.candidateId), (node) => (
+    node.getAttribute && node.getAttribute('data-journal-action') === 'review-proposal'
+  ));
+  if (!reviewButton) throw new Error('a proposal cannot be turned into an entry');
+  reviewButton.click();
+  await flush();
+  if (byData(proposalView.container, 'data-journal-input', 'workspaceRootPath').value !== 'Project') {
+    throw new Error("reviewing a proposal in the global Journal must keep the proposal's own Deal");
+  }
+  byData(proposalView.container, 'data-journal-input', 'title').value = 'Session from a proposal';
+  byData(proposalView.container, 'data-journal-action', 'save-entry').click();
+  await flush();
+  const proposalEntries = proposalApi.storedEntries('worklog:workspace:Project');
+  if (proposalEntries.length !== 1 || proposalEntries[0].sourceCandidateId !== projectProposal.candidateId) {
+    throw new Error('a reviewed proposal was not stored against its own Deal');
+  }
+  if (proposalIds().indexOf(projectProposal.candidateId) !== -1) {
+    throw new Error('a proposal that became an entry must leave the proposal list');
+  }
+  component.unmount && component.unmount(proposalView.container);
 
   component.unmount && component.unmount(container);
   component.unmount && component.unmount(candidateView.container);

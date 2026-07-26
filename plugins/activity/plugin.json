@@ -56,6 +56,13 @@
         "handler": "verstak.activity.suggestWorklog"
       }
     ],
+    "worklogProviders": [
+      {
+        "id": "verstak.activity.worklog",
+        "label": "Activity",
+        "handler": "verstak.activity.suggestWorklog"
+      }
+    ],
     "activityProviders": [
       {
         "id": "verstak.activity.log",

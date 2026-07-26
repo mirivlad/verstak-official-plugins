@@ -37,6 +37,10 @@
     '.journal-input.journal-select{appearance:none;background-color:#0f1424;background-image:linear-gradient(45deg,transparent 50%,var(--vt-color-text-muted,#7f8aa3) 50%),linear-gradient(135deg,var(--vt-color-text-muted,#7f8aa3) 50%,transparent 50%);background-position:calc(100% - 14px) 50%,calc(100% - 9px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:1.7rem}.journal-input.journal-select option{background:#0f1424;color:var(--vt-color-text-primary,#f4f7fb)}',
     '.journal-input:focus{outline:none;border-color:var(--vt-color-accent,#4ecca3);box-shadow:var(--vt-focus-ring,0 0 0 2px rgba(78,204,163,.34))}',
     '.journal-billable{display:flex;align-items:center;gap:.25rem;font-size:.74rem;color:var(--vt-color-text-secondary,#b7c0d4);white-space:nowrap}',
+    '.journal-proposals{flex-shrink:0;max-height:40%;overflow:auto;padding:.5rem .75rem .6rem;border-bottom:1px solid var(--vt-color-border,#202b46);background:var(--vt-color-surface-muted,#111629)}',
+    '.journal-proposals[hidden]{display:none}',
+    '.journal-proposals-title{font-size:.74rem;font-weight:600;color:var(--vt-color-text-secondary,#b7c0d4);margin-bottom:.4rem}',
+    '.journal-proposal{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:.7rem;align-items:center;margin-top:.4rem;padding:.6rem .7rem;border:1px solid rgba(78,204,163,.34);border-radius:var(--vt-radius-md,6px);background:var(--vt-color-surface,#15152c)}',
     '.journal-list{flex:1;min-height:0;overflow:auto;background:var(--vt-color-background,#101020)}',
     '.journal-empty{height:100%;display:flex;align-items:center;justify-content:center;color:var(--vt-color-text-muted,#7f8aa3);font-size:.86rem;padding:2rem;text-align:center}',
     '.journal-row{display:grid;grid-template-columns:8rem minmax(0,1fr) auto auto;gap:.7rem;margin:.5rem .75rem 0;padding:.75rem .85rem;border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface,#15152c);align-items:start}',
@@ -202,17 +206,19 @@
     return isNaN(date.getTime()) ? today() : date.toISOString().slice(0, 10);
   }
 
-  function candidateTime(value) {
+  function formatTime(value, locale) {
     var date = new Date(value || '');
     if (isNaN(date.getTime())) return text(value);
-    return date.toLocaleString(undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    // The engine's own locale is not the one the user chose in Verstak, and a
+    // proposal reading "Работа с Jul 20, 2026, 05:00 PM" is what that looks
+    // like.
+    return date.toLocaleString(locale || undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
   }
 
-  function candidateFromRequest(request, workspaceRoot) {
-    var value = request && request.type === 'work-session-candidate' ? request.candidate : null;
+  function normalizeCandidate(value) {
     if (!value || typeof value !== 'object') return null;
     var workspace = cleanWorkspace(value.workspaceRootPath);
-    if (!workspace || workspace !== cleanWorkspace(workspaceRoot) || !text(value.candidateId).trim()) return null;
+    if (!workspace || !text(value.candidateId).trim()) return null;
     var activities = Array.isArray(value.activities) ? value.activities.filter(function (activity) {
       return activity && text(activity.activityId).trim();
     }).map(function (activity) {
@@ -239,8 +245,18 @@
       estimatedMinutes: Math.max(0, Number(value.estimatedMinutes || 0)),
       activityCount: Math.max(0, Number(value.activityCount || activities.length)),
       activityIds: activityIds,
-      activities: activities
+      activities: activities,
+      providerLabel: '',
+      providerPluginId: ''
     };
+  }
+
+  // A proposal handed over by another tool arrives for the Deal being looked at.
+  function candidateFromRequest(request, workspaceRoot) {
+    var value = request && request.type === 'work-session-candidate' ? request.candidate : null;
+    var candidate = normalizeCandidate(value);
+    if (!candidate || candidate.workspaceRootPath !== cleanWorkspace(workspaceRoot)) return null;
+    return candidate;
   }
 
   function completedTodoFromRequest(request, workspaceRoot) {
@@ -279,6 +295,7 @@
 
     var scope = scopeFromProps(props || {});
     var entries = [];
+    var proposals = [];
     var workspaceOptions = [];
     // Filters over what an entry already records. Nothing here invents a
     // taxonomy: the Deal, whether it is billable and where it came from are
@@ -293,6 +310,10 @@
     var statusText = tr('ui.loading', null, 'Loading journal...');
     var statusClass = '';
     var modalHost = el('div', { className: 'journal-modal-host', hidden: 'hidden' });
+
+    function candidateTime(value) {
+      return formatTime(value, api && api.i18n && typeof api.i18n.getLocale === 'function' ? api.i18n.getLocale() : '');
+    }
 
     function reportError(key, fallback, err) {
       if (typeof console !== 'undefined' && typeof console.warn === 'function') {
@@ -370,9 +391,11 @@
       }));
     }
 
+    var proposalsEl = el('div', { className: 'journal-proposals', 'data-journal-proposals': '', hidden: 'hidden' });
     var listEl = el('div', { className: 'journal-list' });
     containerEl.appendChild(toolbar);
     containerEl.appendChild(filtersEl);
+    containerEl.appendChild(proposalsEl);
     containerEl.appendChild(listEl);
     containerEl.appendChild(modalHost);
 
@@ -420,6 +443,42 @@
       });
     }
 
+    // Proposals come from whoever declares a worklogProviders contribution --
+    // today Activity, tomorrow possibly something else. The Journal asks; it
+    // does not reimplement anyone's idea of what a work session was.
+    function loadProposals() {
+      if (!api || !api.contributions || typeof api.contributions.list !== 'function') return Promise.resolve();
+      if (!api.commands || typeof api.commands.executeFor !== 'function') return Promise.resolve();
+      return api.contributions.list('worklogProviders').then(function (providers) {
+        return Promise.all((Array.isArray(providers) ? providers : []).filter(function (provider) {
+          return provider && provider.pluginId && provider.handler && provider.pluginId !== PLUGIN_ID;
+        }).map(function (provider) {
+          return api.commands.executeFor(provider.pluginId, provider.handler, {
+            workspaceRootPath: scope.mode === 'workspace' ? scope.workspaceRoot : ''
+          }).then(function (response) {
+            var result = response && response.result;
+            var list = result && Array.isArray(result.candidates) ? result.candidates : [];
+            return list.map(normalizeCandidate).filter(Boolean).map(function (candidate) {
+              candidate.providerLabel = text(provider.label);
+              candidate.providerPluginId = text(provider.pluginId);
+              return candidate;
+            });
+          }).catch(function (err) {
+            console.warn('[verstak.journal] proposals from ' + provider.pluginId + ':', err);
+            return [];
+          });
+        }));
+      }).then(function (lists) {
+        var all = [];
+        lists.forEach(function (list) { all = all.concat(list); });
+        proposals = all.sort(function (a, b) {
+          return text(b.endedAt).localeCompare(text(a.endedAt)) || text(a.workspaceRootPath).localeCompare(text(b.workspaceRootPath));
+        });
+      }).catch(function (err) {
+        console.warn('[verstak.journal] list proposal providers:', err);
+      });
+    }
+
     function closeEntryModal() {
       modalHost.innerHTML = '';
       modalHost.setAttribute('hidden', 'hidden');
@@ -433,6 +492,9 @@
         'browser.capture.page': ['ui.activity.capturePage', 'Page captured'],
         'file.created': ['ui.activity.fileCreated', 'File created'],
         'file.updated': ['ui.activity.fileUpdated', 'File updated'],
+        // What the file watcher actually emits; without it every recorded file
+        // change read as a nameless "Activity".
+        'file.changed': ['ui.activity.fileUpdated', 'File updated'],
         'file.deleted': ['ui.activity.fileDeleted', 'File deleted'],
         'note.saved': ['ui.activity.noteSaved', 'Note saved'],
         'workspace.created': ['ui.activity.dealCreated', 'Deal created'],
@@ -465,6 +527,17 @@
       return list.reduce(function (sum, entry) { return sum + Math.max(0, Number(entry.minutes) || 0); }, 0);
     }
 
+    function visibleProposals() {
+      // A proposal is not an entry yet: it was written by nobody and billed to
+      // nothing, so the filters that ask about those take it out of view.
+      if (filterSource === 'manual' || filterSource === 'todo') return [];
+      if (filterBillable !== 'all') return [];
+      return proposals.filter(function (candidate) {
+        if (filterDeal && candidate.workspaceRootPath !== filterDeal) return false;
+        return !entries.some(function (entry) { return entry.sourceCandidateId === candidate.candidateId; });
+      });
+    }
+
     function entryMeta(entry) {
       var facts = [entry.workspaceRootPath, entry.billable ? tr('ui.meta.billable', null, 'billable') : tr('ui.meta.nonBillable', null, 'non-billable')];
       if (entry.activityIds.length) {
@@ -488,9 +561,18 @@
       var workspaceInput = null;
       if (scope.mode === 'global') {
         workspaceInput = el('select', { className: 'journal-input journal-select', 'data-journal-input': 'workspaceRootPath' });
-        workspaceOptions.forEach(function (workspace) {
+        // Whatever the entry or proposal already belongs to must be selectable
+        // even if the Deal folder listing did not turn it up.
+        var known = (editing && existingEntry.workspaceRootPath)
+          || (reviewingCandidate && candidate.workspaceRootPath)
+          || (reviewingTodo && completedTodo.workspaceRootPath)
+          || '';
+        var options = workspaceOptions.slice();
+        if (known && options.indexOf(known) === -1) options.unshift(known);
+        options.forEach(function (workspace) {
           workspaceInput.appendChild(el('option', { value: workspace, textContent: workspace }));
         });
+        if (known) workspaceInput.value = known;
       }
       var activityInputs = reviewingCandidate ? candidate.activities.map(function (activity) {
         var input = el('input', { type: 'checkbox', value: activity.activityId, checked: 'checked', 'data-journal-candidate-activity': activity.activityId });
@@ -610,10 +692,19 @@
       }
       entries = sortEntries(entries);
       var targetEntries = entries.filter(function (item) { return item.workspaceRootPath === workspaceRoot; });
+      // Moving an entry to another Deal has to empty its old home too, or the
+      // global list shows it twice.
+      var previousRoot = existingEntry ? cleanWorkspace(existingEntry.workspaceRootPath) : '';
+      var moved = previousRoot && previousRoot !== workspaceRoot;
       closeEntryModal();
       statusText = existingEntry ? tr('ui.updated', null, 'Entry updated') : tr('ui.added', null, 'Entry added');
       statusClass = '';
       persist(workspaceRoot, targetEntries).then(function () {
+        if (!moved) return undefined;
+        return persist(previousRoot, entries.filter(function (item) {
+          return item.workspaceRootPath === previousRoot;
+        }));
+      }).then(function () {
         if (!sessionID || !handledThrough || !api || !api.events || typeof api.events.publish !== 'function') return undefined;
         return api.events.publish('activity.session.handled', {
           sessionId: sessionID,
@@ -624,11 +715,67 @@
     }
 
     function deleteEntry(entry) {
-      if (scope.mode !== 'workspace' || !entry) return;
+      if (!entry) return;
+      // An entry is stored under its own Deal, which in the global Journal is
+      // not the one being looked at. Deleting used to write back the current
+      // scope, so in the global list the button did nothing at all.
+      var workspaceRoot = cleanWorkspace(entry.workspaceRootPath || scope.workspaceRoot);
+      if (!workspaceRoot) return;
       entries = entries.filter(function (item) { return item.entryId !== entry.entryId; });
       statusText = tr('ui.deleted', null, 'Entry deleted');
       statusClass = '';
-      persist().then(render);
+      persist(workspaceRoot, entries.filter(function (item) {
+        return item.workspaceRootPath === workspaceRoot;
+      })).then(render);
+    }
+
+    function proposalMeta(candidate) {
+      var facts = [candidate.workspaceRootPath];
+      if (candidate.activityCount) {
+        facts.push(tr(candidate.activityCount === 1 ? 'ui.meta.activities.one' : 'ui.meta.activities.many', { count: candidate.activityCount }, candidate.activityCount + ' linked activities'));
+      }
+      if (candidate.providerLabel) facts.push(candidate.providerLabel);
+      return facts.join(' · ');
+    }
+
+    function renderProposals() {
+      proposalsEl.innerHTML = '';
+      var shown = visibleProposals();
+      if (!shown.length) {
+        proposalsEl.setAttribute('hidden', 'hidden');
+        return;
+      }
+      if (typeof proposalsEl.removeAttribute === 'function') proposalsEl.removeAttribute('hidden');
+      proposalsEl.appendChild(el('div', {
+        className: 'journal-proposals-title',
+        'data-journal-proposal-count': String(shown.length),
+        textContent: tr(shown.length === 1 ? 'ui.proposals.one' : 'ui.proposals.many', { count: shown.length }, shown.length + ' possible entries')
+      }));
+      shown.forEach(function (candidate) {
+        proposalsEl.appendChild(el('div', {
+          className: 'journal-proposal',
+          'data-journal-proposal': candidate.candidateId
+        }, [
+          el('div', { className: 'journal-main' }, [
+            el('div', {
+              className: 'journal-entry-title',
+              textContent: tr('ui.proposals.rowTitle', {
+                start: candidateTime(candidate.startedAt),
+                end: candidateTime(candidate.endedAt)
+              }, 'Work between ' + candidateTime(candidate.startedAt) + ' and ' + candidateTime(candidate.endedAt))
+            }),
+            el('div', { className: 'journal-meta', textContent: proposalMeta(candidate) })
+          ]),
+          el('div', { className: 'journal-minutes', textContent: tr('ui.minutesValue', { minutes: candidate.estimatedMinutes }, candidate.estimatedMinutes + ' min') }),
+          el('button', {
+            className: 'journal-btn',
+            type: 'button',
+            'data-journal-action': 'review-proposal',
+            textContent: tr('ui.proposals.review', null, 'Review'),
+            onClick: function () { showEntryModal(null, candidate); }
+          })
+        ]));
+      });
     }
 
     function renderList() {
@@ -674,17 +821,21 @@
       statusEl.textContent = statusText;
       statusEl.className = 'journal-status' + (statusClass ? ' ' + statusClass : '');
       addBtn.disabled = false;
+      renderProposals();
       renderList();
     }
 
     render();
     Promise.all([loadStored(), loadWorkspaceOptions()]).then(function () {
       render();
+      // A proposal handed over from another tool opens straight away; asking
+      // every provider for its own list must not delay that.
       var candidate = candidateFromRequest(props && props.toolRequest, scope.workspaceRoot);
       var completedTodo = completedTodoFromRequest(props && props.toolRequest, scope.workspaceRoot);
       if (candidate) showEntryModal(null, candidate);
       else if (completedTodo) showEntryModal(null, null, completedTodo);
-    });
+      return loadProposals();
+    }).then(render);
     if (api && api.i18n && typeof api.i18n.onDidChangeLocale === 'function') {
       api.i18n.onDidChangeLocale(function () {
         titleEl.textContent = scope.mode === 'global' ? tr('ui.title', null, 'Journal') : tr('ui.workspaceTitle', { workspace: scope.label }, 'Journal · ' + scope.label);
