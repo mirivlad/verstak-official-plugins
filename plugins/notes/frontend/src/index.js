@@ -31,6 +31,7 @@
     '.notes-list{flex:1;overflow:auto;min-height:0}',
     '.notes-item{display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem;border-bottom:1px solid rgba(32,43,70,.72);cursor:pointer;font-size:.85rem}',
     '.notes-item:hover{background:var(--vt-color-surface-hover,#1b2440)}',
+    '.notes-modal-hint{font-size:.78rem;line-height:1.4;color:var(--vt-color-text-secondary,#b7c0d4);margin-bottom:.5rem}',
     '.notes-item.selected{background:var(--vt-color-surface-selected,rgba(78,204,163,.14));box-shadow:inset 2px 0 0 var(--vt-color-accent,#4ecca3)}',
     '.notes-item-icon{width:1.25rem;height:1.25rem;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--vt-color-text-muted,#7f8aa3)}',
     '.notes-item-icon svg{width:16px;height:16px;display:block;fill:currentColor}',
@@ -98,6 +99,7 @@
     note: 'M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 9h-1v1c0 .83-.67 1.5-1.5 1.5S9 12.83 9 12V9.5c0-.83.67-1.5 1.5-1.5S12 8.67 12 9.5v1h1v-1c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v2.5c0 .83-.67 1.5-1.5 1.5s-1.5-.67-1.5-1.5v-1z',
     overview: 'M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z',
     add: 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z',
+    merge: 'M17 20.41L18.41 19 15 15.59 13.59 17 17 20.41zM7.5 8H11v5.59L5.59 19 7 20.41l6-6V8h3.5L12 3.5 7.5 8z',
     rename: 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z',
     open: 'M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7zM5 5h6V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6h-2v6H5V5z',
     search: 'M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z',
@@ -178,6 +180,13 @@
 
       var notes = [];
       var selectedPath = '';
+      // Multi-select exists for merging. selectedPath stays the anchor for the
+      // single-note actions and for shift-range selection.
+      var selectedPaths = {};
+      var mergeModal = null;
+      var mergeInput = null;
+      var mergeError = null;
+      var merging = false;
       var statusText = '';
       var statusClass = '';
       var disposed = false;
@@ -272,7 +281,15 @@
         el('option', { value: 'title-desc' }, ['Z-A'])
       ]);
       var statusEl = el('span', { className: 'notes-status' });
+      var mergeBtn = el('button', {
+        className: 'notes-btn',
+        'data-action': 'merge',
+        innerHTML: iconSvg('merge') + ' ' + tr('ui.merge', null, 'Merge'),
+        onClick: function () { showMerge(); }
+      });
+      mergeBtn.style.display = 'none';
       toolbar.appendChild(createBtn);
+      toolbar.appendChild(mergeBtn);
       toolbar.appendChild(el('div', { className: 'notes-filter-group' }, [filterInput, sortSelect]));
       toolbar.appendChild(el('span', { style: { flex: '1' } }));
       toolbar.appendChild(statusEl);
@@ -387,6 +404,7 @@
       }
 
       function renderList() {
+        updateSelectionControls();
         listContainer.innerHTML = '';
         if (!notes || notes.length === 0) {
           renderEmpty(tr('ui.empty', null, 'No notes yet'));
@@ -435,10 +453,11 @@
             }));
           });
           var row = el('div', {
-            className: 'notes-item' + (note.path === selectedPath ? ' selected' : ''),
+            className: 'notes-item' + (selectedPaths[note.path] ? ' selected' : ''),
             'data-note-path': note.path,
             'data-note-title': note.title,
-            onClick: function () { selectNote(note); },
+            'data-note-selected': selectedPaths[note.path] ? 'true' : 'false',
+            onClick: function (e) { selectNote(note, e); },
             onDblclick: function () { openNote(note); }
           }, [
             el('span', { className: 'notes-item-icon', innerHTML: iconSvg('note') }),
@@ -458,9 +477,51 @@
         ]));
       }
 
-      function selectNote(note) {
+      // Ctrl/Cmd adds one, Shift takes the run from the anchor, a plain click
+      // replaces the selection -- the same gesture set the file list uses, so
+      // there is nothing new to learn here.
+      function selectNote(note, event) {
+        var shown = visibleNotes();
+        var additive = Boolean(event && (event.ctrlKey || event.metaKey));
+        var ranged = Boolean(event && event.shiftKey);
+
+        if (ranged && selectedPath) {
+          var from = shown.findIndex(function (item) { return item.path === selectedPath; });
+          var to = shown.findIndex(function (item) { return item.path === note.path; });
+          if (from !== -1 && to !== -1) {
+            if (!additive) selectedPaths = {};
+            var start = Math.min(from, to);
+            var end = Math.max(from, to);
+            for (var i = start; i <= end; i += 1) selectedPaths[shown[i].path] = true;
+            renderList();
+            updateSelectionControls();
+            return;
+          }
+        }
+
+        if (additive) {
+          if (selectedPaths[note.path]) delete selectedPaths[note.path];
+          else selectedPaths[note.path] = true;
+        } else {
+          selectedPaths = {};
+          selectedPaths[note.path] = true;
+        }
         selectedPath = note.path;
         renderList();
+        updateSelectionControls();
+      }
+
+      function selectedNotes() {
+        return visibleNotes().filter(function (note) { return selectedPaths[note.path]; });
+      }
+
+      function updateSelectionControls() {
+        if (!mergeBtn) return;
+        var count = selectedNotes().length;
+        mergeBtn.style.display = count >= 2 ? '' : 'none';
+        mergeBtn.textContent = '';
+        mergeBtn.innerHTML = iconSvg('merge') + ' ' + tr('ui.mergeCount', { count: count }, 'Merge ' + count);
+        mergeBtn.disabled = merging;
       }
 
       function openNote(note) {
@@ -489,11 +550,47 @@
         ].join('');
       }
 
-      function showNoteFormModal(mode, note) {
-        var isRename = mode === 'rename';
-        var modalTitle = isRename
-          ? tr('ui.renameTitle', null, 'Rename note')
-          : tr('ui.createTitle', null, 'Create note');
+      // One modal shape for every "name it and confirm" step. It used to
+      // branch on an isRename boolean in six places, which left no room for a
+      // third caller without adding a second boolean.
+      var noteFormModes = {
+        create: {
+          title: function () { return tr('ui.createTitle', null, 'Create note'); },
+          placeholder: function () { return tr('ui.noteTitle', null, 'Note title'); },
+          confirmLabel: function () { return tr('ui.create', null, 'Create'); },
+          initialValue: function () { return ''; },
+          confirm: function () { confirmCreate(); },
+          cancel: function () { hideCreate(); },
+          store: function (input, error) { createInput = input; createError = error; }
+        },
+        rename: {
+          title: function () { return tr('ui.renameTitle', null, 'Rename note'); },
+          placeholder: function () { return tr('ui.newTitle', null, 'New title'); },
+          confirmLabel: function () { return tr('ui.rename', null, 'Rename'); },
+          initialValue: function (note) { return note.title || fileName(note.path); },
+          confirm: function () { confirmRename(); },
+          cancel: function () { hideRename(); },
+          store: function (input, error) { renameInput = input; renameError = error; },
+          selectOnOpen: true
+        },
+        merge: {
+          title: function () { return tr('ui.mergeTitle', null, 'Merge notes'); },
+          placeholder: function () { return tr('ui.mergedNoteTitle', null, 'Title of the merged note'); },
+          confirmLabel: function () { return tr('ui.merge', null, 'Merge'); },
+          initialValue: function () { return ''; },
+          confirm: function () { confirmMerge(); },
+          cancel: function () { hideMerge(); },
+          store: function (input, error) { mergeInput = input; mergeError = error; },
+          hint: function (count) {
+            return tr('ui.mergeHint', { count: count },
+              count + ' notes will be combined into a new one. The originals are kept.');
+          }
+        }
+      };
+
+      function showNoteFormModal(mode, note, hintCount) {
+        var config = noteFormModes[mode];
+        var modalTitle = config.title();
         var overlay = el('div', {
           className: 'notes-modal-overlay',
           role: 'presentation'
@@ -502,15 +599,12 @@
         var input = el('input', {
           className: 'notes-modal-input',
           type: 'text',
-          value: isRename ? (note.title || fileName(note.path)) : '',
-          placeholder: isRename
-            ? tr('ui.newTitle', null, 'New title')
-            : tr('ui.noteTitle', null, 'Note title'),
+          placeholder: config.placeholder(),
           autocomplete: 'off',
           'aria-invalid': 'false'
         });
         input.setAttribute('data-notes-' + mode + '-input', '');
-        input.value = isRename ? (note.title || fileName(note.path)) : '';
+        input.value = config.initialValue(note);
         var error = el('div', {
           className: 'notes-modal-error',
           role: 'alert'
@@ -519,57 +613,140 @@
         var confirm = el('button', {
           className: 'notes-modal-btn confirm',
           type: 'button',
-          textContent: isRename ? tr('ui.rename', null, 'Rename') : tr('ui.create', null, 'Create'),
-          onClick: function () {
-            if (isRename) confirmRename();
-            else confirmCreate();
-          }
+          textContent: config.confirmLabel(),
+          onClick: function () { config.confirm(); }
         });
         var cancel = el('button', {
           className: 'notes-modal-btn cancel',
           type: 'button',
           textContent: tr('ui.cancel', null, 'Cancel'),
-          onClick: function () {
-            if (isRename) hideRename();
-            else hideCreate();
-          }
+          onClick: function () { config.cancel(); }
         });
         function handleFormKeydown(event) {
           if (event.key === 'Enter') {
             if (event.preventDefault) event.preventDefault();
-            if (isRename) confirmRename();
-            else confirmCreate();
+            config.confirm();
           }
           if (event.key === 'Escape') {
             if (event.preventDefault) event.preventDefault();
-            if (isRename) hideRename();
-            else hideCreate();
+            config.cancel();
           }
         }
         input.addEventListener('keydown', handleFormKeydown);
+        var modalChildren = [el('div', { className: 'notes-modal-title', textContent: modalTitle })];
+        if (config.hint) {
+          var hintEl = el('div', { className: 'notes-modal-hint', textContent: config.hint(hintCount) });
+          hintEl.setAttribute('data-notes-' + mode + '-hint', '');
+          modalChildren.push(hintEl);
+        }
+        modalChildren.push(input, error, el('div', { className: 'notes-modal-actions' }, [cancel, confirm]));
         var modal = el('div', {
           className: 'notes-modal notes-modal-form',
           role: 'dialog',
           'aria-modal': 'true',
           'aria-label': modalTitle
-        }, [
-          el('div', { className: 'notes-modal-title', textContent: modalTitle }),
-          input,
-          error,
-          el('div', { className: 'notes-modal-actions' }, [cancel, confirm])
-        ]);
+        }, modalChildren);
         overlay.appendChild(modal);
         document.body.appendChild(overlay);
-        if (isRename) {
-          renameInput = input;
-          renameError = error;
-        } else {
-          createInput = input;
-          createError = error;
-        }
+        config.store(input, error);
         input.focus();
-        if (isRename && input.select) input.select();
+        if (config.selectOnOpen && input.select) input.select();
         return overlay;
+      }
+
+      // ─── Merge ─────────────────────────────────────────────
+
+      function showMerge() {
+        if (selectedNotes().length < 2) return;
+        hideMerge();
+        mergeModal = showNoteFormModal('merge', null, selectedNotes().length);
+      }
+
+      function hideMerge() {
+        if (mergeModal) mergeModal.remove();
+        mergeModal = null;
+        mergeInput = null;
+        mergeError = null;
+      }
+
+      function setMergeError(message) {
+        if (!mergeError || !mergeInput) return;
+        mergeError.textContent = message || '';
+        mergeError.style.display = message ? 'block' : 'none';
+        mergeInput.setAttribute('aria-invalid', message ? 'true' : 'false');
+      }
+
+      // The merged note keeps each source under its own heading. Losing which
+      // note a paragraph came from would make the result impossible to check
+      // against the originals, which is why the originals are also kept.
+      function mergedContent(sources) {
+        return sources.map(function (source) {
+          var body = String(source.content || '').replace(/\s+$/, '');
+          return '## ' + source.title + '\n\n' + (body || '_' + tr('ui.mergeEmptySource', null, 'This note was empty') + '_');
+        }).join('\n\n');
+      }
+
+      function confirmMerge() {
+        if (!mergeInput || merging) return;
+        var title = mergeInput.value.trim();
+        if (!title) {
+          setMergeError(tr('ui.titleRequired', null, 'Enter a note title.'));
+          mergeInput.focus();
+          return;
+        }
+        var chosen = selectedNotes();
+        if (chosen.length < 2) {
+          setMergeError(tr('ui.mergeNeedsTwo', null, 'Select at least two notes to merge.'));
+          return;
+        }
+
+        var parent = notesParent();
+        var targetPath;
+        try {
+          targetPath = cleanPath(notesFolderPath(parent) + '/' + normalizeNoteFilename(title));
+        } catch (err) {
+          setMergeError(tr('ui.titleInvalid', null, 'This title cannot be used as a file name.'));
+          return;
+        }
+        if (chosen.some(function (note) { return note.path === targetPath; })) {
+          setMergeError(tr('ui.mergeIntoSource', null, 'Choose a title that is not one of the notes being merged.'));
+          return;
+        }
+
+        merging = true;
+        updateSelectionControls();
+        setStatus(tr('ui.merging', null, 'Merging notes...'), 'loading');
+
+        // Read every source before writing anything: a merge that produced a
+        // half-filled note because one read failed would be worse than a merge
+        // that did not happen.
+        Promise.all(chosen.map(function (note) {
+          return api.files.readText(note.path).then(function (content) {
+            return { title: note.title || fileName(note.path), content: content };
+          });
+        })).then(function (sources) {
+          return api.files.writeText(targetPath, mergedContent(sources), { createIfMissing: true, overwrite: false });
+        }).then(function () {
+          if (disposed) return;
+          merging = false;
+          hideMerge();
+          selectedPaths = {};
+          selectedPath = targetPath;
+          setStatus(tr('ui.merged', { count: chosen.length }, 'Merged ' + chosen.length + ' notes'), 'success');
+          loadNotes();
+          openNote({ path: targetPath, title: title });
+        }).catch(function (err) {
+          if (disposed) return;
+          merging = false;
+          updateSelectionControls();
+          if (isConflictError(err)) {
+            setMergeError(tr('ui.titleExists', null, 'A note with this title already exists.'));
+            setStatus('', '');
+            return;
+          }
+          setMergeError(userFacingError('ui.mergeError', 'Could not merge these notes. Please try again.', err));
+          setStatus('', '');
+        });
       }
 
       // ─── Create ────────────────────────────────────────────
@@ -693,6 +870,7 @@
           api.files.trash(note.path).then(function () {
             if (disposed) return;
             if (selectedPath === note.path) selectedPath = '';
+            delete selectedPaths[note.path];
             setStatus(tr('ui.trashed', null, 'Note moved to trash'), 'success');
             loadNotes();
           }).catch(function (err) {

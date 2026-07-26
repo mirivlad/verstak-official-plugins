@@ -161,6 +161,11 @@ function makeApi(options = {}) {
             type: entry.type,
           }));
       },
+      readText: async (relativePath) => {
+        const entry = entries.get(relativePath);
+        if (!entry) throw new Error(`not-found: ${relativePath}`);
+        return entry.content || '';
+      },
       metadata: async (relativePath) => {
         if (options.metadataAlwaysExists) return { relativePath, type: 'file' };
         const entry = entries.get(relativePath);
@@ -377,6 +382,110 @@ async function mountNotes(api) {
   await flush();
   if (createApi.entries.has('Project/Notes/First_Note.md')) {
     throw new Error('trash note did not remove the markdown file from active entries');
+  }
+
+  // ── Merging several notes into one ────────────────────────────────────
+  const mergeApi = makeApi({ metadataAlwaysExists: true });
+  mergeApi.entries.set('Project/Notes', { type: 'folder' });
+  mergeApi.entries.set('Project/Notes/Alpha.md', { type: 'file', content: '# Alpha\n\nalpha body\n' });
+  mergeApi.entries.set('Project/Notes/Beta.md', { type: 'file', content: '# Beta\n\nbeta body\n' });
+  mergeApi.entries.set('Project/Notes/Gamma.md', { type: 'file', content: '' });
+  const merge = await mountNotes(mergeApi);
+
+  const mergeButton = walk(merge.container, (node) => node.getAttribute && node.getAttribute('data-action') === 'merge');
+  if (!mergeButton) throw new Error('merge button not rendered');
+  if (mergeButton.style.display !== 'none') throw new Error('merge offered with nothing selected');
+
+  const noteRow = (title) => walk(merge.container, (node) => node.getAttribute && node.getAttribute('data-note-title') === title);
+  noteRow('Alpha').dispatchEvent('click', {});
+  await flush();
+  if (mergeButton.style.display !== 'none') throw new Error('merge offered for a single note');
+
+  noteRow('Beta').dispatchEvent('click', { ctrlKey: true });
+  await flush();
+  if (mergeButton.style.display === 'none') throw new Error('merge not offered for two selected notes');
+  if (!noteRow('Alpha') || noteRow('Alpha').getAttribute('data-note-selected') !== 'true') {
+    throw new Error('ctrl-click replaced the selection instead of adding to it');
+  }
+
+  // Shift takes the run from the anchor and replaces what was selected, the
+  // way a file list behaves: Beta is the anchor, so Alpha drops out.
+  noteRow('Gamma').dispatchEvent('click', { shiftKey: true });
+  await flush();
+  if (noteRow('Beta').getAttribute('data-note-selected') !== 'true'
+    || noteRow('Gamma').getAttribute('data-note-selected') !== 'true') {
+    throw new Error('shift-click did not select the run from the anchor');
+  }
+  if (noteRow('Alpha').getAttribute('data-note-selected') === 'true') {
+    throw new Error('shift-click added to the selection instead of replacing it');
+  }
+
+  // Ctrl with shift extends without discarding what was already chosen.
+  noteRow('Alpha').dispatchEvent('click', { ctrlKey: true });
+  await flush();
+  ['Alpha', 'Beta', 'Gamma'].forEach((title) => {
+    if (noteRow(title).getAttribute('data-note-selected') !== 'true') {
+      throw new Error(`ctrl-click did not add ${title} to the selection`);
+    }
+  });
+
+  walk(merge.container, (node) => node.getAttribute && node.getAttribute('data-action') === 'merge').click();
+  await flush();
+  const mergeModal = walk(merge.document.body, (node) => node.getAttribute && node.getAttribute('data-notes-merge-modal') !== undefined);
+  if (!mergeModal) throw new Error('merge modal did not open');
+  const mergeHint = walk(mergeModal, (node) => node.getAttribute && node.getAttribute('data-notes-merge-hint') !== undefined);
+  if (!mergeHint || !mergeHint.textContent.includes('3')) {
+    throw new Error(`the merge modal should say how many notes are being combined: ${mergeHint && mergeHint.textContent}`);
+  }
+  const mergeInput = walk(mergeModal, (node) => node.getAttribute && node.getAttribute('data-notes-merge-input') !== undefined);
+  const mergeConfirm = walk(mergeModal, (node) => node.tagName === 'BUTTON' && node.textContent === 'Merge');
+
+  // A blank title is rejected before anything is written.
+  mergeInput.value = '   ';
+  mergeConfirm.click();
+  await flush();
+  const mergeError = walk(mergeModal, (node) => node.getAttribute && node.getAttribute('data-notes-merge-error') !== undefined);
+  if (!mergeError || !mergeError.textContent) throw new Error('an empty merge title was accepted');
+
+  // So is a title that would overwrite one of the sources.
+  mergeInput.value = 'Alpha';
+  mergeConfirm.click();
+  await flush();
+  // Refused for the right reason: not "that name is taken", which is what a
+  // failed write would report, but "that is one of the notes you are merging".
+  if (mergeError.textContent !== 'Choose a title that is not one of the notes being merged.') {
+    throw new Error(`merging into one of the sources was not refused up front: ${mergeError.textContent}`);
+  }
+  if (mergeApi.entries.get('Project/Notes/Alpha.md').content !== '# Alpha\n\nalpha body\n') {
+    throw new Error('a refused merge still rewrote a source note');
+  }
+
+  mergeInput.value = 'Combined';
+  mergeConfirm.click();
+  await flush();
+
+  const merged = mergeApi.entries.get('Project/Notes/Combined.md');
+  if (!merged) throw new Error('the merged note was not created');
+  ['## Alpha', 'alpha body', '## Beta', 'beta body', '## Gamma'].forEach((fragment) => {
+    if (!merged.content.includes(fragment)) {
+      throw new Error(`merged note is missing ${fragment}: ${JSON.stringify(merged.content)}`);
+    }
+  });
+  if (merged.content.indexOf('## Alpha') > merged.content.indexOf('## Beta')) {
+    throw new Error('merged sections are not in list order');
+  }
+  // The originals stay: a merge the user cannot check against its sources is
+  // a merge they cannot trust.
+  ['Alpha', 'Beta', 'Gamma'].forEach((title) => {
+    if (!mergeApi.entries.has(`Project/Notes/${title}.md`)) {
+      throw new Error(`merging deleted the source note ${title}`);
+    }
+  });
+  if (!mergeApi.opened.some((request) => request.path === 'Project/Notes/Combined.md')) {
+    throw new Error('the merged note was not opened for review');
+  }
+  if (walk(merge.document.body, (node) => node.getAttribute && node.getAttribute('data-notes-merge-modal') !== undefined)) {
+    throw new Error('the merge modal stayed open after a successful merge');
   }
 
   console.log('notes plugin smoke passed');
