@@ -426,6 +426,15 @@
         return !workspaceRoot || path === workspaceRoot || path.indexOf(workspaceRoot + '/') === 0;
       }
 
+      function toolbarGroup(key, fallback, children, extraClass) {
+        var label = tr(key, null, fallback);
+        return el('div', {
+          className: 'files-toolbar-group' + (extraClass ? ' ' + extraClass : ''),
+          role: 'group',
+          'aria-label': label
+        }, children);
+      }
+
       var toolbar = el('div', { className: 'files-toolbar' });
       var breadcrumb = el('div', { className: 'files-breadcrumb' });
       var backBtn = iconButton('back', tr('ui.back', null, 'Back'), 'back', goBack);
@@ -452,12 +461,16 @@
       trashBtn.classList.add('danger');
       toolbar.appendChild(breadcrumb);
       [
-        el('div', { className: 'files-toolbar-group', 'aria-label': 'Navigation' }, [backBtn, forwardBtn, upBtn, refreshBtn]),
-        el('div', { className: 'files-toolbar-group', 'aria-label': 'Create' }, [newFolderBtn, newMdBtn, newTextBtn]),
-        el('div', { className: 'files-toolbar-group', 'aria-label': 'Selection actions' }, [openBtn, renameBtn, trashBtn]),
-        el('div', { className: 'files-toolbar-group', 'aria-label': 'Clipboard' }, [cutBtn, copyBtn, pasteBtn]),
+        // Named groups, so a screen reader announces which part of the toolbar
+        // the focus has moved into rather than reading twelve unrelated
+        // buttons in a row. The names are translated like everything else the
+        // user hears.
+        toolbarGroup('ui.group.navigation', 'Navigation', [backBtn, forwardBtn, upBtn, refreshBtn]),
+        toolbarGroup('ui.group.create', 'Create', [newFolderBtn, newMdBtn, newTextBtn]),
+        toolbarGroup('ui.group.selection', 'Selection actions', [openBtn, renameBtn, trashBtn]),
+        toolbarGroup('ui.group.clipboard', 'Clipboard', [cutBtn, copyBtn, pasteBtn]),
         el('span', { className: 'files-toolbar-spacer' }),
-        el('div', { className: 'files-toolbar-group files-filter-group', 'aria-label': 'Filter and sort' }, [filterInput, sortSelect])
+        toolbarGroup('ui.group.filter', 'Filter and sort', [filterInput, sortSelect], 'files-filter-group')
       ].forEach(function (node) { toolbar.appendChild(node); });
       containerEl.appendChild(toolbar);
 
