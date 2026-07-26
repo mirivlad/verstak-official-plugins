@@ -192,7 +192,7 @@ function loadFilesComponent(document) {
   vm.runInNewContext(source, sandbox, { filename: sourcePath });
   const component = registry['verstak.files'] && registry['verstak.files'].FilesView;
   if (!component) throw new Error('FilesView was not registered');
-  return { component, clipboard: sandbox.navigator.clipboard };
+  return { component, clipboard: sandbox.navigator.clipboard, window: sandbox.window };
 }
 
 function makeApi(options = {}) {
@@ -202,6 +202,44 @@ function makeApi(options = {}) {
   const moved = [];
   const copied = [];
   const listCalls = [];
+  const cancelledTransfers = new Set();
+  const transferProgressListeners = new Set();
+  const transferOutcomes = [];
+
+  // Mirrors what the host does with a batch: keep going past a failure, stop on
+  // cancellation without undoing anything, report progress after each item.
+  const runTransfers = async (transfers, transferOptions = {}, apply) => {
+    const transferId = transferOptions.transferId || '';
+    const outcome = { results: [], succeeded: 0, failed: 0, cancelled: false };
+    for (let index = 0; index < transfers.length; index += 1) {
+      if (transferId && cancelledTransfers.has(transferId)) {
+        outcome.cancelled = true;
+        transfers.slice(index).forEach((remaining) => {
+          outcome.results.push({ from: remaining.from, to: remaining.to, skipped: true });
+        });
+        break;
+      }
+      const transfer = transfers[index];
+      if (options.failTransfersFrom && options.failTransfersFrom.includes(transfer.from)) {
+        outcome.failed += 1;
+        outcome.results.push({ from: transfer.from, to: transfer.to, error: `conflict: ${transfer.to}` });
+      } else {
+        await apply(transfer);
+        outcome.succeeded += 1;
+        outcome.results.push({ from: transfer.from, to: transfer.to });
+      }
+      transferProgressListeners.forEach((listener) => listener({
+        transferId,
+        completed: index + 1,
+        total: transfers.length,
+        succeeded: outcome.succeeded,
+        failed: outcome.failed,
+        path: transfer.to,
+      }));
+    }
+    transferOutcomes.push(outcome);
+    return outcome;
+  };
   const eventHandlers = {};
   let restored = false;
   let externalVisible = false;
@@ -220,6 +258,8 @@ function makeApi(options = {}) {
     moved,
     copied,
     listCalls,
+    transferOutcomes,
+    cancelledTransfers,
     emitFileChanged(payload) {
       (eventHandlers['file.changed'] || []).forEach((handler) => handler({
         name: 'file.changed',
@@ -287,6 +327,25 @@ function makeApi(options = {}) {
       },
       copy: async (fromRelativePath, toRelativePath, copyOptions) => {
         copied.push({ fromRelativePath, toRelativePath, options: copyOptions });
+      },
+      moveMany: async (transfers, transferOptions) =>
+        runTransfers(transfers, transferOptions, async (transfer) => {
+          moved.push({ fromRelativePath: transfer.from, toRelativePath: transfer.to });
+        }),
+      copyMany: async (transfers, transferOptions) =>
+        runTransfers(transfers, transferOptions, async (transfer) => {
+          copied.push({
+            fromRelativePath: transfer.from,
+            toRelativePath: transfer.to,
+            options: { overwrite: transferOptions.overwrite },
+          });
+        }),
+      cancelTransfer: async (transferId) => {
+        cancelledTransfers.add(transferId);
+      },
+      onTransferProgress: (listener) => {
+        transferProgressListeners.add(listener);
+        return () => transferProgressListeners.delete(listener);
       },
       trash: async () => undefined,
       listTrash: async () => trashEntries.slice(),
@@ -486,7 +545,7 @@ async function flush() {
   }
 
   const transferDocument = makeDocument();
-  const { component: transferComponent } = loadFilesComponent(transferDocument);
+  const { component: transferComponent, window: transferWindow } = loadFilesComponent(transferDocument);
   const sourceApi = makeApi({
     entriesForPath: (relativeDir) => relativeDir === 'Project' ? [{
       name: 'Archive',
@@ -523,7 +582,69 @@ async function flush() {
   }])) {
     throw new Error(`cross-Deal folder copy did not use files.copy: ${JSON.stringify(targetApi.copied)}`);
   }
+  if (targetApi.transferOutcomes.length !== 1) {
+    throw new Error(`paste should issue exactly one batch, got ${targetApi.transferOutcomes.length}`);
+  }
   transferComponent.unmount(targetContainer);
+
+  // A paste that partly fails must name what did not land and keep the rest.
+  const partialApi = makeApi({ entriesForPath: () => [], failTransfersFrom: ['Project/Archive'] });
+  const partialContainer = new FakeNode('div');
+  transferWindow.__filesClipboard = {
+    action: 'copy',
+    workspaceRoot: 'Project',
+    items: [
+      { path: 'Project/Archive', name: 'Archive', type: 'folder' },
+      { path: 'Project/notes.md', name: 'notes.md', type: 'file' },
+    ],
+  };
+  transferComponent.mount(partialContainer, { workspaceRootPath: 'Test' }, partialApi);
+  await flush();
+  walk(partialContainer, (node) => node.getAttribute && node.getAttribute('data-files-action') === 'paste').click();
+  await flush();
+  const partialOutcome = partialApi.transferOutcomes[0];
+  if (!partialOutcome || partialOutcome.succeeded !== 1 || partialOutcome.failed !== 1) {
+    throw new Error(`partial paste outcome = ${JSON.stringify(partialOutcome)}`);
+  }
+  const partialNotice = walk(partialContainer, (node) => node.getAttribute && node.getAttribute('data-files-notice') === '');
+  if (!partialNotice || partialNotice.style.display === 'none') {
+    throw new Error('a partly failed paste showed no notice at all');
+  }
+  if (!String(partialNotice.textContent).includes('Archive')) {
+    throw new Error(`partial paste did not name the failed item: ${partialNotice && partialNotice.textContent}`);
+  }
+  transferComponent.unmount(partialContainer);
+
+  // Cancelling stops the batch; the plugin must say so rather than claim success.
+  const cancelApi = makeApi({ entriesForPath: () => [] });
+  const cancelContainer = new FakeNode('div');
+  transferWindow.__filesClipboard = {
+    action: 'copy',
+    workspaceRoot: 'Project',
+    items: [{ path: 'Project/Archive', name: 'Archive', type: 'folder' }],
+  };
+  const originalCopyMany = cancelApi.files.copyMany;
+  cancelApi.files.copyMany = async (transfers, transferOptions) => {
+    await cancelApi.files.cancelTransfer(transferOptions.transferId);
+    return originalCopyMany(transfers, transferOptions);
+  };
+  transferComponent.mount(cancelContainer, { workspaceRootPath: 'Test' }, cancelApi);
+  await flush();
+  walk(cancelContainer, (node) => node.getAttribute && node.getAttribute('data-files-action') === 'paste').click();
+  await flush();
+  const cancelOutcome = cancelApi.transferOutcomes[0];
+  if (!cancelOutcome || !cancelOutcome.cancelled || cancelOutcome.succeeded !== 0) {
+    throw new Error(`cancelled paste outcome = ${JSON.stringify(cancelOutcome)}`);
+  }
+  if (cancelApi.copied.length !== 0) {
+    throw new Error(`a cancelled paste copied anyway: ${JSON.stringify(cancelApi.copied)}`);
+  }
+  const cancelProgress = walk(cancelContainer, (node) => node.getAttribute && node.getAttribute('data-files-progress') === '');
+  if (!cancelProgress || cancelProgress.style.display !== 'none') {
+    throw new Error('the progress panel stayed visible after the transfer ended');
+  }
+  transferComponent.unmount(cancelContainer);
+  transferWindow.__filesClipboard = null;
 
   const russianDocument = makeDocument();
   const { component: russianComponent } = loadFilesComponent(russianDocument);
