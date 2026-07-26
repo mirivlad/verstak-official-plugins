@@ -23,6 +23,7 @@
   "ui.browserActivity.minutes": "{minutes} min",
   "ui.browserActivity.selectAll": "Select all",
   "ui.browserActivity.showAttached": "Show attached",
+  "ui.browserActivity.showUnattached": "Show unattached",
   "ui.browserActivity.title": "Browser activity",
   "ui.captureArchived": "Material archived",
   "ui.captureDeleted": "Material permanently deleted",

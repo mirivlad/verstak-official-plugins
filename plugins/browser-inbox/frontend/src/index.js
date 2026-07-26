@@ -385,12 +385,15 @@
     var unsubscribers = [];
     var domainBindings = {};
     var workspaceOptions = [];
+    var workspaceIds = {};
     var statusFilter = 'all';
     var workspaceFilter = '';
     var searchQuery = '';
     var browserActivity = [];
     var activitySelection = {};
     var showAttachedActivity = false;
+    var showUnattachedActivity = false;
+    var activityAnchorId = '';
     var activityTarget = '';
     function tr(key, params, fallback) {
       if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
@@ -845,13 +848,28 @@
       });
     }
 
+    // Inside a Deal the list is that Deal's, or every Deal's tab shows the same
+    // pages and none of them is about the Deal you are looking at. The toggle
+    // reveals the other set: unattached time here, attached time in the global
+    // tool.
     function visibleActivity() {
       return browserActivity.filter(function (item) {
         var workspaceRoot = cleanWorkspace(item && item.workspaceRootPath);
-        if (scope.mode === 'workspace') return !workspaceRoot || workspaceRoot === scope.workspaceRoot;
+        if (scope.mode === 'workspace') {
+          if (workspaceRoot === scope.workspaceRoot) return true;
+          return showUnattachedActivity && !workspaceRoot;
+        }
         if (!showAttachedActivity) return !workspaceRoot;
         return true;
       });
+    }
+
+    function indexOfActivity(list, activityId) {
+      if (!activityId) return -1;
+      for (var index = 0; index < list.length; index += 1) {
+        if (list[index].activityId === activityId) return index;
+      }
+      return -1;
     }
 
     function selectedActivityIds() {
@@ -866,14 +884,26 @@
       return scope.mode === 'workspace' ? scope.workspaceRoot : cleanWorkspace(activityTarget);
     }
 
+    // Only what is not already attached to the target: attaching a page to the
+    // Deal it is already in changes nothing, and offering it says otherwise.
+    function attachableActivityIds() {
+      var workspaceRoot = attachTarget();
+      var chosen = {};
+      selectedActivityIds().forEach(function (id) { chosen[id] = true; });
+      return browserActivity.filter(function (item) {
+        return chosen[item.activityId] && cleanWorkspace(item.workspaceRootPath) !== workspaceRoot;
+      }).map(function (item) { return item.activityId; });
+    }
+
     function attachSelectedActivity() {
-      var ids = selectedActivityIds();
+      var ids = attachableActivityIds();
       var workspaceRoot = attachTarget();
       if (!ids.length || !workspaceRoot) return Promise.resolve();
       if (!api || !api.commands || typeof api.commands.executeFor !== 'function') return Promise.resolve();
       return api.commands.executeFor(ACTIVITY_PLUGIN_ID, ASSIGN_ACTIVITY_COMMAND, {
         activityIds: ids,
-        workspaceRootPath: workspaceRoot
+        workspaceRootPath: workspaceRoot,
+        workspaceId: workspaceIds[workspaceRoot] || ''
       }).then(function (response) {
         var assigned = response && response.result && Number(response.result.assigned) || 0;
         if (!assigned) {
@@ -916,21 +946,25 @@
           ? tr('ui.browserActivity.chosen', { count: chosen.length, total: visible.length }, chosen.length + ' of ' + visible.length + ' selected')
           : String(visible.length)
       }));
-      if (scope.mode === 'global') {
-        var showAttachedInput = el('input', {
-          type: 'checkbox',
-          'data-browser-activity-show-attached': '',
-          onChange: function () {
-            showAttachedActivity = showAttachedInput.checked === true;
-            renderActivity();
-          }
-        });
-        showAttachedInput.checked = showAttachedActivity;
-        activityHeadEl.appendChild(el('label', { className: 'browser-inbox-activity-toggle' }, [
-          showAttachedInput,
-          el('span', { textContent: tr('ui.browserActivity.showAttached', null, 'Show attached') })
-        ]));
-      }
+      var otherSetInput = el('input', {
+        type: 'checkbox',
+        'data-browser-activity-show-attached': '',
+        onChange: function () {
+          if (scope.mode === 'workspace') showUnattachedActivity = otherSetInput.checked === true;
+          else showAttachedActivity = otherSetInput.checked === true;
+          activityAnchorId = '';
+          renderActivity();
+        }
+      });
+      otherSetInput.checked = scope.mode === 'workspace' ? showUnattachedActivity : showAttachedActivity;
+      activityHeadEl.appendChild(el('label', { className: 'browser-inbox-activity-toggle' }, [
+        otherSetInput,
+        el('span', {
+          textContent: scope.mode === 'workspace'
+            ? tr('ui.browserActivity.showUnattached', null, 'Show unattached')
+            : tr('ui.browserActivity.showAttached', null, 'Show attached')
+        })
+      ]));
       activityHeadEl.appendChild(el('span', { className: 'browser-inbox-spacer' }));
       activityHeadEl.appendChild(el('button', {
         className: 'browser-inbox-btn',
@@ -968,7 +1002,7 @@
         textContent: tr('ui.browserActivity.attach', null, 'Attach to Deal'),
         onClick: attachSelectedActivity
       });
-      attachBtn.disabled = chosen.length === 0 || !attachTarget();
+      attachBtn.disabled = attachableActivityIds().length === 0 || !attachTarget();
       activityHeadEl.appendChild(attachBtn);
 
       if (!visible.length) {
@@ -978,14 +1012,35 @@
         }));
         return;
       }
-      visible.forEach(function (item) {
+      visible.forEach(function (item, index) {
         var workspaceRoot = cleanWorkspace(item.workspaceRootPath);
+        // Ticking twenty pages one at a time is not selecting them in bulk,
+        // which is what this list is for. Shift takes everything between the
+        // last tick and this one, the way every other list does.
+        var extendRange = false;
         var checkbox = el('input', {
           type: 'checkbox',
           'data-browser-activity-id': item.activityId,
+          onClick: function (event) {
+            extendRange = !!(event && event.shiftKey);
+          },
           onChange: function () {
-            if (checkbox.checked) activitySelection[item.activityId] = true;
-            else delete activitySelection[item.activityId];
+            var wanted = checkbox.checked === true;
+            var anchor = indexOfActivity(visible, activityAnchorId);
+            if (extendRange && anchor !== -1) {
+              var from = Math.min(anchor, index);
+              var to = Math.max(anchor, index);
+              for (var step = from; step <= to; step += 1) {
+                if (wanted) activitySelection[visible[step].activityId] = true;
+                else delete activitySelection[visible[step].activityId];
+              }
+            } else if (wanted) {
+              activitySelection[item.activityId] = true;
+            } else {
+              delete activitySelection[item.activityId];
+            }
+            extendRange = false;
+            activityAnchorId = item.activityId;
             renderActivity();
           }
         });
@@ -1263,6 +1318,11 @@
       if (!api || !api.workspaces || typeof api.workspaces.list !== 'function') return Promise.resolve();
       return api.workspaces.list().then(function (entries) {
         var seen = {};
+        workspaceIds = {};
+        (Array.isArray(entries) ? entries : []).forEach(function (entry) {
+          var root = cleanWorkspace(entry && entry.rootPath);
+          if (root && entry && entry.id) workspaceIds[root] = text(entry.id);
+        });
         workspaceOptions = (Array.isArray(entries) ? entries : []).map(function (entry) {
           return cleanWorkspace(entry && entry.rootPath);
         }).filter(function (workspaceRoot) {

@@ -176,6 +176,16 @@ function makeApi(initialSettings = {}, locale = null, proposals = []) {
       list: async () => [
         { type: 'folder', relativePath: 'Project', name: 'Project' },
         { type: 'folder', relativePath: 'Client', name: 'Client' },
+        // A plain folder that is not a Deal, and must never be offered as one.
+        { type: 'folder', relativePath: 'Archive', name: 'Archive' },
+      ],
+    },
+    workspaces: {
+      list: async () => [
+        { id: 'deal-project', name: 'Project', rootPath: 'Project' },
+        { id: 'deal-client', name: 'Client', rootPath: 'Client' },
+        // Most Deals live inside a folder, and those were the ones missing.
+        { id: 'deal-nested', name: 'Sigma', rootPath: 'Clients/2026/Sigma' },
       ],
     },
     i18n: locale ? {
@@ -391,6 +401,14 @@ function byData(container, attr, value) {
   await flush();
   const globalWorkspace = byData(globalView.container, 'data-journal-input', 'workspaceRootPath');
   if (!globalWorkspace || globalWorkspace.tagName !== 'SELECT') throw new Error('global Journal form did not render the Deal selector');
+  // Deals, not folders, and at whatever depth they live.
+  const offeredDeals = globalWorkspace.children.map((option) => option.getAttribute('value'));
+  if (offeredDeals.indexOf('Clients/2026/Sigma') === -1) {
+    throw new Error(`a Deal inside a folder must be offered: ${JSON.stringify(offeredDeals)}`);
+  }
+  if (offeredDeals.indexOf('Archive') !== -1) {
+    throw new Error('a folder that is not a Deal must not be offered as one');
+  }
   globalWorkspace.value = 'Client';
   byData(globalView.container, 'data-journal-input', 'title').value = 'Prepare client summary';
   byData(globalView.container, 'data-journal-input', 'minutes').value = '30';
