@@ -473,6 +473,15 @@
     return label || text(activity && (activity.summary || activity.activityId)).trim() || translate('ui.event.activity', null, 'Activity event');
   }
 
+  // Measured time is said in the reader's language. The record carries a
+  // summary written by the core in English -- "18 min browser activity" --
+  // which is the one thing in this list that never got translated.
+  function humanSummary(activity, translate) {
+    var minutes = Math.round(Math.max(0, Number(activity && activity.durationSeconds) || 0) / 60);
+    if (minutes > 0) return translate('ui.browserMinutes', { minutes: minutes }, minutes + ' min in the browser');
+    return text(activity && activity.summary);
+  }
+
   function eventKind(activity, translate) {
     var type = text(activity && activity.type).toLowerCase();
     if (type.indexOf('browser.capture') === 0) return translate('ui.kind.capture', null, 'Capture');
@@ -872,7 +881,7 @@
               el('span', { className: 'activity-type', textContent: eventKind(activity, tr) }),
               el('span', { className: 'activity-title-text', textContent: humanEventTitle(activity, tr) })
             ]),
-            activity.summary ? el('div', { className: 'activity-summary', textContent: activity.summary }) : null
+            humanSummary(activity, tr) ? el('div', { className: 'activity-summary', textContent: humanSummary(activity, tr) }) : null
           ])
         ]));
       });

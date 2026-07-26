@@ -604,18 +604,31 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
     'activity-events': [{
       activityId: 'browser-domain:batch-1:0',
       type: 'browser.activity.domain',
-      title: 'example.com',
+      title: 'https://example.com/admin/settings?tab=billing',
       summary: '5 min browser activity',
       occurredAt: '2026-07-12T10:05:00Z',
       sourcePluginId: 'verstak-browser-extension',
       sourceBatchId: 'batch-1',
       hostname: 'example.com',
+      url: 'https://example.com/admin/settings?tab=billing',
       durationSeconds: 300,
-      payload: { hostname: 'example.com', durationSeconds: 300 },
+      payload: { hostname: 'example.com', url: 'https://example.com/admin/settings?tab=billing', durationSeconds: 300 },
     }],
   });
   const rawView = await mountWithApi(rawApi, {});
-  if (!rawView.container.textContent.includes('example.com')) throw new Error('append-only browser activity was not rendered');
+  // The address, not the site: which page was open is the difference between
+  // configuring a site and reading it.
+  if (!rawView.container.textContent.includes('https://example.com/admin/settings?tab=billing')) {
+    throw new Error('the page address was not rendered');
+  }
+  // Measured time is said in the reader's language, not in the English the
+  // core wrote into the record.
+  if (!rawView.container.textContent.includes('5 min in the browser')) {
+    throw new Error('browser time was not stated in the interface language');
+  }
+  if (rawView.container.textContent.includes('5 min browser activity')) {
+    throw new Error("the core's untranslated summary was shown to the user");
+  }
   const rawClear = walk(rawView.container, (node) => node.getAttribute && node.getAttribute('data-activity-action') === 'clear');
   rawClear.click();
   await flush();
