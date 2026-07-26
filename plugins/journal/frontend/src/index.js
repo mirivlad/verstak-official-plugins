@@ -27,6 +27,9 @@
     '.journal-btn svg{width:14px;height:14px;display:block;fill:currentColor}',
     '.journal-btn:hover{border-color:var(--vt-color-accent,#4ecca3);background:var(--vt-color-surface-hover,#1b2440);color:var(--vt-color-text-primary,#f4f7fb)}',
     '.journal-btn:disabled{opacity:.45;cursor:default}',
+    '.journal-filters{display:flex;align-items:center;gap:.4rem;padding:.4rem .75rem;border-bottom:1px solid var(--vt-color-border,#202b46);background:var(--vt-color-surface,#15152c);flex-wrap:wrap}',
+    '.journal-filter{font-size:.78rem;padding:.2rem .4rem;border:1px solid var(--vt-color-border-strong,#4a6b9e);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-input,#0f1424);color:var(--vt-color-text-primary,#f4f7fb)}',
+    '.journal-total{font-size:.78rem;color:var(--vt-color-text-secondary,#b7c0d4);white-space:nowrap}',
     '.journal-status{font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3)}',
     '.journal-status.error{display:inline-flex;border:1px solid rgba(233,69,96,.45);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-danger-muted,rgba(233,69,96,.14));color:#ffc6ce;padding:.18rem .4rem}',
     '.journal-input{font-size:.8rem;padding:.38rem .5rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:#0f1424;color:var(--vt-color-text-primary,#f4f7fb);min-width:0;font-family:inherit}',
@@ -277,6 +280,12 @@
     var scope = scopeFromProps(props || {});
     var entries = [];
     var workspaceOptions = [];
+    // Filters over what an entry already records. Nothing here invents a
+    // taxonomy: the Deal, whether it is billable and where it came from are
+    // all fields the entry carries.
+    var filterDeal = '';
+    var filterBillable = 'all';
+    var filterSource = 'all';
     function tr(key, params, fallback) {
       if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
       return fallback || key;
@@ -309,8 +318,58 @@
     toolbar.appendChild(statusEl);
     toolbar.appendChild(addBtn);
 
+    // A journal you cannot narrow is a pile. These are the questions actually
+    // asked of one: whose Deal, what is billable, and what did I write by hand
+    // versus accept from a proposal.
+    var filtersEl = el('div', { className: 'journal-filters', 'data-journal-filters': '' });
+
+    function filterSelect(attr, options, current, onPick) {
+      var select = el('select', { className: 'journal-filter' }, options.map(function (option) {
+        return el('option', { value: option.value, selected: option.value === current }, [option.label]);
+      }));
+      select.setAttribute(attr, '');
+      select.value = current;
+      select.addEventListener('change', function () { onPick(select.value); });
+      return select;
+    }
+
+    function buildFilters() {
+      filtersEl.innerHTML = '';
+      if (scope.mode === 'global') {
+        var deals = [{ value: '', label: tr('ui.filter.allDeals', null, 'All Deals') }];
+        var seen = {};
+        entries.forEach(function (entry) {
+          if (!entry.workspaceRootPath || seen[entry.workspaceRootPath]) return;
+          seen[entry.workspaceRootPath] = true;
+          deals.push({ value: entry.workspaceRootPath, label: entry.workspaceRootPath });
+        });
+        filtersEl.appendChild(filterSelect('data-journal-filter-deal', deals, filterDeal, function (value) {
+          filterDeal = value;
+          render();
+        }));
+      }
+      filtersEl.appendChild(filterSelect('data-journal-filter-billable', [
+        { value: 'all', label: tr('ui.filter.anyBilling', null, 'Billable and not') },
+        { value: 'billable', label: tr('ui.meta.billable', null, 'billable') },
+        { value: 'non-billable', label: tr('ui.meta.nonBillable', null, 'non-billable') }
+      ], filterBillable, function (value) { filterBillable = value; render(); }));
+      filtersEl.appendChild(filterSelect('data-journal-filter-source', [
+        { value: 'all', label: tr('ui.filter.anySource', null, 'Any source') },
+        { value: 'manual', label: tr('ui.filter.manual', null, 'Written by hand') },
+        { value: 'proposal', label: tr('ui.filter.proposal', null, 'From a proposal') },
+        { value: 'todo', label: tr('ui.filter.todo', null, 'From a todo') }
+      ], filterSource, function (value) { filterSource = value; render(); }));
+      filtersEl.appendChild(el('span', { className: 'journal-spacer' }));
+      filtersEl.appendChild(el('span', {
+        className: 'journal-total',
+        'data-journal-total': '',
+        textContent: tr('ui.totalMinutes', { minutes: totalMinutes(visibleEntries()) }, totalMinutes(visibleEntries()) + ' min total')
+      }));
+    }
+
     var listEl = el('div', { className: 'journal-list' });
     containerEl.appendChild(toolbar);
+    containerEl.appendChild(filtersEl);
     containerEl.appendChild(listEl);
     containerEl.appendChild(modalHost);
 
@@ -378,6 +437,29 @@
       };
       var label = labels[type] || ['ui.activity.generic', 'Activity'];
       return tr(label[0], null, label[1]);
+    }
+
+    // Where an entry came from. Derived, not stored: an entry made from a work
+    // session proposal carries its candidate id, one made from a finished todo
+    // carries the todo id, and anything else was typed by hand.
+    function entrySource(entry) {
+      if (entry.sourceCandidateId) return 'proposal';
+      if (entry.sourceTodoId) return 'todo';
+      return 'manual';
+    }
+
+    function visibleEntries() {
+      return entries.filter(function (entry) {
+        if (filterDeal && entry.workspaceRootPath !== filterDeal) return false;
+        if (filterBillable === 'billable' && !entry.billable) return false;
+        if (filterBillable === 'non-billable' && entry.billable) return false;
+        if (filterSource !== 'all' && entrySource(entry) !== filterSource) return false;
+        return true;
+      });
+    }
+
+    function totalMinutes(list) {
+      return list.reduce(function (sum, entry) { return sum + Math.max(0, Number(entry.minutes) || 0); }, 0);
     }
 
     function entryMeta(entry) {
@@ -548,11 +630,17 @@
 
     function renderList() {
       listEl.innerHTML = '';
-      if (!entries.length) {
-        listEl.appendChild(el('div', { className: 'journal-empty', textContent: tr('ui.empty', null, 'No worklog entries yet.') }));
+      var shown = visibleEntries();
+      if (!shown.length) {
+        listEl.appendChild(el('div', {
+          className: 'journal-empty',
+          textContent: entries.length
+            ? tr('ui.noMatches', null, 'No entries match these filters.')
+            : tr('ui.empty', null, 'No worklog entries yet.')
+        }));
         return;
       }
-      entries.forEach(function (entry) {
+      shown.forEach(function (entry) {
         listEl.appendChild(el('div', {
           className: 'journal-row',
           'data-journal-entry': entry.entryId
@@ -564,20 +652,22 @@
             el('div', { className: 'journal-meta', textContent: entryMeta(entry) })
           ]),
           el('div', { className: 'journal-minutes', textContent: tr('ui.minutesValue', { minutes: entry.minutes }, entry.minutes + ' min') }),
-          scope.mode === 'workspace' ? el('div', { className: 'journal-row-actions' }, [
+          el('div', { className: 'journal-row-actions' }, [
             el('button', { className: 'journal-icon-btn', type: 'button', title: tr('ui.edit', null, 'Edit'), 'aria-label': tr('ui.edit', null, 'Edit'), 'data-journal-action': 'edit', innerHTML: iconSvg('edit'), onClick: function () { showEntryModal(entry); } }),
             el('button', { className: 'journal-icon-btn danger', type: 'button', title: tr('ui.delete', null, 'Delete'), 'aria-label': tr('ui.delete', null, 'Delete'), 'data-journal-action': 'delete', innerHTML: iconSvg('trash'), onClick: function () { deleteEntry(entry); } })
-          ]) : null
+          ])
         ]));
       });
     }
 
     function render() {
+      var shownCount = visibleEntries().length;
       countEl.textContent = tr(
-        entries.length === 1 ? 'ui.entryCount.one' : 'ui.entryCount.many',
-        { count: entries.length },
-        entries.length === 1 ? '{count} entry' : '{count} entries'
+        shownCount === 1 ? 'ui.entryCount.one' : 'ui.entryCount.many',
+        { count: shownCount },
+        shownCount === 1 ? '{count} entry' : '{count} entries'
       );
+      buildFilters();
       statusEl.textContent = statusText;
       statusEl.className = 'journal-status' + (statusClass ? ' ' + statusClass : '');
       addBtn.disabled = false;
