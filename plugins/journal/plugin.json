@@ -18,7 +18,8 @@
     "files.read",
     "files.write",
     "storage.namespace",
-    "ui.register"
+    "ui.register",
+    "workbench.open"
   ],
   "frontend": {
     "entry": "frontend/src/index.js"
