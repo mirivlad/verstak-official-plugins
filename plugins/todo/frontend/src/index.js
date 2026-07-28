@@ -675,6 +675,16 @@
     Promise.all([loadStored(), loadWorkspaceOptions()]).then(function () {
       render();
     });
+    // A todo written on another machine arrives while this list is on screen.
+    // Without this it appears only the next time the view is mounted, which
+    // looks exactly like sync not working.
+    if (api && api.events && typeof api.events.subscribe === 'function') {
+      api.events.subscribe('plugin.records.changed', function (event) {
+        var payload = (event && event.payload) || {};
+        if (payload.pluginId && payload.pluginId !== PLUGIN_ID) return;
+        loadStored().then(render);
+      });
+    }
     if (api && api.i18n && typeof api.i18n.onDidChangeLocale === 'function') {
       api.i18n.onDidChangeLocale(function () {
         titleEl.textContent = scope.mode === 'global' ? tr('ui.title', null, 'Todos') : tr('ui.workspaceTitle', { workspace: scope.label }, 'Todos · ' + scope.label);

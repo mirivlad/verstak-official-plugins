@@ -16,11 +16,17 @@
     "verstak/core/notifications/v1"
   ],
   "permissions": [
+    "events.subscribe",
     "files.read",
     "storage.namespace",
     "ui.register",
     "notifications.schedule"
   ],
+  "sync": {
+    "records": [
+      { "id": "todos", "storage": "settings", "key": "todos:global", "identity": "id" }
+    ]
+  },
   "frontend": {
     "entry": "frontend/src/index.js"
   },
