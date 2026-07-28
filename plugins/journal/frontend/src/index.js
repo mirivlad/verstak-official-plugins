@@ -344,7 +344,9 @@
       lines.push('| ' + [
         tr('ui.date', null, 'Date'),
         tr('ui.fieldTitle', null, 'Title'),
-        tr('ui.minutes', null, 'Minutes'),
+        // The column holds "1 h 30 min", so it is not called Minutes. The CSV
+        // one is, because there it really is a number of them.
+        tr('ui.report.timeColumn', null, 'Time'),
         tr('ui.billable', null, 'Billable')
       ].join(' | ') + ' |');
       lines.push('| --- | --- | --- | --- |');
@@ -1675,11 +1677,12 @@
             el('div', { className: 'journal-entry-title', textContent: group.deal }),
             el('div', { className: 'journal-minutes', 'data-journal-report-deal-total': String(group.minutes), textContent: formatDuration(group.minutes, tr) })
           ]),
-          el('div', { className: 'journal-meta', textContent: tr('ui.report.dealTotal', {
-            deal: group.deal,
-            total: formatDuration(group.minutes, tr),
-            billable: formatDuration(group.billableMinutes, tr)
-          }, group.deal + ': ' + formatDuration(group.minutes, tr) + ', billable ' + formatDuration(group.billableMinutes, tr)) })
+          // The Deal's total is already beside its name; what this adds is how
+          // much of it is billable.
+          el('div', { className: 'journal-meta', textContent: tr('ui.report.dealBillable', {
+            billable: formatDuration(group.billableMinutes, tr),
+            total: formatDuration(group.minutes, tr)
+          }, 'billable ' + formatDuration(group.billableMinutes, tr) + ' of ' + formatDuration(group.minutes, tr)) })
         ]);
         group.days.forEach(function (day) {
           day.entries.forEach(function (entry) {
