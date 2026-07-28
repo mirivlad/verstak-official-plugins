@@ -104,6 +104,21 @@ with open(path, 'w', encoding='utf-8') as f:
     return 1
   fi
 
+  # 6. checksums.txt
+  #
+  # A package travels through a build, an install script, a .deb and whatever
+  # the user's own copy did to it. This says what left here, so a plugin that
+  # arrives half-copied or a version behind is caught at discovery rather than
+  # by a plugin behaving oddly. It is a checksum, not a signature: it detects
+  # damage, not somebody who meant it.
+  (
+    cd "$dist_dir"
+    find . -type f ! -name checksums.txt -printf '%P\n' | LC_ALL=C sort | while read -r file; do
+      printf '%s  %s\n' "$(sha256sum "$file" | cut -d' ' -f1)" "$file"
+    done > checksums.txt
+  )
+  echo "    └─ checksums.txt ($(wc -l < "$dist_dir/checksums.txt") entries)"
+
   local file_count
   file_count=$(find "$dist_dir" -type f | wc -l)
   echo "    └─ dist package: $file_count file(s)"
