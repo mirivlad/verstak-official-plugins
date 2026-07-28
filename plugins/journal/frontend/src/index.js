@@ -164,23 +164,6 @@
     return value.map(function (item) { return normalizeEntry(item, storageKey); });
   }
 
-  function storageEntries(entryList) {
-    return entryList.map(function (entry) {
-      return {
-        entryId: entry.entryId,
-        workspaceRootPath: entry.workspaceRootPath,
-        date: entry.date,
-        title: entry.title,
-        summary: entry.summary,
-        minutes: entry.minutes,
-        billable: entry.billable,
-        sourceCandidateId: entry.sourceCandidateId,
-        sourceTodoId: entry.sourceTodoId,
-        activityIds: entry.activityIds || []
-      };
-    });
-  }
-
   function sortEntries(entryList) {
     var seen = {};
     return entryList.filter(function (entry) {
@@ -203,6 +186,212 @@
 
   function entryId(workspaceRoot, date, title) {
     return 'journal:' + cleanWorkspace(workspaceRoot || 'Global') + ':' + text(date) + ':' + encodeKey(title).slice(0, 48) + ':' + Date.now();
+  }
+
+  // =====================================================================
+  // The worklog is a document, not a setting
+  //
+  // What a worklog is for is showing someone: a client, an accountant, or
+  // yourself next March. It lived in the plugin's settings, which is a JSON
+  // blob under `.verstak` -- a path sync skips by design and no editor opens.
+  // It now lives in the Deal it belongs to, one ordinary Markdown file per
+  // month, and travels with every other file the vault carries.
+  //
+  //   <Deal>/Журнал/2026-07.md
+  //
+  // The prose belongs to the user. The comment at the end of each entry holds
+  // only what has no readable form -- which entry this is, and what it was
+  // made from. Where the two overlap the prose wins: someone who opens the
+  // file and changes "45 мин" to "90 мин" means it.
+  // =====================================================================
+  var JOURNAL_FOLDER = 'Журнал';
+  var ENTRY_MARK = '<!-- verstak-entry ';
+  var ENTRY_MARK_END = ' -->';
+  var MIGRATION_KEY = 'worklogVaultMigration';
+  var MONTH_FILE = /^(\d{4}-\d{2})\.md$/;
+  // "45 мин · к оплате" and its English twin, and nothing looser: a body whose
+  // first line merely mentions minutes must stay a body.
+  var META_LINE = /^(\d{1,6})\s*(?:мин|минут|min|minutes)[а-яё.]*\s*(?:·\s*(.+?))?\s*$/i;
+  // The words the journal itself writes, in both languages it speaks. A file
+  // written in Russian still reads correctly after the user switches to
+  // English, because what the entry is worth is also in the record below it.
+  var BILLABLE_WORDS = { 'оплачиваемая': true, 'billable': true, 'к оплате': true };
+  var NON_BILLABLE_WORDS = { 'неоплачиваемая': true, 'non-billable': true, 'не к оплате': true };
+
+  function monthOf(date) {
+    return text(date).slice(0, 7);
+  }
+
+  function journalFolderPath(dealRoot) {
+    return cleanWorkspace(dealRoot) + '/' + JOURNAL_FOLDER;
+  }
+
+  function monthFilePath(dealRoot, month) {
+    return journalFolderPath(dealRoot) + '/' + text(month) + '.md';
+  }
+
+  // A body line that looks like structure would be read back as structure.
+  // A backslash is Markdown's own way of saying "this is text".
+  function escapeBodyLine(line) {
+    if (/^\s*#{1,6}\s/.test(line) || line.indexOf(ENTRY_MARK) === 0) return '\\' + line;
+    return line;
+  }
+
+  function unescapeBodyLine(line) {
+    if (line.indexOf('\\') !== 0) return line;
+    var rest = line.slice(1);
+    if (/^\s*#{1,6}\s/.test(rest) || rest.indexOf(ENTRY_MARK) === 0) return rest;
+    return line;
+  }
+
+  function metaLine(entry, tr) {
+    var minutes = Math.max(0, Number(entry.minutes) || 0);
+    return tr('ui.minutesValue', { minutes: minutes }, minutes + ' min')
+      + ' · '
+      + (entry.billable ? tr('ui.meta.billable', null, 'billable') : tr('ui.meta.nonBillable', null, 'non-billable'));
+  }
+
+  // Only what the prose cannot carry. An entry typed by hand has none of it and
+  // is still a journal entry.
+  function entryRecord(entry) {
+    var record = { entryId: entry.entryId };
+    if (entry.sourceCandidateId) record.sourceCandidateId = entry.sourceCandidateId;
+    if (entry.sourceTodoId) record.sourceTodoId = entry.sourceTodoId;
+    if (entry.activityIds && entry.activityIds.length) record.activityIds = entry.activityIds;
+    record.minutes = Math.max(0, Number(entry.minutes) || 0);
+    record.billable = entry.billable === true;
+    return record;
+  }
+
+  function fileEntryId(dealRoot, date, title, index) {
+    return 'journal:' + cleanWorkspace(dealRoot || 'Global') + ':' + text(date) + ':' + encodeKey(title).slice(0, 48) + ':#' + index;
+  }
+
+  function sortForFile(entryList) {
+    return entryList.slice().sort(function (a, b) {
+      return text(a.date).localeCompare(text(b.date)) || text(a.entryId).localeCompare(text(b.entryId));
+    });
+  }
+
+  function renderMonthFile(dealRoot, month, entryList, tr) {
+    var deal = cleanWorkspace(dealRoot);
+    var lines = [
+      '---',
+      'verstak: worklog',
+      'version: 1',
+      'deal: "' + deal.replace(/"/g, '\\"') + '"',
+      'month: ' + text(month),
+      '---',
+      '',
+      '# ' + tr('file.heading', { deal: deal, month: text(month) }, 'Journal — ' + deal + ' — ' + text(month)),
+      ''
+    ];
+    var byDate = {};
+    var dates = [];
+    sortForFile(entryList).forEach(function (entry) {
+      if (!byDate[entry.date]) {
+        byDate[entry.date] = [];
+        dates.push(entry.date);
+      }
+      byDate[entry.date].push(entry);
+    });
+    dates.forEach(function (date) {
+      lines.push('## ' + date, '');
+      byDate[date].forEach(function (entry) {
+        lines.push('### ' + text(entry.title).replace(/\s+/g, ' ').trim(), '');
+        lines.push(metaLine(entry, tr), '');
+        var body = text(entry.summary).replace(/\r\n/g, '\n').replace(/[ \t\n]+$/, '');
+        if (body) {
+          body.split('\n').forEach(function (line) { lines.push(escapeBodyLine(line)); });
+          lines.push('');
+        }
+        lines.push(ENTRY_MARK + JSON.stringify(entryRecord(entry)) + ENTRY_MARK_END, '');
+      });
+    });
+    return lines.join('\n').replace(/[ \t\n]+$/, '') + '\n';
+  }
+
+  function parseRecord(value) {
+    try {
+      var parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch (err) {
+      return {};
+    }
+  }
+
+  function finishFileEntry(pending, dealRoot) {
+    var record = pending.record || {};
+    var bodyLines = pending.bodyLines.slice();
+    while (bodyLines.length && !text(bodyLines[0]).trim()) bodyLines.shift();
+    var minutes = Math.max(0, Number(record.minutes) || 0);
+    var billable = record.billable === true;
+    if (bodyLines.length) {
+      var meta = META_LINE.exec(text(bodyLines[0]).trim());
+      if (meta) {
+        minutes = Math.max(0, Number(meta[1]) || 0);
+        var word = text(meta[2]).trim().toLowerCase();
+        if (NON_BILLABLE_WORDS[word]) billable = false;
+        else if (BILLABLE_WORDS[word]) billable = true;
+        bodyLines.shift();
+      }
+    }
+    while (bodyLines.length && !text(bodyLines[0]).trim()) bodyLines.shift();
+    while (bodyLines.length && !text(bodyLines[bodyLines.length - 1]).trim()) bodyLines.pop();
+    return normalizeEntry({
+      entryId: text(record.entryId) || fileEntryId(dealRoot, pending.date, pending.title, pending.index),
+      workspaceRootPath: cleanWorkspace(dealRoot),
+      date: pending.date,
+      title: pending.title,
+      summary: bodyLines.map(unescapeBodyLine).join('\n'),
+      minutes: minutes,
+      billable: billable,
+      sourceCandidateId: record.sourceCandidateId,
+      sourceTodoId: record.sourceTodoId,
+      activityIds: record.activityIds
+    });
+  }
+
+  function parseMonthFile(content, dealRoot, month) {
+    var lines = text(content).replace(/\r\n/g, '\n').split('\n');
+    var index = 0;
+    var start = 0;
+    if (lines[0] === '---') {
+      var close = lines.indexOf('---', 1);
+      if (close > 0) start = close + 1;
+    }
+    var currentDate = text(month) + '-01';
+    var parsed = [];
+    var pending = null;
+    function flush() {
+      if (!pending) return;
+      parsed.push(finishFileEntry(pending, dealRoot));
+      pending = null;
+    }
+    for (var i = start; i < lines.length; i += 1) {
+      var line = lines[i];
+      var titleMatch = /^###\s+(.+?)\s*$/.exec(line);
+      if (titleMatch) {
+        flush();
+        index += 1;
+        pending = { date: currentDate, title: titleMatch[1], bodyLines: [], record: null, index: index };
+        continue;
+      }
+      var dateMatch = /^##\s+(\d{4}-\d{2}-\d{2})\s*$/.exec(line);
+      if (dateMatch) {
+        flush();
+        currentDate = dateMatch[1];
+        continue;
+      }
+      if (!pending) continue;
+      if (line.indexOf(ENTRY_MARK) === 0 && line.slice(-ENTRY_MARK_END.length) === ENTRY_MARK_END) {
+        pending.record = parseRecord(line.slice(ENTRY_MARK.length, line.length - ENTRY_MARK_END.length));
+        continue;
+      }
+      pending.bodyLines.push(line);
+    }
+    flush();
+    return parsed;
   }
 
   function candidateDate(value) {
@@ -430,13 +619,144 @@
     containerEl.appendChild(listEl);
     containerEl.appendChild(modalHost);
 
-    function persist(workspaceRoot, values) {
-      if (!api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve();
-      var target = cleanWorkspace(workspaceRoot || scope.workspaceRoot);
-      if (!target) return Promise.resolve();
-      return api.settings.write(WORKLOG_PREFIX + encodeKey(target), storageEntries(values || entries)).catch(function (err) {
+    // Saving the journal is the plugin keeping its own records, so the write
+    // says so and never turns into a proposal to journal about journalling.
+    function serviceWrite() {
+      return { createIfMissing: true, overwrite: true, service: true };
+    }
+
+    var journalFolderReady = {};
+    var migration = { version: 1, deals: {} };
+
+    function ensureJournalFolder(dealRoot) {
+      var folder = journalFolderPath(dealRoot);
+      if (journalFolderReady[folder]) return Promise.resolve();
+      if (!api || !api.files || typeof api.files.createFolder !== 'function') return Promise.resolve();
+      return api.files.createFolder(folder).catch(function (err) {
+        // Already there is the ordinary case after the first entry.
+        if (String((err && err.message) || err).indexOf('conflict') === -1) throw err;
+      }).then(function () {
+        journalFolderReady[folder] = true;
+      });
+    }
+
+    function readDealEntries(dealRoot) {
+      var deal = cleanWorkspace(dealRoot);
+      if (!deal || !api || !api.files || typeof api.files.list !== 'function' || typeof api.files.readText !== 'function') {
+        return Promise.resolve([]);
+      }
+      return api.files.list(journalFolderPath(deal)).then(function (found) {
+        var months = (Array.isArray(found) ? found : []).map(function (item) {
+          if (!item || item.type === 'folder') return null;
+          var match = MONTH_FILE.exec(text(item.name));
+          return match ? { month: match[1], path: text(item.relativePath) } : null;
+        }).filter(Boolean);
+        return Promise.all(months.map(function (item) {
+          return api.files.readText(item.path).then(function (content) {
+            return parseMonthFile(content, deal, item.month);
+          }).catch(function (err) {
+            console.warn('[verstak.journal] read ' + item.path + ':', err);
+            return [];
+          });
+        }));
+      }).then(function (lists) {
+        var all = [];
+        lists.forEach(function (list) { all = all.concat(list); });
+        return all;
+      }).catch(function () {
+        // A Deal nobody has journalled in has no journal folder, which is not
+        // an error and must not be reported as one.
+        return [];
+      });
+    }
+
+    function writeMonths(dealRoot, months, entryList) {
+      var deal = cleanWorkspace(dealRoot);
+      var wanted = {};
+      (months || []).forEach(function (month) { if (month) wanted[month] = true; });
+      var targets = Object.keys(wanted).sort();
+      if (!deal || !targets.length) return Promise.resolve();
+      if (!api || !api.files || typeof api.files.writeText !== 'function') return Promise.resolve();
+      var list = entryList || entries;
+      return ensureJournalFolder(deal).then(function () {
+        return targets.reduce(function (chain, month) {
+          return chain.then(function () {
+            var forMonth = list.filter(function (entry) {
+              return cleanWorkspace(entry.workspaceRootPath) === deal && monthOf(entry.date) === month;
+            });
+            return api.files.writeText(monthFilePath(deal, month), renderMonthFile(deal, month, forMonth, tr), serviceWrite());
+          });
+        }, Promise.resolve());
+      });
+    }
+
+    function persist(workspaceRoot, months, values) {
+      return writeMonths(workspaceRoot, months, values).catch(function (err) {
         reportError('ui.saveError', 'Could not save journal. Please try again.', err);
       });
+    }
+
+    function normalizeMigration(value) {
+      var stored = value && typeof value === 'object' && value.deals && typeof value.deals === 'object' ? value.deals : {};
+      var deals = {};
+      Object.keys(stored).forEach(function (key) { deals[key] = text(stored[key]); });
+      return { version: 1, deals: deals };
+    }
+
+    function rememberMigration(dealRoot) {
+      migration.deals[cleanWorkspace(dealRoot)] = new Date().toISOString();
+      if (!api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve();
+      return api.settings.write(MIGRATION_KEY, migration).catch(function (err) {
+        console.warn('[verstak.journal] record worklog migration:', err);
+      });
+    }
+
+    // Worklogs written before this version are in plugin settings. They are
+    // copied into the Deal once; the settings copy is left exactly where it is,
+    // because deleting the only other copy to make a migration look tidy is how
+    // people lose a year of billing.
+    function migrateDeal(dealRoot, settings, vaultEntries) {
+      var deal = cleanWorkspace(dealRoot);
+      if (!deal || migration.deals[deal]) return Promise.resolve(vaultEntries);
+      var key = WORKLOG_PREFIX + encodeKey(deal);
+      var stored = normalizeEntries(settings[key], key).map(function (entry) {
+        entry.workspaceRootPath = deal;
+        return entry;
+      });
+      if (!stored.length) return rememberMigration(deal).then(function () { return vaultEntries; });
+      var known = {};
+      vaultEntries.forEach(function (entry) { known[entry.entryId] = true; });
+      var missing = stored.filter(function (entry) { return !known[entry.entryId]; });
+      var merged = sortEntries(vaultEntries.concat(missing));
+      if (!missing.length) return rememberMigration(deal).then(function () { return merged; });
+      var months = {};
+      merged.forEach(function (entry) { months[monthOf(entry.date)] = true; });
+      return writeMonths(deal, Object.keys(months), merged).then(function () {
+        return rememberMigration(deal);
+      }).then(function () {
+        return merged;
+      }).catch(function (err) {
+        // The old copy is still there and the entries are on screen. Saying
+        // nothing louder than a warning keeps a failed copy from reading like
+        // lost work.
+        console.warn('[verstak.journal] move worklog of ' + deal + ' into the Deal:', err);
+        return merged;
+      });
+    }
+
+    // Every Deal this Journal has to speak for: the ones that exist, plus any
+    // named by a worklog written before the move into the vault.
+    function dealsInScope(settings) {
+      if (scope.mode === 'workspace') return scope.workspaceRoot ? [scope.workspaceRoot] : [];
+      var seen = {};
+      var deals = [];
+      workspaceOptions.concat(worklogKeys(settings).map(decodeWorkspaceKey)).forEach(function (deal) {
+        var target = cleanWorkspace(deal);
+        if (!target || seen[target]) return;
+        seen[target] = true;
+        deals.push(target);
+      });
+      return deals;
     }
 
     // Deals, not folders. Listing the vault root offered every top-level
@@ -467,23 +787,29 @@
     }
 
     function loadStored() {
-      if (!api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve();
-      if (scope.mode === 'global') {
-        return api.settings.read().then(function (settings) {
-          var all = [];
-          worklogKeys(settings || {}).forEach(function (key) {
-            all = all.concat(normalizeEntries((settings || {})[key], key));
+      var readSettings = api && api.settings && typeof api.settings.read === 'function'
+        ? api.settings.read()
+        : Promise.resolve({});
+      return readSettings.then(function (stored) {
+        var settings = stored || {};
+        migration = normalizeMigration(settings[MIGRATION_KEY]);
+        var deals = dealsInScope(settings);
+        // One Deal at a time: a migration writes files, and a dozen Deals
+        // migrating at once is a dozen interleaved writes into the same vault.
+        return deals.reduce(function (chain, deal) {
+          return chain.then(function (collected) {
+            return readDealEntries(deal).then(function (found) {
+              return migrateDeal(deal, settings, found);
+            }).then(function (dealEntries) {
+              return collected.concat(dealEntries);
+            });
           });
-          entries = sortEntries(all);
-          statusText = tr('ui.aggregating', null, 'Aggregating worklogs');
-          statusClass = '';
-        }).catch(function (err) {
-          reportError('ui.loadError', 'Could not load journal. Please try again.', err);
-        });
-      }
-      return api.settings.read(scope.key).then(function (stored) {
-        entries = sortEntries(normalizeEntries(stored, scope.key));
-        statusText = tr('ui.ready', null, 'Ready');
+        }, Promise.resolve([]));
+      }).then(function (all) {
+        entries = sortEntries(all);
+        statusText = scope.mode === 'global'
+          ? tr('ui.aggregating', null, 'Aggregating worklogs')
+          : tr('ui.ready', null, 'Ready');
         statusClass = '';
       }).catch(function (err) {
         reportError('ui.loadError', 'Could not load journal. Please try again.', err);
@@ -755,7 +1081,12 @@
         entries = [entry].concat(entries);
       }
       entries = sortEntries(entries);
-      var targetEntries = entries.filter(function (item) { return item.workspaceRootPath === workspaceRoot; });
+      // Only the months that changed are rewritten. A Deal journalled in for
+      // three years has thirty-six files, and saving one entry is not a reason
+      // to rewrite all of them.
+      var previousMonth = existingEntry ? monthOf(existingEntry.date) : '';
+      var months = [monthOf(entry.date)];
+      if (previousMonth && previousMonth !== months[0]) months.push(previousMonth);
       // Moving an entry to another Deal has to empty its old home too, or the
       // global list shows it twice.
       var previousRoot = existingEntry ? cleanWorkspace(existingEntry.workspaceRootPath) : '';
@@ -763,11 +1094,9 @@
       closeEntryModal();
       statusText = existingEntry ? tr('ui.updated', null, 'Entry updated') : tr('ui.added', null, 'Entry added');
       statusClass = '';
-      persist(workspaceRoot, targetEntries).then(function () {
+      persist(workspaceRoot, months, entries).then(function () {
         if (!moved) return undefined;
-        return persist(previousRoot, entries.filter(function (item) {
-          return item.workspaceRootPath === previousRoot;
-        }));
+        return persist(previousRoot, [previousMonth || monthOf(entry.date)], entries);
       }).then(function () {
         if (!sessionID || !handledThrough || !api || !api.events || typeof api.events.publish !== 'function') return undefined;
         return api.events.publish('activity.session.handled', {
@@ -788,9 +1117,7 @@
       entries = entries.filter(function (item) { return item.entryId !== entry.entryId; });
       statusText = tr('ui.deleted', null, 'Entry deleted');
       statusClass = '';
-      persist(workspaceRoot, entries.filter(function (item) {
-        return item.workspaceRootPath === workspaceRoot;
-      })).then(render);
+      persist(workspaceRoot, [monthOf(entry.date)], entries).then(render);
     }
 
     var BREAKDOWN_FALLBACKS = {
@@ -1050,7 +1377,9 @@
     }
 
     render();
-    Promise.all([loadStored(), loadWorkspaceOptions()]).then(function () {
+    // The Deals have to be known before the journal can be read: in the global
+    // Journal they are the list of places to read it from.
+    loadWorkspaceOptions().then(loadStored).then(function () {
       render();
       // A proposal handed over from another tool opens straight away; asking
       // every provider for its own list must not delay that.

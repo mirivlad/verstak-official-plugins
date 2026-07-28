@@ -2,6 +2,7 @@
   "contributions.sidebarItems.verstak.journal.sidebar.title": "Journal",
   "contributions.views.verstak.journal.view.title": "Journal",
   "contributions.workspaceItems.verstak.journal.workspace.title": "Journal",
+  "file.heading": "Journal — {deal} — {month}",
   "manifest.description": "Deal-scoped journal with user-authored entries and optional Activity links.",
   "manifest.name": "Journal",
   "ui.activity.captureLink": "Link captured",

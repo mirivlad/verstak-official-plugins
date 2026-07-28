@@ -2,6 +2,7 @@
   "contributions.sidebarItems.verstak.journal.sidebar.title": "Журнал",
   "contributions.views.verstak.journal.view.title": "Журнал",
   "contributions.workspaceItems.verstak.journal.workspace.title": "Журнал",
+  "file.heading": "Журнал — {deal} — {month}",
   "manifest.description": "Журнал Дела с ручными записями и необязательными связями с активностью.",
   "manifest.name": "Журнал",
   "ui.activity.captureLink": "Сохранена ссылка",

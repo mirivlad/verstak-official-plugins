@@ -133,13 +133,82 @@ function loadComponent(document) {
   return component;
 }
 
-function makeApi(initialSettings = {}, locale = null, proposals = []) {
+const ENTRY_MARK = '<!-- verstak-entry ';
+const ENTRY_MARK_END = ' -->';
+
+// An outside reader of the file, written on purpose without reusing the
+// plugin's own parser: what this recovers is what a person or another program
+// can recover from the vault.
+function readVaultMonth(content, dealRoot) {
+  const found = [];
+  let date = '';
+  let current = null;
+  const finish = () => {
+    if (!current) return;
+    const body = current.body.slice();
+    while (body.length && !body[0].trim()) body.shift();
+    if (body.length && /^\d+\s*(?:мин|min)/i.test(body[0].trim())) {
+      current.metaLine = body.shift().trim();
+    }
+    while (body.length && !body[0].trim()) body.shift();
+    while (body.length && !body[body.length - 1].trim()) body.pop();
+    current.summary = body.join('\n');
+    delete current.body;
+    found.push(current);
+    current = null;
+  };
+  for (const line of String(content).split('\n')) {
+    const title = /^###\s+(.+?)\s*$/.exec(line);
+    if (title) {
+      finish();
+      current = {
+        workspaceRootPath: dealRoot,
+        date,
+        title: title[1],
+        minutes: 0,
+        billable: false,
+        activityIds: [],
+        sourceCandidateId: '',
+        sourceTodoId: '',
+        metaLine: '',
+        body: [],
+      };
+      continue;
+    }
+    const day = /^##\s+(\d{4}-\d{2}-\d{2})\s*$/.exec(line);
+    if (day) {
+      finish();
+      date = day[1];
+      continue;
+    }
+    if (!current) continue;
+    if (line.startsWith(ENTRY_MARK) && line.endsWith(ENTRY_MARK_END)) {
+      Object.assign(current, JSON.parse(line.slice(ENTRY_MARK.length, line.length - ENTRY_MARK_END.length)));
+      continue;
+    }
+    current.body.push(line);
+  }
+  finish();
+  return found;
+}
+
+function makeApi(initialSettings = {}, locale = null, proposals = [], initialVault = {}) {
   const settings = { ...initialSettings };
+  const vault = { ...initialVault };
+  const folders = new Set(['Project', 'Client', 'Archive', 'Clients', 'Clients/2026', 'Clients/2026/Sigma']);
+  Object.keys(vault).forEach((path) => folders.add(path.slice(0, path.lastIndexOf('/'))));
+  // A Deal that has a worklog is a Deal that exists.
+  Object.keys(settings)
+    .filter((key) => key.startsWith('worklog:workspace:'))
+    .forEach((key) => folders.add(decodeURIComponent(key.slice('worklog:workspace:'.length))));
+  const writes = [];
   const publishedEvents = [];
   const providerCalls = [];
   return {
     publishedEvents,
     providerCalls,
+    vault,
+    writes,
     contributions: {
       list: async (point) => (point === 'worklogProviders' ? [{
         pluginId: 'verstak.activity',
@@ -175,12 +244,40 @@ function makeApi(initialSettings = {}, locale = null, proposals = []) {
       },
     },
     files: {
-      list: async () => [
-        { type: 'folder', relativePath: 'Project', name: 'Project' },
-        { type: 'folder', relativePath: 'Client', name: 'Client' },
-        // A plain folder that is not a Deal, and must never be offered as one.
-        { type: 'folder', relativePath: 'Archive', name: 'Archive' },
-      ],
+      list: async (relativeDir) => {
+        const dir = String(relativeDir || '').replace(/^\/+|\/+$/g, '');
+        if (!dir) {
+          return [
+            { type: 'folder', relativePath: 'Project', name: 'Project' },
+            { type: 'folder', relativePath: 'Client', name: 'Client' },
+            // A plain folder that is not a Deal, and must never be offered as one.
+            { type: 'folder', relativePath: 'Archive', name: 'Archive' },
+          ];
+        }
+        if (!folders.has(dir)) throw new Error(`not-found: ${dir}`);
+        return Object.keys(vault)
+          .filter((path) => path.startsWith(`${dir}/`) && !path.slice(dir.length + 1).includes('/'))
+          .sort()
+          .map((path) => ({ type: 'file', relativePath: path, name: path.slice(dir.length + 1) }));
+      },
+      readText: async (relativePath) => {
+        if (!(relativePath in vault)) throw new Error(`not-found: ${relativePath}`);
+        return vault[relativePath];
+      },
+      writeText: async (relativePath, content, options = {}) => {
+        const parent = relativePath.slice(0, relativePath.lastIndexOf('/'));
+        if (!folders.has(parent)) throw new Error(`parent-not-found: ${parent}`);
+        if (relativePath in vault && !options.overwrite) throw new Error(`conflict: ${relativePath}`);
+        if (!(relativePath in vault) && !options.createIfMissing) throw new Error(`not-found: ${relativePath}`);
+        writes.push({ relativePath, options });
+        vault[relativePath] = String(content);
+      },
+      createFolder: async (relativePath) => {
+        if (folders.has(relativePath)) throw new Error(`conflict: ${relativePath}`);
+        const parent = relativePath.slice(0, relativePath.lastIndexOf('/'));
+        if (parent && !folders.has(parent)) throw new Error(`parent-not-found: ${parent}`);
+        folders.add(relativePath);
+      },
     },
     workspaces: {
       list: async () => [
@@ -196,14 +293,23 @@ function makeApi(initialSettings = {}, locale = null, proposals = []) {
         return String(locale[key] || fallback || key).replace(/\{(\w+)\}/g, (_match, name) => String((params || {})[name] ?? ''));
       },
     } : null,
-    storedEntries(key) {
-      return settings[key] || [];
+    // What the Deal's own files say, read the way anything outside Verstak
+    // would read them.
+    storedEntries(dealRoot) {
+      const prefix = `${dealRoot}/Журнал/`;
+      return Object.keys(vault)
+        .filter((path) => path.startsWith(prefix))
+        .sort()
+        .reduce((all, path) => all.concat(readVaultMonth(vault[path], dealRoot)), []);
+    },
+    settingsSnapshot() {
+      return { ...settings };
     },
   };
 }
 
 async function flush() {
-  for (let i = 0; i < 40; i += 1) await Promise.resolve();
+  for (let i = 0; i < 400; i += 1) await Promise.resolve();
 }
 
 async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, workspaceRootPath: 'Project' }, document = makeDocument()) {
@@ -234,7 +340,7 @@ function byData(container, attr, value) {
 
   const api = makeApi();
   const { component, container } = await mountWithApi(api);
-  const projectKey = 'worklog:workspace:Project';
+  const projectDeal = 'Project';
 
   if (walk(container, (node) => node.getAttribute && node.getAttribute('data-journal-action') === 'import-activity')) {
     throw new Error('Journal must not provide direct Activity import');
@@ -249,8 +355,30 @@ function byData(container, attr, value) {
   byData(container, 'data-journal-action', 'save-entry').click();
   await flush();
 
-  if (api.storedEntries(projectKey).length !== 1) throw new Error('manual journal entry was not stored');
-  if (api.storedEntries(projectKey)[0].activityIds.length !== 0) throw new Error('manual journal entry must not require activity links');
+  if (api.storedEntries(projectDeal).length !== 1) throw new Error('manual journal entry was not stored');
+  if (api.storedEntries(projectDeal)[0].activityIds.length !== 0) throw new Error('manual journal entry must not require activity links');
+
+  // ── The worklog is a document ─────────────────────────────────────────
+  // It lands in the Deal it belongs to, as a month of ordinary Markdown that
+  // an editor opens and sync carries, and not in a settings blob under
+  // `.verstak`, where it was and where neither could reach it.
+  const monthPath = 'Project/Журнал/2026-06.md';
+  if (!(monthPath in api.vault)) {
+    throw new Error(`the worklog was not written into the Deal: ${JSON.stringify(Object.keys(api.vault))}`);
+  }
+  if (api.settingsSnapshot()['worklog:workspace:Project']) {
+    throw new Error('the worklog must no longer be written into plugin settings');
+  }
+  const monthText = api.vault[monthPath];
+  for (const expected of ['## 2026-06-27', '### Draft brief', '45 min · non-billable', 'Reviewed docs']) {
+    if (!monthText.includes(expected)) throw new Error(`the worklog file is not readable prose: ${JSON.stringify(monthText)}`);
+  }
+  // Saving the journal is the plugin keeping its own records. Unmarked, every
+  // save becomes activity, and activity proposes a journal entry about it.
+  const journalWrite = api.writes.find((write) => write.relativePath === monthPath);
+  if (!journalWrite || journalWrite.options.service !== true) {
+    throw new Error(`writing the journal must declare itself bookkeeping: ${JSON.stringify(journalWrite)}`);
+  }
   if (!container.textContent.includes('Draft brief')) throw new Error('manual journal entry was not rendered');
   if (!container.textContent.includes('45 min')) throw new Error('manual journal entry minutes were not rendered');
 
@@ -262,8 +390,8 @@ function byData(container, attr, value) {
   byData(container, 'data-journal-action', 'save-entry').click();
   await flush();
 
-  if (api.storedEntries(projectKey).length !== 1) throw new Error('editing journal entry created a duplicate');
-  if (api.storedEntries(projectKey)[0].title !== 'Draft brief updated') throw new Error('journal entry title was not updated');
+  if (api.storedEntries(projectDeal).length !== 1) throw new Error('editing journal entry created a duplicate');
+  if (api.storedEntries(projectDeal)[0].title !== 'Draft brief updated') throw new Error('journal entry title was not updated');
   if (!container.textContent.includes('60 min')) throw new Error('edited journal entry minutes were not rendered');
 
   const candidate = {
@@ -342,8 +470,8 @@ function byData(container, attr, value) {
   byData(candidateView.container, 'data-journal-action', 'save-entry').click();
   await flush();
 
-  if (api.storedEntries(projectKey).length !== 2) throw new Error('reviewed candidate was not saved as a journal entry');
-  const linkedEntry = api.storedEntries(projectKey).find((entry) => entry.sourceCandidateId === candidate.candidateId);
+  if (api.storedEntries(projectDeal).length !== 2) throw new Error('reviewed candidate was not saved as a journal entry');
+  const linkedEntry = api.storedEntries(projectDeal).find((entry) => entry.sourceCandidateId === candidate.candidateId);
   if (!linkedEntry) throw new Error('candidate reference was not stored on the journal entry');
   if (linkedEntry.title !== 'Review research capture' || linkedEntry.summary !== 'Read the capture and updated the project note.') {
     throw new Error('candidate review did not keep the user-authored entry fields');
@@ -368,7 +496,7 @@ function byData(container, attr, value) {
 
   byData(candidateView.container, 'data-journal-action', 'delete').click();
   await flush();
-  if (api.storedEntries(projectKey).length !== 1) throw new Error('journal entry was not deleted');
+  if (api.storedEntries(projectDeal).length !== 1) throw new Error('journal entry was not deleted');
 
   const completedTodo = {
     id: 'todo:Project:project-review',
@@ -402,8 +530,8 @@ function byData(container, attr, value) {
   byData(todoView.container, 'data-journal-action', 'save-entry').click();
   await flush();
 
-  if (api.storedEntries(projectKey).length !== 2) throw new Error('completed Todo Journal entry was not saved');
-  const todoEntry = api.storedEntries(projectKey).find((entry) => entry.sourceTodoId === completedTodo.id);
+  if (api.storedEntries(projectDeal).length !== 2) throw new Error('completed Todo Journal entry was not saved');
+  const todoEntry = api.storedEntries(projectDeal).find((entry) => entry.sourceTodoId === completedTodo.id);
   if (!todoEntry) throw new Error('completed Todo reference was not stored on the Journal entry');
   if (todoEntry.title !== 'Prepare project review for handoff' || todoEntry.summary !== 'Reviewed factual project notes before handoff.') {
     throw new Error('completed Todo Journal form did not preserve the user-edited fields');
@@ -416,7 +544,7 @@ function byData(container, attr, value) {
   });
   byData(duplicateTodoView.container, 'data-journal-action', 'save-entry').click();
   await flush();
-  if (api.storedEntries(projectKey).filter((entry) => entry.sourceTodoId === completedTodo.id).length !== 1) {
+  if (api.storedEntries(projectDeal).filter((entry) => entry.sourceTodoId === completedTodo.id).length !== 1) {
     throw new Error('completed Todo Journal conversion created a duplicate entry');
   }
 
@@ -443,8 +571,8 @@ function byData(container, attr, value) {
   byData(globalView.container, 'data-journal-input', 'minutes').value = '30';
   byData(globalView.container, 'data-journal-action', 'save-entry').click();
   await flush();
-  const clientKey = 'worklog:workspace:Client';
-  if (api.storedEntries(clientKey).length !== 1 || api.storedEntries(clientKey)[0].title !== 'Prepare client summary') {
+  const clientDeal = 'Client';
+  if (api.storedEntries(clientDeal).length !== 1 || api.storedEntries(clientDeal)[0].title !== 'Prepare client summary') {
     throw new Error('global Journal entry was not stored under the selected Deal');
   }
   if (!globalView.container.textContent.includes('Prepare client summary')) throw new Error('global Journal did not render the created entry');
@@ -523,10 +651,10 @@ function byData(container, attr, value) {
   const betaRow = byData(filterView.container, 'data-journal-entry', 'b-todo');
   walk(betaRow, (node) => node.getAttribute && node.getAttribute('data-journal-action') === 'delete').click();
   await flush();
-  if (filterApi.storedEntries('worklog:workspace:Beta').length !== 0) {
+  if (filterApi.storedEntries('Beta').length !== 0) {
     throw new Error('deleting from the global Journal did not reach the entry\'s own Deal');
   }
-  if (filterApi.storedEntries('worklog:workspace:Alpha').length !== 2) {
+  if (filterApi.storedEntries('Alpha').length !== 2) {
     throw new Error('deleting one entry disturbed another Deal');
   }
   if (titles().includes('Beta from todo')) throw new Error('the deleted entry is still listed');
@@ -615,7 +743,7 @@ function byData(container, attr, value) {
   byData(proposalView.container, 'data-journal-input', 'title').value = 'Session from a proposal';
   byData(proposalView.container, 'data-journal-action', 'save-entry').click();
   await flush();
-  const proposalEntries = proposalApi.storedEntries('worklog:workspace:Project');
+  const proposalEntries = proposalApi.storedEntries('Project');
   if (proposalEntries.length !== 1 || proposalEntries[0].sourceCandidateId !== projectProposal.candidateId) {
     throw new Error('a reviewed proposal was not stored against its own Deal');
   }
@@ -681,6 +809,106 @@ function byData(container, attr, value) {
     throw new Error('choosing another Deal must teach that Deal');
   }
   component.unmount && component.unmount(pickView.container);
+
+  // ── The worklog that was already there ────────────────────────────────
+  // Everything written before this version is in plugin settings. It is copied
+  // into the Deal once, and the settings copy is left alone -- but it is never
+  // read again, or deleting an entry would only bring it back at next start.
+  const legacySettings = {
+    'worklog:workspace:Project': [
+      { entryId: 'old-1', workspaceRootPath: 'Project', date: '2026-05-04', title: 'Kickoff call', summary: 'Agreed the scope.', minutes: 60, billable: true },
+      { entryId: 'old-2', workspaceRootPath: 'Project', date: '2026-06-11', title: 'Second month', minutes: 20, billable: false },
+    ],
+  };
+  const migrateApi = makeApi(legacySettings);
+  const migrateView = await mountWithApi(migrateApi, { workspaceNode: { name: 'Project' }, workspaceRootPath: 'Project' });
+  const migrated = migrateApi.storedEntries('Project');
+  if (migrated.length !== 2) {
+    throw new Error(`the worklog already written was not moved into the Deal: ${JSON.stringify(Object.keys(migrateApi.vault))}`);
+  }
+  if (!('Project/Журнал/2026-05.md' in migrateApi.vault) || !('Project/Журнал/2026-06.md' in migrateApi.vault)) {
+    throw new Error('each month belongs in its own file');
+  }
+  const kickoff = migrated.find((entry) => entry.entryId === 'old-1');
+  if (!kickoff || kickoff.title !== 'Kickoff call' || kickoff.minutes !== 60 || kickoff.billable !== true || kickoff.summary !== 'Agreed the scope.') {
+    throw new Error(`the moved entry lost something: ${JSON.stringify(kickoff)}`);
+  }
+  if (!migrateApi.settingsSnapshot()['worklog:workspace:Project']) {
+    throw new Error('the copy that was already there must not be deleted to make the move look tidy');
+  }
+  byData(migrateView.container, 'data-journal-entry', 'old-2');
+  walk(byData(migrateView.container, 'data-journal-entry', 'old-2'), (node) => node.getAttribute && node.getAttribute('data-journal-action') === 'delete').click();
+  await flush();
+  const afterDelete = await mountWithApi(migrateApi, { workspaceNode: { name: 'Project' }, workspaceRootPath: 'Project' });
+  if (afterDelete.container.textContent.includes('Second month')) {
+    throw new Error('a deleted entry came back from the settings copy at the next start');
+  }
+  component.unmount && component.unmount(migrateView.container);
+  component.unmount && component.unmount(afterDelete.container);
+
+  // ── The file is the user's too ────────────────────────────────────────
+  // A worklog kept in a Deal can be opened in any editor. An entry written
+  // there by hand is a journal entry, and a correction made there is the truth.
+  const handWritten = [
+    '---',
+    'verstak: worklog',
+    'version: 1',
+    'deal: "Project"',
+    'month: 2026-04',
+    '---',
+    '',
+    '# Журнал',
+    '',
+    '## 2026-04-02',
+    '',
+    '### Wrote this in vim',
+    '',
+    '90 min · billable',
+    '',
+    'No comment, no ids, still an entry.',
+    '',
+  ].join('\n');
+  const handApi = makeApi({}, null, [], { 'Project/Журнал/2026-04.md': handWritten });
+  const handView = await mountWithApi(handApi, { workspaceNode: { name: 'Project' }, workspaceRootPath: 'Project' });
+  const handRow = walk(handView.container, (node) => (
+    node.getAttribute && node.getAttribute('data-journal-entry') && node.textContent.includes('Wrote this in vim')
+  ));
+  if (!handRow) throw new Error('an entry written into the file by hand must be read as an entry');
+  const handMinutes = walk(handRow, (node) => node.className === 'journal-minutes');
+  if (!handMinutes || handMinutes.textContent !== '90 min') {
+    throw new Error(`what the file says the work took is what the work took, got ${JSON.stringify(handMinutes && handMinutes.textContent)}`);
+  }
+  const handSummary = walk(handRow, (node) => node.className === 'journal-summary');
+  if (!handSummary || handSummary.textContent !== 'No comment, no ids, still an entry.') {
+    throw new Error(`the body written by hand was not read back exactly: ${JSON.stringify(handSummary && handSummary.textContent)}`);
+  }
+  component.unmount && component.unmount(handView.container);
+
+  // Prose that looks like structure stays prose. A body with its own heading
+  // used to reappear as a separate entry with the rest of the text inside it.
+  const proseApi = makeApi();
+  const proseView = await mountWithApi(proseApi, { workspaceNode: { name: 'Project' }, workspaceRootPath: 'Project' });
+  byData(proseView.container, 'data-journal-action', 'add').click();
+  await flush();
+  byData(proseView.container, 'data-journal-input', 'date').value = '2026-08-03';
+  byData(proseView.container, 'data-journal-input', 'title').value = 'Wrote the report';
+  byData(proseView.container, 'data-journal-input', 'summary').value = '### Findings\nTwo of them.';
+  byData(proseView.container, 'data-journal-input', 'minutes').value = '25';
+  byData(proseView.container, 'data-journal-action', 'save-entry').click();
+  await flush();
+  const proseEntries = proseApi.storedEntries('Project');
+  if (proseEntries.length !== 1) {
+    throw new Error(`a heading inside a body became a second entry: ${JSON.stringify(proseEntries.map((entry) => entry.title))}`);
+  }
+  if (proseEntries[0].summary !== '\\### Findings\nTwo of them.') {
+    throw new Error(`a heading inside a body must be escaped in the file: ${JSON.stringify(proseEntries[0].summary)}`);
+  }
+  const reread = await mountWithApi(proseApi, { workspaceNode: { name: 'Project' }, workspaceRootPath: 'Project' });
+  if (!reread.container.textContent.includes('### Findings')) {
+    throw new Error('the escaped heading did not come back as the user wrote it');
+  }
+  component.unmount && component.unmount(proseView.container);
+  component.unmount && component.unmount(reread.container);
 
   component.unmount && component.unmount(container);
   component.unmount && component.unmount(candidateView.container);
