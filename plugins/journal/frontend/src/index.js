@@ -45,7 +45,20 @@
     '.journal-proposals-title{font-size:.74rem;font-weight:600;color:var(--vt-color-text-secondary,#b7c0d4);margin-bottom:.4rem}',
     '.journal-proposal-actions{display:flex;gap:.35rem;flex-wrap:wrap;justify-content:flex-end}',
     '.journal-proposal{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:.7rem;align-items:center;margin-top:.4rem;padding:.6rem .7rem;border:1px solid rgba(78,204,163,.34);border-radius:var(--vt-radius-md,6px);background:var(--vt-color-surface,#15152c)}',
+    '.journal-btn-icon{display:inline-flex}',
+    '.journal-btn-icon svg{width:14px;height:14px;display:block;fill:currentColor}',
     '.journal-list{flex:1;min-height:0;overflow:auto;background:var(--vt-color-background,#101020)}',
+    '.journal-list[hidden]{display:none}',
+    '.journal-report-head{display:flex;flex-wrap:wrap;align-items:center;gap:.75rem;margin:.5rem .75rem 0;padding:.75rem .85rem;border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface,#15152c)}',
+    '.journal-report-span{font-size:.86rem;font-weight:600;color:var(--vt-color-text-primary,#f4f7fb)}',
+    '.journal-report-figures{display:flex;gap:1.1rem;flex-wrap:wrap}',
+    '.journal-report-figure-label{font-size:.7rem;color:var(--vt-color-text-muted,#7f8aa3)}',
+    '.journal-report-figure-value{font-size:.95rem;font-weight:650;color:var(--vt-color-accent,#4ecca3)}',
+    '.journal-report-actions{display:flex;gap:.4rem;margin-left:auto;flex-wrap:wrap}',
+    '.journal-report-deal{margin:.5rem .75rem 0;padding:.75rem .85rem;border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface,#15152c)}',
+    '.journal-report-deal-head{display:flex;align-items:baseline;gap:.7rem;justify-content:space-between}',
+    '.journal-report-row{display:grid;grid-template-columns:7rem minmax(0,1fr) auto;gap:.7rem;padding:.32rem 0;border-top:1px solid var(--vt-color-border,#202b46);align-items:baseline}',
+    '.journal-report-title{font-size:.82rem;color:var(--vt-color-text-secondary,#b7c0d4);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '.journal-empty{height:100%;display:flex;align-items:center;justify-content:center;color:var(--vt-color-text-muted,#7f8aa3);font-size:.86rem;padding:2rem;text-align:center}',
     '.journal-row{display:grid;grid-template-columns:8rem minmax(0,1fr) auto auto;gap:.7rem;margin:.5rem .75rem 0;padding:.75rem .85rem;border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface,#15152c);align-items:start}',
     '.journal-row:hover{background:var(--vt-color-surface-hover,#1b2440)}',
@@ -128,8 +141,16 @@
     };
   }
 
+  // The day on the user's own calendar. toISOString() is UTC, so east of
+  // Greenwich everything written in the evening was dated yesterday.
+  function isoDay(date) {
+    var month = String(date.getMonth() + 1);
+    var day = String(date.getDate());
+    return date.getFullYear() + '-' + (month.length < 2 ? '0' + month : month) + '-' + (day.length < 2 ? '0' + day : day);
+  }
+
   function today() {
-    return new Date().toISOString().slice(0, 10);
+    return isoDay(new Date());
   }
 
   function normalizeEntry(value, storageKey) {
@@ -182,6 +203,198 @@
     return Object.keys(settings || {}).filter(function (key) {
       return key.indexOf(WORKLOG_PREFIX) === 0;
     });
+  }
+
+  // =====================================================================
+  // The report
+  //
+  // A worklog answers "what did I do"; a report answers "what do I bill".
+  // Everything below works from entries the journal already has -- it counts
+  // and groups, and invents nothing.
+  // =====================================================================
+  var REPORTS_FOLDER = 'Отчёты';
+
+  function dateOnly(value) {
+    return text(value).slice(0, 10);
+  }
+
+  function shiftDays(date, days) {
+    var moved = new Date(date.getTime());
+    moved.setDate(moved.getDate() + days);
+    return moved;
+  }
+
+  function periodRange(kind, customFrom, customTo) {
+    var now = new Date();
+    if (kind === 'custom') {
+      var from = dateOnly(customFrom);
+      var to = dateOnly(customTo);
+      if (!from && !to) return null;
+      return { from: from, to: to };
+    }
+    if (kind === 'week') {
+      // Monday first. A work week starts when the work does.
+      var monday = shiftDays(now, -((now.getDay() + 6) % 7));
+      return { from: isoDay(monday), to: isoDay(shiftDays(monday, 6)) };
+    }
+    if (kind === 'month') {
+      return {
+        from: isoDay(new Date(now.getFullYear(), now.getMonth(), 1)),
+        to: isoDay(new Date(now.getFullYear(), now.getMonth() + 1, 0))
+      };
+    }
+    if (kind === 'last-month') {
+      return {
+        from: isoDay(new Date(now.getFullYear(), now.getMonth() - 1, 1)),
+        to: isoDay(new Date(now.getFullYear(), now.getMonth(), 0))
+      };
+    }
+    if (kind === 'year') {
+      return { from: now.getFullYear() + '-01-01', to: now.getFullYear() + '-12-31' };
+    }
+    return null;
+  }
+
+  function inRange(date, range) {
+    if (!range) return true;
+    var day = dateOnly(date);
+    if (range.from && day < range.from) return false;
+    if (range.to && day > range.to) return false;
+    return true;
+  }
+
+  function formatDuration(minutes, tr) {
+    var total = Math.max(0, Math.round(Number(minutes) || 0));
+    var hours = Math.floor(total / 60);
+    var rest = total % 60;
+    if (!hours) return tr('ui.minutesValue', { minutes: rest }, rest + ' min');
+    if (!rest) return tr('ui.report.hours', { hours: hours }, hours + ' h');
+    return tr('ui.report.hoursMinutes', { hours: hours, minutes: rest }, hours + ' h ' + rest + ' min');
+  }
+
+  function buildReport(entryList) {
+    var deals = [];
+    var byDeal = {};
+    sortForFile(entryList).forEach(function (entry) {
+      var deal = cleanWorkspace(entry.workspaceRootPath);
+      if (!byDeal[deal]) {
+        byDeal[deal] = { deal: deal, minutes: 0, billableMinutes: 0, count: 0, days: [], byDay: {} };
+        deals.push(byDeal[deal]);
+      }
+      var group = byDeal[deal];
+      var minutes = Math.max(0, Number(entry.minutes) || 0);
+      group.minutes += minutes;
+      if (entry.billable) group.billableMinutes += minutes;
+      group.count += 1;
+      if (!group.byDay[entry.date]) {
+        group.byDay[entry.date] = { date: entry.date, minutes: 0, entries: [] };
+        group.days.push(group.byDay[entry.date]);
+      }
+      group.byDay[entry.date].minutes += minutes;
+      group.byDay[entry.date].entries.push(entry);
+    });
+    // Most time first: the Deal that took the month is the one being asked
+    // about.
+    deals.sort(function (a, b) {
+      return b.minutes - a.minutes || a.deal.localeCompare(b.deal);
+    });
+    var total = { minutes: 0, billableMinutes: 0, count: 0, from: '', to: '' };
+    deals.forEach(function (group) {
+      total.minutes += group.minutes;
+      total.billableMinutes += group.billableMinutes;
+      total.count += group.count;
+      group.days.forEach(function (day) {
+        if (!total.from || day.date < total.from) total.from = day.date;
+        if (!total.to || day.date > total.to) total.to = day.date;
+      });
+      delete group.byDay;
+    });
+    return { deals: deals, total: total };
+  }
+
+  function reportSpan(report, range) {
+    var from = (range && range.from) || report.total.from;
+    var to = (range && range.to) || report.total.to;
+    return { from: from, to: to };
+  }
+
+  function reportFileName(report, range) {
+    var span = reportSpan(report, range);
+    if (!span.from && !span.to) return 'Отчёт';
+    if (span.from === span.to) return 'Отчёт ' + span.from;
+    return 'Отчёт ' + (span.from || '…') + ' - ' + (span.to || '…');
+  }
+
+  function reportMarkdown(report, range, tr) {
+    var span = reportSpan(report, range);
+    var lines = [
+      '# ' + tr('ui.report.fileHeading', { from: span.from || '…', to: span.to || '…' }, 'Worklog report — ' + (span.from || '…') + ' — ' + (span.to || '…')),
+      '',
+      tr('ui.report.totalLine', {
+        total: formatDuration(report.total.minutes, tr),
+        billable: formatDuration(report.total.billableMinutes, tr),
+        nonBillable: formatDuration(report.total.minutes - report.total.billableMinutes, tr),
+        count: report.total.count
+      }, 'Total ' + formatDuration(report.total.minutes, tr) + ' · billable ' + formatDuration(report.total.billableMinutes, tr) + ' · non-billable ' + formatDuration(report.total.minutes - report.total.billableMinutes, tr) + ' · ' + report.total.count + ' entries'),
+      ''
+    ];
+    report.deals.forEach(function (group) {
+      lines.push('## ' + group.deal + ' — ' + formatDuration(group.minutes, tr));
+      lines.push('');
+      lines.push('| ' + [
+        tr('ui.date', null, 'Date'),
+        tr('ui.fieldTitle', null, 'Title'),
+        tr('ui.minutes', null, 'Minutes'),
+        tr('ui.billable', null, 'Billable')
+      ].join(' | ') + ' |');
+      lines.push('| --- | --- | --- | --- |');
+      group.days.forEach(function (day) {
+        day.entries.forEach(function (entry) {
+          lines.push('| ' + [
+            entry.date,
+            text(entry.title).replace(/\|/g, '\\|'),
+            formatDuration(entry.minutes, tr),
+            entry.billable ? tr('ui.report.yes', null, 'yes') : tr('ui.report.no', null, 'no')
+          ].join(' | ') + ' |');
+        });
+      });
+      lines.push('');
+      lines.push(tr('ui.report.dealTotal', {
+        deal: group.deal,
+        total: formatDuration(group.minutes, tr),
+        billable: formatDuration(group.billableMinutes, tr)
+      }, group.deal + ': ' + formatDuration(group.minutes, tr) + ', billable ' + formatDuration(group.billableMinutes, tr)));
+      lines.push('');
+    });
+    return lines.join('\n').replace(/[ \t\n]+$/, '') + '\n';
+  }
+
+  function csvCell(value) {
+    return '"' + text(value).replace(/\r?\n/g, ' ').replace(/"/g, '""') + '"';
+  }
+
+  function reportCsv(report, tr) {
+    var rows = [[
+      tr('ui.workspace', null, 'Deal'),
+      tr('ui.date', null, 'Date'),
+      tr('ui.fieldTitle', null, 'Title'),
+      tr('ui.minutes', null, 'Minutes'),
+      tr('ui.billable', null, 'Billable')
+    ].map(csvCell).join(',')];
+    report.deals.forEach(function (group) {
+      group.days.forEach(function (day) {
+        day.entries.forEach(function (entry) {
+          rows.push([
+            csvCell(group.deal),
+            csvCell(entry.date),
+            csvCell(entry.title),
+            String(Math.max(0, Number(entry.minutes) || 0)),
+            csvCell(entry.billable ? tr('ui.report.yes', null, 'yes') : tr('ui.report.no', null, 'no'))
+          ].join(','));
+        });
+      });
+    });
+    return rows.join('\n') + '\n';
   }
 
   function entryId(workspaceRoot, date, title) {
@@ -494,6 +707,8 @@
   }
 
   var ICONS = {
+    report: 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm2 12h2v3H7v-3zm4-6h2v9h-2V9zm4 3h2v6h-2v-6z',
+    download: 'M12 3v10.17l3.59-3.58L17 11l-5 5-5-5 1.41-1.41L11 13.17V3h1zM5 19h14v2H5v-2z',
     add: 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z',
     edit: 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z',
     trash: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM8 9h8v10H8V9zm7.5-5-1-1h-5l-1 1H5v2h14V4z'
@@ -523,6 +738,10 @@
     var filterDeal = '';
     var filterBillable = 'all';
     var filterSource = 'all';
+    var filterPeriod = 'all';
+    var customFrom = '';
+    var customTo = '';
+    var mode = 'list';
     function tr(key, params, fallback) {
       if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
       return fallback || key;
@@ -553,10 +772,23 @@
       innerHTML: iconSvg('add') + '<span>' + tr('ui.add', null, 'Add') + '</span>',
       onClick: function () { showEntryModal(); }
     });
+    // A worklog answers what was done; this answers what to bill for. Same
+    // entries, same filters, counted instead of listed.
+    var reportLabelEl = el('span', { 'data-journal-report-label': '', textContent: tr('ui.report.open', null, 'Report') });
+    var reportBtn = el('button', {
+      className: 'journal-btn',
+      type: 'button',
+      'data-journal-action': 'toggle-report',
+      onClick: function () {
+        mode = mode === 'report' ? 'list' : 'report';
+        render();
+      }
+    }, [el('span', { className: 'journal-btn-icon', innerHTML: iconSvg('report') }), reportLabelEl]);
     toolbar.appendChild(titleEl);
     toolbar.appendChild(countEl);
     toolbar.appendChild(el('span', { className: 'journal-spacer' }));
     toolbar.appendChild(statusEl);
+    toolbar.appendChild(reportBtn);
     toolbar.appendChild(addBtn);
 
     // A journal you cannot narrow is a pile. These are the questions actually
@@ -603,6 +835,24 @@
         { value: 'proposal', label: tr('ui.filter.proposal', null, 'From a proposal') },
         { value: 'todo', label: tr('ui.filter.todo', null, 'From a todo') }
       ], filterSource, function (value) { filterSource = value; render(); }));
+      // The question a worklog is asked is almost always about a stretch of
+      // time: this week, last month, the quarter being invoiced.
+      filtersEl.appendChild(filterSelect('data-journal-filter-period', [
+        { value: 'all', label: tr('ui.filter.anyPeriod', null, 'All time') },
+        { value: 'week', label: tr('ui.filter.thisWeek', null, 'This week') },
+        { value: 'month', label: tr('ui.filter.thisMonth', null, 'This month') },
+        { value: 'last-month', label: tr('ui.filter.lastMonth', null, 'Last month') },
+        { value: 'year', label: tr('ui.filter.thisYear', null, 'This year') },
+        { value: 'custom', label: tr('ui.filter.customPeriod', null, 'Exact dates…') }
+      ], filterPeriod, function (value) { filterPeriod = value; render(); }));
+      if (filterPeriod === 'custom') {
+        var fromInput = el('input', { className: 'journal-input journal-filter', type: 'date', value: customFrom, 'data-journal-filter-from': '' });
+        fromInput.addEventListener('change', function () { customFrom = fromInput.value; render(); });
+        var toInput = el('input', { className: 'journal-input journal-filter', type: 'date', value: customTo, 'data-journal-filter-to': '' });
+        toInput.addEventListener('change', function () { customTo = toInput.value; render(); });
+        filtersEl.appendChild(fromInput);
+        filtersEl.appendChild(toInput);
+      }
       filtersEl.appendChild(el('span', { className: 'journal-spacer' }));
       filtersEl.appendChild(el('span', {
         className: 'journal-total',
@@ -613,10 +863,12 @@
 
     var proposalsEl = el('div', { className: 'journal-proposals', 'data-journal-proposals': '', hidden: 'hidden' });
     var listEl = el('div', { className: 'journal-list' });
+    var reportEl = el('div', { className: 'journal-list', 'data-journal-report': '', hidden: 'hidden' });
     containerEl.appendChild(toolbar);
     containerEl.appendChild(filtersEl);
     containerEl.appendChild(proposalsEl);
     containerEl.appendChild(listEl);
+    containerEl.appendChild(reportEl);
     containerEl.appendChild(modalHost);
 
     // Saving the journal is the plugin keeping its own records, so the write
@@ -628,9 +880,8 @@
     var journalFolderReady = {};
     var migration = { version: 1, deals: {} };
 
-    function ensureJournalFolder(dealRoot) {
-      var folder = journalFolderPath(dealRoot);
-      if (journalFolderReady[folder]) return Promise.resolve();
+    function ensureFolder(folder) {
+      if (!folder || journalFolderReady[folder]) return Promise.resolve();
       if (!api || !api.files || typeof api.files.createFolder !== 'function') return Promise.resolve();
       return api.files.createFolder(folder).catch(function (err) {
         // Already there is the ordinary case after the first entry.
@@ -638,6 +889,10 @@
       }).then(function () {
         journalFolderReady[folder] = true;
       });
+    }
+
+    function ensureJournalFolder(dealRoot) {
+      return ensureFolder(journalFolderPath(dealRoot));
     }
 
     function readDealEntries(dealRoot) {
@@ -892,12 +1147,18 @@
       return 'manual';
     }
 
+    function currentRange() {
+      return periodRange(filterPeriod, customFrom, customTo);
+    }
+
     function visibleEntries() {
+      var range = currentRange();
       return entries.filter(function (entry) {
         if (filterDeal && entry.workspaceRootPath !== filterDeal) return false;
         if (filterBillable === 'billable' && !entry.billable) return false;
         if (filterBillable === 'non-billable' && entry.billable) return false;
         if (filterSource !== 'all' && entrySource(entry) !== filterSource) return false;
+        if (!inRange(entry.date, range)) return false;
         return true;
       });
     }
@@ -1329,6 +1590,110 @@
       });
     }
 
+    // A report for one Deal belongs beside that Deal's journal; one that spans
+    // Deals belongs to nobody in particular, so it goes to the vault's own
+    // reports folder.
+    function reportTargetFolder() {
+      return scope.mode === 'workspace' && scope.workspaceRoot
+        ? journalFolderPath(scope.workspaceRoot)
+        : REPORTS_FOLDER;
+    }
+
+    function exportReport(format) {
+      var report = buildReport(visibleEntries());
+      if (!report.total.count) return Promise.resolve();
+      if (!api || !api.files || typeof api.files.writeText !== 'function') return Promise.resolve();
+      var folder = reportTargetFolder();
+      var range = currentRange();
+      var path = folder + '/' + reportFileName(report, range) + (format === 'csv' ? '.csv' : '.md');
+      var content = format === 'csv' ? reportCsv(report, tr) : reportMarkdown(report, range, tr);
+      return ensureFolder(folder).then(function () {
+        // The report is a document the user asked for, not the plugin keeping
+        // its own records, so this write is not marked as bookkeeping.
+        return api.files.writeText(path, content, { createIfMissing: true, overwrite: true });
+      }).then(function () {
+        statusText = tr('ui.report.saved', { path: path }, 'Saved to ' + path);
+        statusClass = '';
+        render();
+        if (!api.workbench || typeof api.workbench.openResource !== 'function') return undefined;
+        return api.workbench.openResource({ kind: 'vault-file', path: path, mode: 'view' }).catch(function (err) {
+          console.warn('[verstak.journal] open the report:', err);
+        });
+      }).catch(function (err) {
+        reportError('ui.report.saveError', 'Could not save the report. Please try again.', err);
+        render();
+      });
+    }
+
+    function reportFigure(labelKey, labelFallback, minutes, attr) {
+      var figure = el('div', { className: 'journal-report-figure' }, [
+        el('div', { className: 'journal-report-figure-label', textContent: tr(labelKey, null, labelFallback) }),
+        el('div', { className: 'journal-report-figure-value', textContent: formatDuration(minutes, tr) })
+      ]);
+      figure.setAttribute(attr, String(Math.max(0, Math.round(Number(minutes) || 0))));
+      return figure;
+    }
+
+    function renderReport() {
+      reportEl.innerHTML = '';
+      var range = currentRange();
+      var report = buildReport(visibleEntries());
+      var span = reportSpan(report, range);
+      var exportBtns = el('div', { className: 'journal-report-actions' }, [
+        el('button', {
+          className: 'journal-btn',
+          type: 'button',
+          'data-journal-action': 'export-markdown',
+          disabled: report.total.count ? null : 'disabled',
+          innerHTML: iconSvg('download') + '<span>' + tr('ui.report.exportMarkdown', null, 'Save as Markdown') + '</span>',
+          onClick: function () { exportReport('markdown'); }
+        }),
+        el('button', {
+          className: 'journal-btn',
+          type: 'button',
+          'data-journal-action': 'export-csv',
+          disabled: report.total.count ? null : 'disabled',
+          innerHTML: iconSvg('download') + '<span>' + tr('ui.report.exportCsv', null, 'Save as CSV') + '</span>',
+          onClick: function () { exportReport('csv'); }
+        })
+      ]);
+      reportEl.appendChild(el('div', { className: 'journal-report-head' }, [
+        el('div', { className: 'journal-report-span', 'data-journal-report-span': '', textContent: report.total.count
+          ? tr('ui.report.span', { from: span.from || '…', to: span.to || '…' }, (span.from || '…') + ' — ' + (span.to || '…'))
+          : tr('ui.report.empty', null, 'Nothing recorded for this period.') }),
+        el('div', { className: 'journal-report-figures' }, [
+          reportFigure('ui.report.total', 'Total', report.total.minutes, 'data-journal-report-total'),
+          reportFigure('ui.meta.billable', 'billable', report.total.billableMinutes, 'data-journal-report-billable'),
+          reportFigure('ui.meta.nonBillable', 'non-billable', report.total.minutes - report.total.billableMinutes, 'data-journal-report-non-billable')
+        ]),
+        exportBtns
+      ]));
+      if (!report.total.count) return;
+      report.deals.forEach(function (group) {
+        var block = el('div', { className: 'journal-report-deal', 'data-journal-report-deal': group.deal }, [
+          el('div', { className: 'journal-report-deal-head' }, [
+            el('div', { className: 'journal-entry-title', textContent: group.deal }),
+            el('div', { className: 'journal-minutes', 'data-journal-report-deal-total': String(group.minutes), textContent: formatDuration(group.minutes, tr) })
+          ]),
+          el('div', { className: 'journal-meta', textContent: tr('ui.report.dealTotal', {
+            deal: group.deal,
+            total: formatDuration(group.minutes, tr),
+            billable: formatDuration(group.billableMinutes, tr)
+          }, group.deal + ': ' + formatDuration(group.minutes, tr) + ', billable ' + formatDuration(group.billableMinutes, tr)) })
+        ]);
+        group.days.forEach(function (day) {
+          day.entries.forEach(function (entry) {
+            block.appendChild(el('div', { className: 'journal-report-row' }, [
+              el('div', { className: 'journal-date', textContent: entry.date }),
+              el('div', { className: 'journal-report-title', textContent: entry.title }),
+              el('div', { className: 'journal-minutes', textContent: formatDuration(entry.minutes, tr) })
+            ]));
+          });
+        });
+        reportEl.appendChild(block);
+      });
+    }
+
     function renderList() {
       listEl.innerHTML = '';
       var shown = visibleEntries();
@@ -1372,6 +1737,18 @@
       statusEl.textContent = statusText;
       statusEl.className = 'journal-status' + (statusClass ? ' ' + statusClass : '');
       addBtn.disabled = false;
+      reportLabelEl.textContent = mode === 'report'
+        ? tr('ui.report.close', null, 'Entries')
+        : tr('ui.report.open', null, 'Report');
+      if (mode === 'report') {
+        listEl.setAttribute('hidden', 'hidden');
+        reportEl.removeAttribute('hidden');
+        proposalsEl.setAttribute('hidden', 'hidden');
+        renderReport();
+        return;
+      }
+      reportEl.setAttribute('hidden', 'hidden');
+      listEl.removeAttribute('hidden');
       renderProposals();
       renderList();
     }

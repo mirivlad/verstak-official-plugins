@@ -192,16 +192,24 @@ function readVaultMonth(content, dealRoot) {
   return found;
 }
 
+// The vault root is a folder that always exists, so a top-level name has no
+// parent to look for.
+function parentOf(relativePath) {
+  const cut = relativePath.lastIndexOf('/');
+  return cut === -1 ? '' : relativePath.slice(0, cut);
+}
+
 function makeApi(initialSettings = {}, locale = null, proposals = [], initialVault = {}) {
   const settings = { ...initialSettings };
   const vault = { ...initialVault };
   const folders = new Set(['Project', 'Client', 'Archive', 'Clients', 'Clients/2026', 'Clients/2026/Sigma']);
-  Object.keys(vault).forEach((path) => folders.add(path.slice(0, path.lastIndexOf('/'))));
+  Object.keys(vault).forEach((path) => folders.add(parentOf(path)));
   // A Deal that has a worklog is a Deal that exists.
   Object.keys(settings)
     .filter((key) => key.startsWith('worklog:workspace:'))
     .forEach((key) => folders.add(decodeURIComponent(key.slice('worklog:workspace:'.length))));
   const writes = [];
+  const opened = [];
   const publishedEvents = [];
   const providerCalls = [];
   return {
@@ -209,6 +217,7 @@ function makeApi(initialSettings = {}, locale = null, proposals = [], initialVau
     providerCalls,
     vault,
     writes,
+    opened,
     contributions: {
       list: async (point) => (point === 'worklogProviders' ? [{
         pluginId: 'verstak.activity',
@@ -265,8 +274,8 @@ function makeApi(initialSettings = {}, locale = null, proposals = [], initialVau
         return vault[relativePath];
       },
       writeText: async (relativePath, content, options = {}) => {
-        const parent = relativePath.slice(0, relativePath.lastIndexOf('/'));
-        if (!folders.has(parent)) throw new Error(`parent-not-found: ${parent}`);
+        const parent = parentOf(relativePath);
+        if (parent && !folders.has(parent)) throw new Error(`parent-not-found: ${parent}`);
         if (relativePath in vault && !options.overwrite) throw new Error(`conflict: ${relativePath}`);
         if (!(relativePath in vault) && !options.createIfMissing) throw new Error(`not-found: ${relativePath}`);
         writes.push({ relativePath, options });
@@ -274,9 +283,15 @@ function makeApi(initialSettings = {}, locale = null, proposals = [], initialVau
       },
       createFolder: async (relativePath) => {
         if (folders.has(relativePath)) throw new Error(`conflict: ${relativePath}`);
-        const parent = relativePath.slice(0, relativePath.lastIndexOf('/'));
+        const parent = parentOf(relativePath);
         if (parent && !folders.has(parent)) throw new Error(`parent-not-found: ${parent}`);
         folders.add(relativePath);
+      },
+    },
+    workbench: {
+      openResource: async (request) => {
+        opened.push(request);
+        return { status: 'opened' };
       },
     },
     workspaces: {
@@ -909,6 +924,145 @@ function byData(container, attr, value) {
   }
   component.unmount && component.unmount(proseView.container);
   component.unmount && component.unmount(reread.container);
+
+  // ── The report ────────────────────────────────────────────────────────
+  // The worklog answers what was done. This answers what to bill, from the
+  // same entries and the same filters, and writes it where an invoice can be
+  // built from it.
+  function monthFile(deal, month, rows) {
+    const lines = ['---', 'verstak: worklog', 'version: 1', `deal: "${deal}"`, `month: ${month}`, '---', '', '# Журнал', ''];
+    let lastDate = '';
+    for (const row of rows) {
+      if (row.date !== lastDate) {
+        lines.push(`## ${row.date}`, '');
+        lastDate = row.date;
+      }
+      lines.push(`### ${row.title}`, '');
+      lines.push(`${row.minutes} min · ${row.billable ? 'billable' : 'non-billable'}`, '');
+      lines.push(`${ENTRY_MARK}${JSON.stringify({ entryId: row.entryId, minutes: row.minutes, billable: row.billable })}${ENTRY_MARK_END}`, '');
+    }
+    return lines.join('\n');
+  }
+
+  const reportApi = makeApi({}, null, [], {
+    'Project/Журнал/2026-05.md': monthFile('Project', '2026-05', [
+      { entryId: 'r-old', date: '2026-05-30', title: 'Last month work', minutes: 30, billable: true },
+    ]),
+    'Project/Журнал/2026-06.md': monthFile('Project', '2026-06', [
+      { entryId: 'r-1', date: '2026-06-01', title: 'Kickoff', minutes: 90, billable: true },
+      { entryId: 'r-2', date: '2026-06-01', title: 'Notes', minutes: 30, billable: false },
+      { entryId: 'r-3', date: '2026-06-15', title: 'Review', minutes: 45, billable: true },
+    ]),
+    'Client/Журнал/2026-06.md': monthFile('Client', '2026-06', [
+      { entryId: 'r-4', date: '2026-06-10', title: 'Client call', minutes: 60, billable: true },
+    ]),
+  });
+  const reportView = await mountWithApi(reportApi, {});
+  const reportToggle = byData(reportView.container, 'data-journal-action', 'toggle-report');
+  if (byData(reportView.container, 'data-journal-report', '').getAttribute('hidden') !== 'hidden') {
+    throw new Error('the Journal must open on its entries, not on a report');
+  }
+  reportToggle.click();
+  await flush();
+  const reportRoot = byData(reportView.container, 'data-journal-report', '');
+  if (reportRoot.getAttribute('hidden') === 'hidden') throw new Error('the report did not open');
+
+  const totalFigure = walk(reportRoot, (node) => node.getAttribute && node.getAttribute('data-journal-report-total'));
+  if (!totalFigure || totalFigure.getAttribute('data-journal-report-total') !== '255') {
+    throw new Error(`the report must add up every entry in view: ${totalFigure && totalFigure.getAttribute('data-journal-report-total')}`);
+  }
+  const billableFigure = walk(reportRoot, (node) => node.getAttribute && node.getAttribute('data-journal-report-billable'));
+  if (!billableFigure || billableFigure.getAttribute('data-journal-report-billable') !== '225') {
+    throw new Error(`what is billable is counted apart: ${billableFigure && billableFigure.getAttribute('data-journal-report-billable')}`);
+  }
+  if (!totalFigure.textContent.includes('4 h 15 min')) {
+    throw new Error(`255 minutes is four and a quarter hours, not "${totalFigure.textContent}"`);
+  }
+  const projectBlock = byData(reportRoot, 'data-journal-report-deal', 'Project');
+  const clientBlock = byData(reportRoot, 'data-journal-report-deal', 'Client');
+  if (walk(projectBlock, (node) => node.getAttribute && node.getAttribute('data-journal-report-deal-total')).getAttribute('data-journal-report-deal-total') !== '195') {
+    throw new Error('a Deal must add up its own time');
+  }
+  if (!clientBlock.textContent.includes('Client call')) throw new Error('the report must name the work, not only the hours');
+  // Most time first: the Deal that took the month is the one being asked about.
+  if (reportRoot.children.indexOf(projectBlock) > reportRoot.children.indexOf(clientBlock)) {
+    throw new Error('the Deal that took the most time belongs at the top');
+  }
+
+  // A period is the question a worklog is usually asked.
+  const periodFilter = byData(reportView.container, 'data-journal-filter-period', '');
+  periodFilter.value = 'custom';
+  periodFilter.dispatchEvent('change');
+  await flush();
+  byData(reportView.container, 'data-journal-filter-from', '').value = '2026-06-01';
+  byData(reportView.container, 'data-journal-filter-from', '').dispatchEvent('change');
+  await flush();
+  byData(reportView.container, 'data-journal-filter-to', '').value = '2026-06-30';
+  byData(reportView.container, 'data-journal-filter-to', '').dispatchEvent('change');
+  await flush();
+  const narrowedRoot = byData(reportView.container, 'data-journal-report', '');
+  const narrowedTotal = walk(narrowedRoot, (node) => node.getAttribute && node.getAttribute('data-journal-report-total'));
+  if (narrowedTotal.getAttribute('data-journal-report-total') !== '225') {
+    throw new Error(`the period must leave May out: ${narrowedTotal.getAttribute('data-journal-report-total')}`);
+  }
+  if (narrowedRoot.textContent.includes('Last month work')) throw new Error('an entry outside the period is still in the report');
+
+  walk(narrowedRoot, (node) => node.getAttribute && node.getAttribute('data-journal-action') === 'export-markdown').click();
+  await flush();
+  // Across Deals the report belongs to nobody in particular, so it goes to the
+  // vault's own reports folder.
+  const markdownPath = 'Отчёты/Отчёт 2026-06-01 - 2026-06-30.md';
+  if (!(markdownPath in reportApi.vault)) {
+    throw new Error(`the report was not saved: ${JSON.stringify(Object.keys(reportApi.vault))}`);
+  }
+  const savedReport = reportApi.vault[markdownPath];
+  for (const expected of ['# Worklog report — 2026-06-01 — 2026-06-30', '## Project — 2 h 45 min', '| 2026-06-15 | Review | 45 min | yes |', '## Client — 1 h']) {
+    if (!savedReport.includes(expected)) throw new Error(`the saved report is missing ${JSON.stringify(expected)}: ${savedReport}`);
+  }
+  if (savedReport.includes('Last month work')) throw new Error('the saved report ignored the period');
+  const reportWrite = reportApi.writes.find((write) => write.relativePath === markdownPath);
+  if (reportWrite.options.service === true) {
+    throw new Error('a report is a document the user asked for, not the plugin keeping its own records');
+  }
+  if (!reportApi.opened.some((request) => request.path === markdownPath)) {
+    throw new Error('the report that was just written should open');
+  }
+
+  walk(narrowedRoot, (node) => node.getAttribute && node.getAttribute('data-journal-action') === 'export-csv').click();
+  await flush();
+  const csvPath = 'Отчёты/Отчёт 2026-06-01 - 2026-06-30.csv';
+  const savedCsv = reportApi.vault[csvPath];
+  if (!savedCsv) throw new Error('a worklog nobody can put in a spreadsheet is half a report');
+  if (savedCsv.split('\n')[0] !== '"Deal","Date","Title","Minutes","Billable"') {
+    throw new Error(`unexpected CSV header: ${savedCsv.split('\n')[0]}`);
+  }
+  if (!savedCsv.includes('"Project","2026-06-15","Review",45,"yes"')) {
+    throw new Error(`unexpected CSV rows: ${savedCsv}`);
+  }
+  component.unmount && component.unmount(reportView.container);
+
+  // In one Deal, the report is that Deal's and belongs beside its journal.
+  const dealReportApi = makeApi({}, null, [], {
+    'Project/Журнал/2026-06.md': monthFile('Project', '2026-06', [
+      { entryId: 'd-1', date: '2026-06-02', title: 'Only this Deal', minutes: 120, billable: true },
+    ]),
+    'Client/Журнал/2026-06.md': monthFile('Client', '2026-06', [
+      { entryId: 'd-2', date: '2026-06-02', title: 'Someone else', minutes: 15, billable: true },
+    ]),
+  });
+  const dealReportView = await mountWithApi(dealReportApi, { workspaceNode: { name: 'Project' }, workspaceRootPath: 'Project' });
+  byData(dealReportView.container, 'data-journal-action', 'toggle-report').click();
+  await flush();
+  const dealReportRoot = byData(dealReportView.container, 'data-journal-report', '');
+  if (dealReportRoot.textContent.includes('Someone else')) {
+    throw new Error("a Deal's report must not count another Deal's work");
+  }
+  walk(dealReportRoot, (node) => node.getAttribute && node.getAttribute('data-journal-action') === 'export-markdown').click();
+  await flush();
+  if (!('Project/Журнал/Отчёт 2026-06-02.md' in dealReportApi.vault)) {
+    throw new Error(`a Deal's report belongs beside its journal: ${JSON.stringify(Object.keys(dealReportApi.vault))}`);
+  }
+  component.unmount && component.unmount(dealReportView.container);
 
   component.unmount && component.unmount(container);
   component.unmount && component.unmount(candidateView.container);
