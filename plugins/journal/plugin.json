@@ -63,6 +63,11 @@
         "id": "verstak.journal.provideOverview",
         "title": "Provide Overview Signals",
         "handler": "verstak.journal.provideOverview"
+      },
+      {
+        "id": "verstak.journal.search",
+        "title": "Search Journal",
+        "handler": "verstak.journal.search"
       }
     ],
     "overviewProviders": [
@@ -70,6 +75,13 @@
         "id": "verstak.journal.overview",
         "label": "Journal",
         "handler": "verstak.journal.provideOverview"
+      }
+    ],
+    "searchProviders": [
+      {
+        "id": "verstak.journal.search-provider",
+        "label": "Journal",
+        "handler": "verstak.journal.search"
       }
     ]
   }

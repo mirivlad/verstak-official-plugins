@@ -350,16 +350,25 @@
   function normalizeProviderResults(provider, value) {
     var list = Array.isArray(value) ? value : (value && Array.isArray(value.results) ? value.results : []);
     return list.map(function (item) {
+      var legacyPath = cleanPath(item.path || item.relativePath || '');
+      var normalized = item && item.id && item.title;
+      var title = normalized ? String(item.title) : baseName(legacyPath || item.title || provider.label || provider.id);
+      var subtitle = normalized ? String(item.subtitle || '') : legacyPath;
+      var path = legacyPath || subtitle || title;
       return {
-        path: cleanPath(item.path || item.relativePath || item.title || provider.label || provider.id),
-        type: item.type || 'external',
-        matchType: item.matchType || provider.label || 'External match',
+        id: item.id || path,
+        path: path,
+        title: title,
+        subtitle: subtitle,
+        type: item.type || item.categoryId || 'external',
+        matchType: item.matchType || item.categoryLabel || provider.label || 'External match',
         sourceLabel: provider.label || provider.id || provider.pluginId,
-        openable: item.openable === true,
+        openable: item.openable === true || !!item.action,
+        action: item.action || null,
         line: item.line || 0,
         snippet: item.snippet || item.preview || ''
       };
-    }).filter(function (item) { return item.path; });
+    }).filter(function (item) { return item.path || item.title; });
   }
 
   async function runExternalProviders(api, rootPath, query, remaining) {
@@ -452,6 +461,35 @@
         containerEl.appendChild(resultsEl);
       }
 
+      function openResult(result) {
+        var action = result && result.action;
+        if (action && action.kind === 'resource' && action.resource) {
+          return api.workbench.openResource(action.resource).catch(function (err) { console.error('[search] openResource:', err); });
+        }
+        if (action && action.kind === 'view') {
+          window.dispatchEvent(new CustomEvent('verstak:open-view', {
+            detail: { viewId: action.viewId || '', pluginId: action.pluginId || '' }
+          }));
+          return Promise.resolve();
+        }
+        if (action && (action.kind === 'workspace' || action.kind === 'workspace-item')) {
+          var workspaceRoot = cleanPath(action.workspaceRootPath || '');
+          if (!workspaceRoot) return Promise.resolve();
+          window.dispatchEvent(new CustomEvent('verstak:workspace-selected', {
+            detail: { workspaceName: workspaceRoot, workspaceRootPath: workspaceRoot }
+          }));
+          if (action.kind === 'workspace-item') {
+            window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', {
+              detail: { workspaceItemId: action.workspaceItemId || '', toolRequest: action.toolRequest || null }
+            }));
+          }
+          return Promise.resolve();
+        }
+        if (!result || !result.openable || !result.path) return Promise.resolve();
+        return api.workbench.openResource({ kind: 'vault-file', path: result.path, mode: 'view' })
+          .catch(function (err) { console.error('[search] openResource:', err); });
+      }
+
       function render() {
         ensureLayout();
         if (document.activeElement !== input && input.value !== state.query) {
@@ -483,9 +521,9 @@
             el('div', {}, [
               el('div', { className: 'search-result-head' }, [
                 el('span', { className: 'search-type' }, [resultTypeLabel(result)]),
-                el('span', { className: 'search-title', title: result.path }, [baseName(result.path)])
+                el('span', { className: 'search-title', title: result.title || result.path }, [result.title || baseName(result.path)])
               ]),
-              el('div', { className: 'search-path' }, [result.path]),
+              el('div', { className: 'search-path' }, [result.subtitle || result.path]),
               el('div', { className: 'search-snippet' }, [result.snippet]),
               el('div', { className: 'search-meta' }, [
                 (result.sourceLabel ? result.sourceLabel + ' - ' : '') + result.matchType + (result.line ? ' - Line ' + result.line : '')
@@ -494,14 +532,8 @@
             result.openable ? el('button', {
               className: 'search-btn search-open-btn',
               textContent: tr('ui.open', null, 'Open'),
-              'data-search-open': result.path,
-              onClick: function () {
-                api.workbench.openResource({
-                  kind: 'vault-file',
-                  path: result.path,
-                  mode: 'view'
-                }).catch(function (err) { console.error('[search] openResource:', err); });
-              }
+              'data-search-open': result.path || result.id || result.title,
+              onClick: function () { openResult(result); }
             }) : null
           ]));
         });
