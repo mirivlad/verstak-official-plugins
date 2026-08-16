@@ -85,6 +85,11 @@
         "id": "verstak.activity.removeBrowserActivityRule",
         "title": "Remove a Browser Activity Rule",
         "handler": "verstak.activity.removeBrowserActivityRule"
+      },
+      {
+        "id": "verstak.activity.provideOverview",
+        "title": "Provide Overview Signals",
+        "handler": "verstak.activity.provideOverview"
       }
     ],
     "worklogProviders": [
@@ -115,6 +120,13 @@
           "browser.capture.converted"
         ],
         "handler": "recordActivityEvent"
+      }
+    ],
+    "overviewProviders": [
+      {
+        "id": "verstak.activity.overview",
+        "label": "Activity",
+        "handler": "verstak.activity.provideOverview"
       }
     ]
   }

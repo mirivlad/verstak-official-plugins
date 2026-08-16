@@ -5,7 +5,13 @@
   "version": "0.1.0",
   "apiVersion": "0.1.0",
   "description": "Deal-scoped journal with user-authored entries and optional Activity links.",
-  "localization": { "defaultLocale": "en", "locales": { "en": "locales/en.json", "ru": "locales/ru.json" } },
+  "localization": {
+    "defaultLocale": "en",
+    "locales": {
+      "en": "locales/en.json",
+      "ru": "locales/ru.json"
+    }
+  },
   "source": "official",
   "icon": "book-open",
   "provides": [
@@ -19,7 +25,8 @@
     "files.write",
     "storage.namespace",
     "ui.register",
-    "workbench.open"
+    "workbench.open",
+    "commands.register"
   ],
   "frontend": {
     "entry": "frontend/src/index.js"
@@ -49,6 +56,20 @@
         "icon": "book-open",
         "order": 70,
         "component": "JournalView"
+      }
+    ],
+    "commands": [
+      {
+        "id": "verstak.journal.provideOverview",
+        "title": "Provide Overview Signals",
+        "handler": "verstak.journal.provideOverview"
+      }
+    ],
+    "overviewProviders": [
+      {
+        "id": "verstak.journal.overview",
+        "label": "Journal",
+        "handler": "verstak.journal.provideOverview"
       }
     ]
   }

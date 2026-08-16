@@ -11,6 +11,7 @@
   var MAX_TODOS = 500;
   var STATUS_VALUES = ['open', 'done', 'cancelled'];
   var PRIORITY_VALUES = ['low', 'normal', 'high'];
+  var OVERVIEW_COMMAND_ID = 'verstak.todo.provideOverview';
 
   var STYLES = [
     '.todo-root{display:flex;flex-direction:column;height:100%;min-height:0;container-type:inline-size;background:var(--vt-color-background,#101020);color:var(--vt-color-text-primary,#f4f7fb);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}',
@@ -696,6 +697,51 @@
     }
   };
 
+
+  function overviewText(api, key, params, fallback) {
+    if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
+    return fallback || key;
+  }
+
+  function todoOverviewState(api, todo) {
+    if (reminderIsDue(todo)) return overviewText(api, 'overview.reminderDue', null, 'Reminder due');
+    var state = dueState(todo);
+    if (state === 'overdue') return overviewText(api, 'overview.overdue', null, 'Overdue');
+    if (state === 'due-soon') return overviewText(api, 'overview.dueSoon', null, 'Due soon');
+    return '';
+  }
+
+  function provideOverview(api, args) {
+    var workspace = cleanWorkspace(args && args.workspaceRootPath);
+    if (!workspace || !api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve({});
+    return api.settings.read().then(function (settings) {
+      var todos = sortTodos(normalizeTodos((settings || {})[GLOBAL_KEY])).filter(function (todo) {
+        return cleanWorkspace(todo.workspaceRootPath) === workspace && !!todoOverviewState(api, todo);
+      }).sort(function (a, b) {
+        var av = dateTimeValue(a.reminderAt, false) || dateTimeValue(a.dueAt, true) || Number.MAX_SAFE_INTEGER;
+        var bv = dateTimeValue(b.reminderAt, false) || dateTimeValue(b.dueAt, true) || Number.MAX_SAFE_INTEGER;
+        return av - bv || text(b.updatedAt).localeCompare(text(a.updatedAt));
+      });
+      return {
+        attention: todos.map(function (todo) {
+          var state = todoOverviewState(api, todo);
+          var due = todo.dueAt ? overviewText(api, 'overview.due', { date: todo.dueAt }, 'Due ' + todo.dueAt) : '';
+          return {
+            id: todo.id,
+            title: todo.title || 'Untitled',
+            meta: due ? state + ' · ' + due : state,
+            occurredAt: todo.reminderAt || todo.dueAt || todo.updatedAt || todo.createdAt || '',
+            action: { workspaceItemId: 'verstak.todo.workspace' }
+          };
+        }),
+        lastActiveAt: todos.length ? (todos[0].updatedAt || todos[0].dueAt || '') : ''
+      };
+    }).catch(function (err) {
+      console.warn('[verstak.todo] overview provider:', err);
+      return {};
+    });
+  }
+
   TodoView.unmount = function (containerEl) {
     if (containerEl) containerEl.innerHTML = '';
   };
@@ -703,6 +749,10 @@
   window.VerstakPluginRegister(PLUGIN_ID, {
     components: {
       TodoView: TodoView
+    },
+    activate: function (api) {
+      if (!api || !api.commands || typeof api.commands.register !== 'function') return Promise.resolve();
+      return api.commands.register(OVERVIEW_COMMAND_ID, function (args) { return provideOverview(api, args); });
     }
   });
 })();
