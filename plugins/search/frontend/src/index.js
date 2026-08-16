@@ -18,6 +18,9 @@
   var INDEX_STORAGE_KEY = 'search-index';
   var INDEX_VERSION = 1;
   var SEARCH_COMMAND_ID = 'verstak.search.searchVaultText';
+  var providerIndexes = Object.create(null);
+  var providerBuilds = Object.create(null);
+  var providerGeneration = 0;
 
   function injectStyles() {
     if (document.getElementById('search-style-injected')) return;
@@ -253,6 +256,95 @@
       if (match) results.push(match);
     }
     return results;
+  }
+
+  function providerResultId(result) {
+    return [result && result.type || 'result', cleanPath(result && result.path), result && result.matchType || 'match'].join(':');
+  }
+
+  function normalizeLocalProviderResult(result) {
+    var normalized = {
+      id: providerResultId(result),
+      title: baseName(result.path),
+      subtitle: cleanPath(result.path),
+      snippet: result.snippet || '',
+      categoryId: result.type === 'folder' ? 'folders' : 'files',
+      score: result.matchType === 'Content match' ? 80 : 100
+    };
+    if (result.openable) {
+      normalized.action = {
+        kind: 'resource',
+        resource: {
+          kind: 'vault-file',
+          path: cleanPath(result.path),
+          mode: 'view'
+        }
+      };
+    }
+    return normalized;
+  }
+
+  async function loadProviderIndex(api, rootPath) {
+    var key = cleanPath(rootPath);
+    if (normalizeIndex(providerIndexes[key], key)) return providerIndexes[key];
+    if (providerBuilds[key]) return providerBuilds[key];
+    var generation = providerGeneration;
+    providerBuilds[key] = buildIndex(api, key).then(function (built) {
+      if (generation === providerGeneration) providerIndexes[key] = built;
+      return built;
+    }).finally(function () {
+      delete providerBuilds[key];
+    });
+    return providerBuilds[key];
+  }
+
+  async function provideSearch(api, args) {
+    args = args || {};
+    var query = String(args.query || '').trim();
+    var rootPath = cleanPath(args.workspaceRootPath || '');
+    var limit = Number(args.limit) || MAX_RESULTS;
+    if (limit <= 0) limit = MAX_RESULTS;
+    if (query.length < 2) return { results: [] };
+    var index = await loadProviderIndex(api, rootPath);
+    var local = runLocalSearch(index, query).slice(0, limit);
+    return {
+      results: local.map(normalizeLocalProviderResult),
+      partial: local.length >= limit
+    };
+  }
+
+  function invalidateProviderIndexes(event) {
+    var payload = (event && event.payload) || event || {};
+    var changedPath = cleanPath(payload.relativePath || payload.path || '');
+    providerGeneration += 1;
+    if (!changedPath) {
+      providerIndexes = Object.create(null);
+      providerBuilds = Object.create(null);
+      return;
+    }
+    Object.keys(providerIndexes).forEach(function (scope) {
+      if (!scope || changedPath === scope || changedPath.indexOf(scope + '/') === 0) delete providerIndexes[scope];
+    });
+    Object.keys(providerBuilds).forEach(function (scope) {
+      if (!scope || changedPath === scope || changedPath.indexOf(scope + '/') === 0) delete providerBuilds[scope];
+    });
+  }
+
+  function activateSearchProvider(api) {
+    var tasks = [];
+    if (api && api.commands && typeof api.commands.register === 'function') {
+      tasks.push(api.commands.register(SEARCH_COMMAND_ID, function (args) {
+        return provideSearch(api, args);
+      }));
+    }
+    if (api && api.events && typeof api.events.subscribe === 'function') {
+      tasks.push(api.events.subscribe('file.changed', function (event) {
+        invalidateProviderIndexes(event);
+      }));
+    }
+    return Promise.all(tasks).catch(function (err) {
+      console.warn('[verstak.search] background provider activation:', err);
+    });
   }
 
   function normalizeProviderResults(provider, value) {
@@ -500,13 +592,6 @@
       }
 
       function setupIntegrations() {
-        if (api.commands && typeof api.commands.register === 'function') {
-          api.commands.register(SEARCH_COMMAND_ID, searchVaultText).then(function (unregister) {
-            if (typeof unregister === 'function') cleanupFns.push(unregister);
-          }).catch(function (err) {
-            console.error('[search] register command:', err);
-          });
-        }
         if (api.events && typeof api.events.subscribe === 'function') {
           api.events.subscribe('file.changed', handleFileChanged).then(function (unsubscribe) {
             if (typeof unsubscribe === 'function') cleanupFns.push(unsubscribe);
@@ -544,6 +629,7 @@
   };
 
   window.VerstakPluginRegister('verstak.search', {
-    components: { SearchView: SearchView }
+    components: { SearchView: SearchView },
+    activate: activateSearchProvider
   });
 })();
