@@ -28,5 +28,27 @@ for (const { name, manifest } of manifests) {
   }
 }
 
+const byId = new Map(manifests.map((row) => [row.manifest.id, row]));
+function fail(message) { throw new Error(message); }
+const searchRow = byId.get('verstak.search');
+if (!searchRow) fail('verstak.search manifest missing');
+const source = fs.readFileSync(path.join(root, searchRow.name, searchRow.manifest.frontend.entry), 'utf8');
+if (!source.includes("commands.register(SEARCH_COMMAND_ID")) fail("Search bundle must register its provider command during activation");
+if (!source.includes("api.events.subscribe('file.changed'")) fail("Search provider index must invalidate on file.changed");
+if (!source.includes("loadProviderEntries(api, rootPath)")) fail("Search provider must publish path matches before full-text reads finish");
+if (!source.includes("api.capabilities.get(FILES_CAPABILITY_ID)")) fail("Search folder navigation must resolve Files through its capability");
+if (!source.includes("api.workspaces.resolvePath(cleanPath(result.path))")) fail("Search folder navigation must resolve the owning Deal through the workspace API");
+if (!source.includes("toolRequest: { type: 'open-folder', path: localPath }")) fail("Search folder results must use the Files open-folder tool request contract");
+if (!source.includes("api.commands.executeFor(provider.pluginId, provider.handler")) fail("Search workspace must aggregate declared Search providers");
+
+const filesSource = fs.readFileSync(path.join(root, 'files/frontend/src/index.js'), 'utf8');
+if (!filesSource.includes("toolRequest && toolRequest.type === 'open-folder'")) fail("Files workspace item must accept the open-folder tool request");
+if (!filesSource.includes("requestedSegments.indexOf('..') === -1")) fail("Files open-folder tool request must reject parent traversal");
+
+const searchOptional = new Set((byId.get('verstak.search').manifest.optionalRequires || []));
+for (const capability of ['verstak/core/capability-registry/v1', 'verstak/core/workspace/v1']) {
+  if (!searchOptional.has(capability)) fail(`verstak.search must declare optional dependency ${capability}`);
+}
+
 if (providerCount !== 4) throw new Error(`expected 4 official Search providers, found ${providerCount}`);
 console.log(`OK ${providerCount} Search providers use declared background commands`);

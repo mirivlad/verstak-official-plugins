@@ -5,7 +5,13 @@
   "version": "0.1.0",
   "apiVersion": "0.1.0",
   "description": "Deal-scoped vault text search provider.",
-  "localization": { "defaultLocale": "en", "locales": { "en": "locales/en.json", "ru": "locales/ru.json" } },
+  "localization": {
+    "defaultLocale": "en",
+    "locales": {
+      "en": "locales/en.json",
+      "ru": "locales/ru.json"
+    }
+  },
   "source": "official",
   "icon": "search",
   "provides": [
@@ -51,5 +57,9 @@
         "handler": "verstak.search.searchVaultText"
       }
     ]
-  }
+  },
+  "optionalRequires": [
+    "verstak/core/capability-registry/v1",
+    "verstak/core/workspace/v1"
+  ]
 }
