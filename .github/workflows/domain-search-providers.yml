@@ -39,7 +39,9 @@ jobs:
         run: python3 -m pip install --quiet jsonschema
 
       - name: Apply provider patch
-        run: python3 .github/scripts/domain_search_providers.py
+        run: |
+          python3 .github/scripts/domain_search_providers.py
+          python3 .github/scripts/add_search_locales.py
 
       - name: Domain provider smoke
         run: node scripts/smoke-domain-search-providers.js
@@ -65,7 +67,7 @@ jobs:
 
       - name: Remove one-shot machinery and commit
         run: |
-          rm .github/scripts/domain_search_providers.py .github/workflows/domain-search-providers.yml
+          rm .github/scripts/domain_search_providers.py .github/scripts/add_search_locales.py .github/workflows/domain-search-providers.yml
           git add -A
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
