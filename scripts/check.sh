@@ -275,6 +275,14 @@ else
 fi
 
 echo ""
+echo "[search providers]"
+if command -v node &>/dev/null; then
+  node "$ROOT/scripts/check-search-providers.js"
+  report "search provider contracts" $?
+else
+  echo "  ⚠️  node not available — skipping Search provider contracts"
+fi
+
 # Check all scripts in plugins are executable
 echo "[script permissions]"
 MISSING_EXEC=0
@@ -313,6 +321,8 @@ if command -v node &>/dev/null; then
   report "todo frontend behavior" $?
   node "$ROOT/scripts/smoke-search-plugin.js"
   report "search frontend behavior" $?
+  node "$ROOT/scripts/smoke-domain-search-providers.js"
+  report "domain search provider behavior" $?
   node "$ROOT/scripts/smoke-secrets-plugin.js"
   report "secrets frontend behavior" $?
   node "$ROOT/scripts/smoke-sync-plugin.js"

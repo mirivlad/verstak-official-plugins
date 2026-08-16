@@ -1,10 +1,19 @@
 {
+  "contributions.commands.verstak.journal.provideOverview.title": "Данные для обзора",
+  "contributions.commands.verstak.journal.search.title": "Искать в журнале",
+  "contributions.overviewProviders.verstak.journal.overview.label": "Журнал",
+  "contributions.searchProviders.verstak.journal.search-provider.label": "Журнал",
   "contributions.sidebarItems.verstak.journal.sidebar.title": "Журнал",
   "contributions.views.verstak.journal.view.title": "Журнал",
   "contributions.workspaceItems.verstak.journal.workspace.title": "Журнал",
   "file.heading": "Журнал — {deal} — {month}",
   "manifest.description": "Журнал Дела с ручными записями и необязательными связями с активностью.",
   "manifest.name": "Журнал",
+  "overview.category": "Журнал",
+  "overview.continue": "Продолжить запись журнала «{title}»",
+  "overview.countMany": "{count} записей журнала",
+  "overview.countOne": "{count} запись журнала",
+  "overview.summary": "Журнал",
   "ui.activity.captureLink": "Сохранена ссылка",
   "ui.activity.capturePage": "Сохранена страница",
   "ui.activity.captureSelection": "Захвачено выделение",
@@ -115,12 +124,5 @@
   "ui.updated": "Запись обновлена",
   "ui.workItem": "Выполненная работа",
   "ui.workspace": "Дело",
-  "ui.workspaceTitle": "Журнал · {workspace}",
-  "contributions.commands.verstak.journal.provideOverview.title": "Данные для обзора",
-  "contributions.overviewProviders.verstak.journal.overview.label": "Журнал",
-  "overview.summary": "Журнал",
-  "overview.countOne": "{count} запись журнала",
-  "overview.countMany": "{count} записей журнала",
-  "overview.category": "Журнал",
-  "overview.continue": "Продолжить запись журнала «{title}»"
+  "ui.workspaceTitle": "Журнал · {workspace}"
 }

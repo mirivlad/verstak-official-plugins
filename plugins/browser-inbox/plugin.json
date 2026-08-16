@@ -72,6 +72,11 @@
         "id": "verstak.browser-inbox.provideOverview",
         "title": "Provide Overview Signals",
         "handler": "verstak.browser-inbox.provideOverview"
+      },
+      {
+        "id": "verstak.browser-inbox.search",
+        "title": "Search Browser Materials",
+        "handler": "verstak.browser-inbox.search"
       }
     ],
     "overviewProviders": [
@@ -79,6 +84,13 @@
         "id": "verstak.browser-inbox.overview",
         "label": "Browser",
         "handler": "verstak.browser-inbox.provideOverview"
+      }
+    ],
+    "searchProviders": [
+      {
+        "id": "verstak.browser-inbox.search-provider",
+        "label": "Browser",
+        "handler": "verstak.browser-inbox.search"
       }
     ]
   }

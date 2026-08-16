@@ -1,10 +1,19 @@
 {
+  "contributions.commands.verstak.journal.provideOverview.title": "Provide Overview Signals",
+  "contributions.commands.verstak.journal.search.title": "Search Journal",
+  "contributions.overviewProviders.verstak.journal.overview.label": "Journal",
+  "contributions.searchProviders.verstak.journal.search-provider.label": "Journal",
   "contributions.sidebarItems.verstak.journal.sidebar.title": "Journal",
   "contributions.views.verstak.journal.view.title": "Journal",
   "contributions.workspaceItems.verstak.journal.workspace.title": "Journal",
   "file.heading": "Journal — {deal} — {month}",
   "manifest.description": "Deal-scoped journal with user-authored entries and optional Activity links.",
   "manifest.name": "Journal",
+  "overview.category": "Journal",
+  "overview.continue": "Continue journal entry “{title}”",
+  "overview.countMany": "{count} journal entries",
+  "overview.countOne": "{count} journal entry",
+  "overview.summary": "Journal",
   "ui.activity.captureLink": "Link captured",
   "ui.activity.capturePage": "Page captured",
   "ui.activity.captureSelection": "Selection captured",
@@ -115,12 +124,5 @@
   "ui.updated": "Entry updated",
   "ui.workItem": "Work item",
   "ui.workspace": "Deal",
-  "ui.workspaceTitle": "Journal · {workspace}",
-  "contributions.commands.verstak.journal.provideOverview.title": "Provide Overview Signals",
-  "contributions.overviewProviders.verstak.journal.overview.label": "Journal",
-  "overview.summary": "Journal",
-  "overview.countOne": "{count} journal entry",
-  "overview.countMany": "{count} journal entries",
-  "overview.category": "Journal",
-  "overview.continue": "Continue journal entry “{title}”"
+  "ui.workspaceTitle": "Journal · {workspace}"
 }
