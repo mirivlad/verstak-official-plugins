@@ -1,0 +1,73 @@
+name: domain-search-providers
+
+on:
+  push:
+    branches:
+      - audit/domain-search-providers
+
+permissions:
+  contents: write
+
+concurrency:
+  group: domain-search-providers-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out official plugins
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check out current SDK
+        uses: actions/checkout@v4
+        with:
+          repository: mirivlad/verstak-sdk
+          ref: main
+          path: verstak-sdk
+
+      - name: Put SDK beside official plugins
+        run: mv verstak-sdk ../verstak-sdk
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Python schema dependency
+        run: python3 -m pip install --quiet jsonschema
+
+      - name: Apply provider patch
+        run: python3 .github/scripts/domain_search_providers.py
+
+      - name: Domain provider smoke
+        run: node scripts/smoke-domain-search-providers.js
+
+      - name: Search UI smoke
+        run: node scripts/smoke-search-plugin.js
+
+      - name: Search declaration guard
+        run: node scripts/check-search-providers.js
+
+      - name: Full official plugin checks
+        run: bash scripts/check.sh
+
+      - name: Verify diff
+        run: |
+          git diff --check
+          grep -q 'readJournalEntries(api, workspace)' plugins/journal/frontend/src/index.js
+          grep -q 'verstak.journal.search-provider' plugins/journal/plugin.json
+          grep -q 'verstak.browser-inbox.search-provider' plugins/browser-inbox/plugin.json
+          grep -q 'verstak.activity.search-provider' plugins/activity/plugin.json
+          grep -q 'item.action || null' plugins/search/frontend/src/index.js
+          git status --short
+
+      - name: Remove one-shot machinery and commit
+        run: |
+          rm .github/scripts/domain_search_providers.py .github/workflows/domain-search-providers.yml
+          git add -A
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat: add domain-owned Search providers'
+          git push origin HEAD:audit/domain-search-providers
