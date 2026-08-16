@@ -61,6 +61,20 @@ jobs:
         working-directory: work/verstak-official-plugins
         run: python3 .github/scripts/apply-search-provider-navigation.py
 
+      - name: Correct checker path root
+        working-directory: work/verstak-official-plugins
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/check-search-providers.js')
+          text = path.read_text()
+          old = "path.join(root, 'plugins/files/frontend/src/index.js')"
+          new = "path.join(root, 'files/frontend/src/index.js')"
+          if text.count(old) != 1:
+              raise SystemExit('generated Files checker path drifted')
+          path.write_text(text.replace(old, new, 1))
+          PY
+
       - name: Verify intended source boundaries
         working-directory: work/verstak-official-plugins
         run: |
