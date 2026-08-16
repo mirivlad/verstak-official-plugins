@@ -26,13 +26,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Correct one-shot Notes anchor
+      - name: Correct one-shot contract details
         working-directory: work/verstak-official-plugins
         run: |
           python3 - <<'PY'
           from pathlib import Path
           p = Path('.github/scripts/apply_overview_providers.py')
           s = p.read_text()
+
+          # Notes is an object-style component; it has no NotesView.unmount symbol.
           s = s.replace(
               'replace_once(notes, "  NotesView.unmount = function (containerEl) {", notes_provider + "  NotesView.unmount = function (containerEl) {")',
               'replace_once(notes, "  window.VerstakPluginRegister(\'verstak.notes\', {", notes_provider + "  window.VerstakPluginRegister(\'verstak.notes\', {")'
@@ -40,6 +42,50 @@ jobs:
           s = s.replace("var value = text(entry && (entry.relativePath || entry.name)).replace(/\\\\/g, '/');", "var value = String(entry && (entry.relativePath || entry.name) || '').replace(/\\\\/g, '/');")
           s = s.replace("var relative = text(overview.relativePath || overview.name);", "var relative = String(overview.relativePath || overview.name || '');")
           s = s.replace("title: text(overview.name || fileName(relative) || 'Overview.md'),", "title: String(overview.name || fileName(relative) || 'Overview.md'),")
+
+          # Official plugin catalogs are deliberately flat. Also localize every
+          # manifest contribution introduced by the provider contract.
+          start = s.index('def add_manifest_provider(')
+          end = s.index('\n\ndef add_locale', start)
+          s = s[:start] + '''def add_manifest_provider(name, command_id, provider_id, label, needs_commands_permission=True):
+              path = ROOT / 'plugins' / name / 'plugin.json'
+              data = json.loads(path.read_text())
+              if needs_commands_permission and 'commands.register' not in data.setdefault('permissions', []):
+                  data['permissions'].append('commands.register')
+              contributes = data.setdefault('contributes', {})
+              commands = contributes.setdefault('commands', [])
+              if not any(item.get('id') == command_id for item in commands):
+                  commands.append({'id': command_id, 'title': 'Provide Overview Signals', 'handler': command_id})
+              providers = contributes.setdefault('overviewProviders', [])
+              if not any(item.get('id') == provider_id for item in providers):
+                  providers.append({'id': provider_id, 'label': label, 'handler': command_id})
+              path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\\n')
+              for locale in ('en', 'ru'):
+                  locale_path = ROOT / 'plugins' / name / 'locales' / f'{locale}.json'
+                  catalog = json.loads(locale_path.read_text())
+                  catalog[f'contributions.commands.{command_id}.title'] = 'Provide Overview Signals' if locale == 'en' else 'Данные для обзора'
+                  catalog[f'contributions.overviewProviders.{provider_id}.label'] = catalog.get('manifest.name', label)
+                  locale_path.write_text(json.dumps(catalog, indent=2, ensure_ascii=False) + '\\n')
+          ''' + s[end:]
+
+          start = s.index('def add_locale(')
+          end = s.index('\n\ndef replace_once', start)
+          s = s[:start] + '''def add_locale(name, en, ru):
+              for locale, values in [('en', en), ('ru', ru)]:
+                  path = ROOT / 'plugins' / name / 'locales' / f'{locale}.json'
+                  data = json.loads(path.read_text())
+                  for key, value in values.items():
+                      full_key = 'overview.' + key
+                      assert full_key not in data or data[full_key] == value, (name, locale, full_key)
+                      data[full_key] = value
+                  path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\\n')
+          ''' + s[end:]
+
+          # Only provider plugins have to expose source-level workspace targets.
+          s = s.replace(
+              "  const source = manifest.frontend && manifest.frontend.entry ? fs.readFileSync",
+              "  if (!(contributes.overviewProviders || []).length) continue;\\n  const source = manifest.frontend && manifest.frontend.entry ? fs.readFileSync"
+          )
           p.write_text(s)
           PY
       - name: Apply provider patch
