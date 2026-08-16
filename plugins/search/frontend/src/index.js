@@ -18,6 +18,9 @@
   var INDEX_STORAGE_KEY = 'search-index';
   var INDEX_VERSION = 1;
   var SEARCH_COMMAND_ID = 'verstak.search.searchVaultText';
+  var FILES_CAPABILITY_ID = 'verstak/files/v1';
+  var providerEntries = Object.create(null);
+  var providerEntryBuilds = Object.create(null);
   var providerIndexes = Object.create(null);
   var providerBuilds = Object.create(null);
   var providerGeneration = 0;
@@ -180,8 +183,8 @@
     return found;
   }
 
-  async function buildIndex(api, rootPath) {
-    var entries = await collectEntries(api, rootPath);
+  async function buildIndex(api, rootPath, entries) {
+    entries = Array.isArray(entries) ? entries : await collectEntries(api, rootPath);
     var files = [];
     for (var i = 0; i < entries.length; i++) {
       var entry = entries[i];
@@ -262,7 +265,37 @@
     return [result && result.type || 'result', cleanPath(result && result.path), result && result.matchType || 'match'].join(':');
   }
 
-  function normalizeLocalProviderResult(result) {
+  async function resolveFolderAction(api, result) {
+    if (!api || !api.capabilities || typeof api.capabilities.get !== 'function') return null;
+    if (!api.contributions || typeof api.contributions.list !== 'function') return null;
+    if (!api.workspaces || typeof api.workspaces.resolvePath !== 'function') return null;
+    try {
+      var capability = await api.capabilities.get(FILES_CAPABILITY_ID);
+      if (!capability || !capability.available || !capability.pluginId) return null;
+      var workspaceItems = await api.contributions.list('workspaceItems');
+      workspaceItems = Array.isArray(workspaceItems) ? workspaceItems : [];
+      var filesTool = workspaceItems.find(function (item) {
+        return item && item.pluginId === capability.pluginId && item.id;
+      });
+      if (!filesTool) return null;
+      var resolved = await api.workspaces.resolvePath(cleanPath(result.path));
+      if (!resolved || !resolved.found || !resolved.workspaceRootPath) return null;
+      var fullPath = cleanPath(result.path);
+      var workspaceRootPath = cleanPath(resolved.workspaceRootPath);
+      if (fullPath !== workspaceRootPath && fullPath.indexOf(workspaceRootPath + '/') !== 0) return null;
+      var localPath = fullPath === workspaceRootPath ? '' : fullPath.slice(workspaceRootPath.length + 1);
+      return {
+        kind: 'workspace-item',
+        workspaceRootPath: workspaceRootPath,
+        workspaceItemId: filesTool.id,
+        toolRequest: { type: 'open-folder', path: localPath }
+      };
+    } catch (err) {
+      return null;
+    }
+  }
+
+  async function normalizeLocalProviderResult(api, result) {
     var normalized = {
       id: providerResultId(result),
       title: baseName(result.path),
@@ -280,22 +313,45 @@
           mode: 'view'
         }
       };
+    } else if (result.type === 'folder') {
+      normalized.action = await resolveFolderAction(api, result);
     }
     return normalized;
   }
 
-  async function loadProviderIndex(api, rootPath) {
+  async function loadProviderEntries(api, rootPath) {
+    var key = cleanPath(rootPath);
+    if (Array.isArray(providerEntries[key])) return providerEntries[key];
+    if (providerEntryBuilds[key]) return providerEntryBuilds[key];
+    var generation = providerGeneration;
+    providerEntryBuilds[key] = collectEntries(api, key).then(function (entries) {
+      if (generation === providerGeneration) providerEntries[key] = entries;
+      return entries;
+    }).finally(function () {
+      delete providerEntryBuilds[key];
+    });
+    return providerEntryBuilds[key];
+  }
+
+  async function loadProviderIndex(api, rootPath, knownEntries) {
     var key = cleanPath(rootPath);
     if (normalizeIndex(providerIndexes[key], key)) return providerIndexes[key];
     if (providerBuilds[key]) return providerBuilds[key];
     var generation = providerGeneration;
-    providerBuilds[key] = buildIndex(api, key).then(function (built) {
+    var entries = Array.isArray(knownEntries) ? knownEntries : await loadProviderEntries(api, key);
+    providerBuilds[key] = buildIndex(api, key, entries).then(function (built) {
       if (generation === providerGeneration) providerIndexes[key] = built;
       return built;
     }).finally(function () {
       delete providerBuilds[key];
     });
     return providerBuilds[key];
+  }
+
+  async function normalizeLocalProviderResults(api, rows) {
+    return Promise.all(rows.map(function (row) {
+      return normalizeLocalProviderResult(api, row);
+    }));
   }
 
   async function provideSearch(api, args) {
@@ -305,10 +361,34 @@
     var limit = Number(args.limit) || MAX_RESULTS;
     if (limit <= 0) limit = MAX_RESULTS;
     if (query.length < 2) return { results: [] };
-    var index = await loadProviderIndex(api, rootPath);
+
+    var readyIndex = normalizeIndex(providerIndexes[rootPath], rootPath);
+    if (readyIndex) {
+      var readyLocal = runLocalSearch(readyIndex, query).slice(0, limit);
+      return {
+        results: await normalizeLocalProviderResults(api, readyLocal),
+        partial: readyLocal.length >= limit
+      };
+    }
+
+    // File and folder names are useful before full-text indexing finishes.
+    // Do not make a quick jump wait behind every readText() call in the vault.
+    var entries = await loadProviderEntries(api, rootPath);
+    var pathLocal = runLocalSearch({ entries: entries, files: [] }, query).slice(0, limit);
+    if (pathLocal.length) {
+      loadProviderIndex(api, rootPath, entries).catch(function (err) {
+        console.warn('[verstak.search] background text index:', err);
+      });
+      return {
+        results: await normalizeLocalProviderResults(api, pathLocal),
+        partial: true
+      };
+    }
+
+    var index = await loadProviderIndex(api, rootPath, entries);
     var local = runLocalSearch(index, query).slice(0, limit);
     return {
-      results: local.map(normalizeLocalProviderResult),
+      results: await normalizeLocalProviderResults(api, local),
       partial: local.length >= limit
     };
   }
@@ -318,10 +398,18 @@
     var changedPath = cleanPath(payload.relativePath || payload.path || '');
     providerGeneration += 1;
     if (!changedPath) {
+      providerEntries = Object.create(null);
+      providerEntryBuilds = Object.create(null);
       providerIndexes = Object.create(null);
       providerBuilds = Object.create(null);
       return;
     }
+    Object.keys(providerEntries).forEach(function (scope) {
+      if (!scope || changedPath === scope || changedPath.indexOf(scope + '/') === 0) delete providerEntries[scope];
+    });
+    Object.keys(providerEntryBuilds).forEach(function (scope) {
+      if (!scope || changedPath === scope || changedPath.indexOf(scope + '/') === 0) delete providerEntryBuilds[scope];
+    });
     Object.keys(providerIndexes).forEach(function (scope) {
       if (!scope || changedPath === scope || changedPath.indexOf(scope + '/') === 0) delete providerIndexes[scope];
     });
