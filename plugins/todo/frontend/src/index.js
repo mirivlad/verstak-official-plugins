@@ -582,7 +582,7 @@
       var workspaceRoot = cleanWorkspace(todo && todo.workspaceRootPath);
       if (!workspaceRoot || typeof window === 'undefined' || typeof window.dispatchEvent !== 'function' || typeof CustomEvent === 'undefined') return;
       window.dispatchEvent(new CustomEvent('verstak:workspace-selected', { detail: { workspaceName: workspaceRoot } }));
-      window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', { detail: { kind: 'todo' } }));
+      window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', { detail: { workspaceItemId: 'verstak.todo.workspace' } }));
     }
 
     function createJournalEntry(todo) {
@@ -590,7 +590,7 @@
       if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function' || typeof CustomEvent === 'undefined') return;
       window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', {
         detail: {
-          kind: 'journal',
+          workspaceItemId: 'verstak.journal.workspace',
           toolRequest: {
             type: 'completed-todo',
             todo: {

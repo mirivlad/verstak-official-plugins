@@ -310,7 +310,7 @@ async function mountWithApi(apiState, props, emittedEvents = [], document = make
 
   byData(container, 'data-todo-action', 'create-journal-entry').click();
   const journalEvent = workspaceView.emittedEvents.find((event) => event.type === 'verstak:workspace-open-tool');
-  if (!journalEvent || !journalEvent.detail || journalEvent.detail.kind !== 'journal') {
+  if (!journalEvent || !journalEvent.detail || journalEvent.detail.workspaceItemId !== 'verstak.journal.workspace') {
     throw new Error('Todo Journal conversion did not request the Journal workspace tool');
   }
   const journalRequest = journalEvent.detail.toolRequest;
