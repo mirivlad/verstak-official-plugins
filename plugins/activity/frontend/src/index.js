@@ -1589,7 +1589,7 @@
       });
       var fileRecent = recent.filter(function (item) { return item.categoryId === 'files'; }).length;
       var candidates = (results[2] && Array.isArray(results[2].candidates)) ? results[2].candidates : [];
-      var attention = candidates.map(function (candidate) {
+      var attention = candidates.map(function (candidate, index) {
         return {
           id: candidate.candidateId,
           title: overviewTranslate(api, 'overview.possibleJournalEntry', null, 'Possible journal entry'),
@@ -1598,6 +1598,7 @@
             activities: candidate.activityCount || (candidate.activityIds || []).length || 0
           }, (candidate.estimatedMinutes || 0) + ' min · ' + (candidate.activityCount || 0) + ' activities'),
           occurredAt: candidate.endedAt || candidate.startedAt || '',
+          order: 200 + index,
           action: overviewAction('verstak.journal.workspace', { type: 'work-session-candidate', candidate: candidate })
         };
       });
