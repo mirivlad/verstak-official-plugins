@@ -1,0 +1,40 @@
+name: apply-overview-providers
+
+on:
+  push:
+    branches: [audit/overview-providers]
+    paths:
+      - '.github/scripts/apply_overview_providers.py'
+      - '.github/workflows/apply-overview-providers.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/overview-providers
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          repository: mirivlad/verstak-sdk
+          path: ../verstak-sdk
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Apply provider patch
+        run: python3 .github/scripts/apply_overview_providers.py
+      - name: Check official plugins
+        run: bash scripts/check.sh
+      - name: Remove one-shot machinery and commit
+        run: |
+          rm -f .github/scripts/apply_overview_providers.py .github/workflows/apply-overview-providers.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'feat: provide Overview signals from official plugins'
+          git push origin HEAD:audit/overview-providers
