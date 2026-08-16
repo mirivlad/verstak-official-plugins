@@ -98,7 +98,7 @@ function makeDocument() {
   };
 }
 
-function loadComponent(document) {
+function loadBundle(document) {
   const registry = {};
   vm.runInNewContext(source, {
     console: {
@@ -113,15 +113,16 @@ function loadComponent(document) {
     document,
     window: {
       VerstakPluginRegister(pluginId, bundle) {
-        registry[pluginId] = bundle.components || {};
+        registry[pluginId] = bundle || {};
       },
     },
     setTimeout,
     clearTimeout,
   }, { filename: sourcePath });
-  const component = registry['verstak.search'] && registry['verstak.search'].SearchView;
-  if (!component) throw new Error('SearchView was not registered');
-  return component;
+  const bundle = registry['verstak.search'];
+  if (!bundle || !bundle.components || !bundle.components.SearchView) throw new Error('SearchView was not registered');
+  if (typeof bundle.activate !== 'function') throw new Error('Search bundle must expose background activate()');
+  return bundle;
 }
 
 async function flush() {
@@ -138,7 +139,8 @@ async function wait(ms) {
 
 (async () => {
   const document = makeDocument();
-  const component = loadComponent(document);
+  const bundle = loadBundle(document);
+  const component = bundle.components.SearchView;
   const opened = [];
   const fileContents = {
     'Project/Docs/case.md': '# Case\nTarget phrase is here.\n',
@@ -205,6 +207,11 @@ async function wait(ms) {
     },
     files: {
       list: async (relativeDir) => {
+        if (relativeDir === '') {
+          return [
+            { name: 'Project', relativePath: 'Project', type: 'folder' },
+          ];
+        }
         if (relativeDir === 'Project') {
           return [
             { name: 'Docs', relativePath: 'Project/Docs', type: 'folder' },
@@ -232,12 +239,32 @@ async function wait(ms) {
     },
   };
 
+  await bundle.activate(api);
+  await flush();
+  if (!commandHandlers.has('verstak.search.searchVaultText')) throw new Error('background search provider command was not registered');
+  if (!eventHandlers['file.changed'] || eventHandlers['file.changed'].length !== 1) throw new Error('background file.changed subscription was not registered');
+
+  const backgroundSearch = commandHandlers.get('verstak.search.searchVaultText');
+  const globalResponse = await backgroundSearch({ query: 'target phrase', limit: 10 });
+  if (!globalResponse || !Array.isArray(globalResponse.results)) throw new Error('background provider must return SearchProviderResponse');
+  const globalFile = globalResponse.results.find((item) => item.subtitle === 'Project/Docs/case.md');
+  if (!globalFile) throw new Error('background provider must support vault-global search without workspaceRootPath');
+  if (!globalFile.action || globalFile.action.kind !== 'resource' || globalFile.action.resource.path !== 'Project/Docs/case.md') {
+    throw new Error('background file result must expose a generic resource action');
+  }
+  const scopedResponse = await backgroundSearch({ query: 'target phrase', workspaceRootPath: 'Project', limit: 10 });
+  if (!scopedResponse.results.some((item) => item.subtitle === 'Project/Docs/case.md')) {
+    throw new Error('background provider must support Deal-scoped search');
+  }
+
   const container = new FakeNode('div');
   component.mount(container, { workspaceRootPath: 'Project' }, api);
   await flush();
 
-  if (!commandHandlers.has('verstak.search.searchVaultText')) throw new Error('search provider command was not registered');
-  if (!eventHandlers['file.changed'] || eventHandlers['file.changed'].length !== 1) throw new Error('file.changed subscription was not registered');
+  if (commandHandlers.get('verstak.search.searchVaultText') !== backgroundSearch) {
+    throw new Error('mounting SearchView must not replace the background provider handler');
+  }
+  if (!eventHandlers['file.changed'] || eventHandlers['file.changed'].length !== 2) throw new Error('view should add its scoped file.changed subscription beside background invalidation');
   if (!manifest.permissions.includes('storage.namespace')) throw new Error('search manifest must request storage.namespace');
   if (!manifest.permissions.includes('events.subscribe')) throw new Error('search manifest must request events.subscribe');
   if (!manifest.permissions.includes('commands.register')) throw new Error('search manifest must request commands.register');
@@ -317,6 +344,15 @@ async function wait(ms) {
   await flush();
   if (!opened[0] || opened[0].path !== 'Project/Docs/case.md' || opened[0].mode !== 'view') {
     throw new Error('result did not open through workbench');
+  }
+
+  component.unmount(container);
+  await flush();
+  if (commandHandlers.get('verstak.search.searchVaultText') !== backgroundSearch) {
+    throw new Error('unmounting SearchView must leave the background provider handler registered');
+  }
+  if (!eventHandlers['file.changed'] || eventHandlers['file.changed'].length !== 1) {
+    throw new Error('unmounting SearchView must leave only the background file.changed subscription');
   }
 
   console.log('search plugin smoke passed');
