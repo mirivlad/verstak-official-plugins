@@ -9,6 +9,8 @@
   "ui.vault": "Vault",
   "ui.searching": "Searching...",
   "ui.search": "Search",
+  "ui.file": "File",
+  "ui.folder": "Folder",
   "ui.providersFailed": "Some plugin search providers did not respond",
   "ui.providerUnavailable": "A search provider is unavailable.",
   "ui.searchError": "Could not search the vault. Please try again.",

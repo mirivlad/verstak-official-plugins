@@ -302,6 +302,9 @@
       subtitle: cleanPath(result.path),
       snippet: result.snippet || '',
       categoryId: result.type === 'folder' ? 'folders' : 'files',
+      categoryLabel: api && api.i18n && typeof api.i18n.t === 'function'
+        ? api.i18n.t(result.type === 'folder' ? 'ui.folder' : 'ui.file', null, result.type === 'folder' ? 'Folder' : 'File')
+        : (result.type === 'folder' ? 'Folder' : 'File'),
       score: result.matchType === 'Content match' ? 80 : 100
     };
     if (result.openable) {
