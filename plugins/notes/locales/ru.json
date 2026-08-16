@@ -47,5 +47,11 @@
   "ui.trashError": "Не удалось переместить заметку в корзину. Повторите попытку.",
   "ui.trashTitle": "Переместить заметку в корзину",
   "ui.trashed": "Заметка перемещена в корзину",
-  "ui.trashing": "Перемещение заметки в корзину..."
+  "ui.trashing": "Перемещение заметки в корзину...",
+  "contributions.commands.verstak.notes.provideOverview.title": "Данные для обзора",
+  "contributions.overviewProviders.verstak.notes.overview.label": "Заметки",
+  "overview.summary": "Заметки",
+  "overview.countOne": "{count} заметка",
+  "overview.countMany": "{count} заметок",
+  "overview.overviewNote": "Обзорная заметка"
 }

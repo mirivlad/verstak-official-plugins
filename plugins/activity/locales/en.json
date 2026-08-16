@@ -75,5 +75,17 @@
   "ui.subscriptionsUnavailable": "Activity updates are unavailable. Please try again.",
   "ui.title": "Activity",
   "ui.truncated": "Showing the latest {shown} of {total} events",
-  "ui.workspaceTitle": "Activity · {workspace}"
+  "ui.workspaceTitle": "Activity · {workspace}",
+  "contributions.commands.verstak.activity.provideOverview.title": "Provide Overview Signals",
+  "contributions.overviewProviders.verstak.activity.overview.label": "Activity",
+  "overview.summary": "Activity",
+  "overview.files": "Files",
+  "overview.eventCountOne": "{count} recorded event",
+  "overview.eventCountMany": "{count} recorded events",
+  "overview.fileCountOne": "{count} recent change",
+  "overview.fileCountMany": "{count} recent changes",
+  "overview.notesCategory": "Notes",
+  "overview.filesCategory": "Files",
+  "overview.possibleJournalEntry": "Possible journal entry",
+  "overview.candidateMeta": "{minutes} min · {activities} activities"
 }

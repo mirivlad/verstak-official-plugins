@@ -65,5 +65,11 @@
   "ui.delete": "Delete",
   "ui.untitled": "Untitled todo",
   "ui.count": "{count} todo(s)",
-  "ui.filteredCount": "{visible} of {count} todos"
+  "ui.filteredCount": "{visible} of {count} todos",
+  "contributions.commands.verstak.todo.provideOverview.title": "Provide Overview Signals",
+  "contributions.overviewProviders.verstak.todo.overview.label": "Todos",
+  "overview.overdue": "Overdue",
+  "overview.dueSoon": "Due soon",
+  "overview.reminderDue": "Reminder due",
+  "overview.due": "Due {date}"
 }

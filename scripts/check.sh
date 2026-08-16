@@ -266,6 +266,15 @@ else
 fi
 
 echo ""
+echo "[overview providers]"
+if command -v node &>/dev/null; then
+  node "$ROOT/scripts/check-overview-providers.js"
+  report "overview provider contracts" $?
+else
+  echo "  ⚠️  node not available — skipping Overview provider contracts"
+fi
+
+echo ""
 # Check all scripts in plugins are executable
 echo "[script permissions]"
 MISSING_EXEC=0

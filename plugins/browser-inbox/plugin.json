@@ -5,7 +5,13 @@
   "version": "0.1.0",
   "apiVersion": "0.1.0",
   "description": "Global browser materials with explicit Deal assignment delivered through the local receiver event protocol.",
-  "localization": { "defaultLocale": "en", "locales": { "en": "locales/en.json", "ru": "locales/ru.json" } },
+  "localization": {
+    "defaultLocale": "en",
+    "locales": {
+      "en": "locales/en.json",
+      "ru": "locales/ru.json"
+    }
+  },
   "source": "official",
   "icon": "inbox",
   "provides": [
@@ -21,7 +27,8 @@
     "files.read",
     "files.write",
     "storage.namespace",
-    "ui.register"
+    "ui.register",
+    "commands.register"
   ],
   "frontend": {
     "entry": "frontend/src/index.js"
@@ -58,6 +65,20 @@
         "id": "verstak.browser-inbox.settings",
         "title": "Browser",
         "component": "BrowserInboxSettings"
+      }
+    ],
+    "commands": [
+      {
+        "id": "verstak.browser-inbox.provideOverview",
+        "title": "Provide Overview Signals",
+        "handler": "verstak.browser-inbox.provideOverview"
+      }
+    ],
+    "overviewProviders": [
+      {
+        "id": "verstak.browser-inbox.overview",
+        "label": "Browser",
+        "handler": "verstak.browser-inbox.provideOverview"
       }
     ]
   }

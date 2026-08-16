@@ -6,6 +6,9 @@
 (function () {
   'use strict';
 
+  var PLUGIN_ID = 'verstak.notes';
+  var OVERVIEW_COMMAND_ID = 'verstak.notes.provideOverview';
+
   function injectStyles() {
     if (document.getElementById('notes-style-injected')) return;
     var style = document.createElement('style');
@@ -958,7 +961,57 @@
     }
   };
 
-  window.VerstakPluginRegister('verstak.notes', {
-    components: { NotesView: NotesView }
+
+  function overviewText(api, key, params, fallback) {
+    if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
+    return fallback || key;
+  }
+
+  function provideOverview(api, args) {
+    var workspace = cleanPath(args && args.workspaceRootPath);
+    if (!workspace || !api || !api.files || typeof api.files.list !== 'function') return Promise.resolve({});
+    var notesPath = notesFolderPath(workspace);
+    return Promise.all([
+      api.files.list(notesPath).catch(function () { return []; }),
+      api.files.list(workspace).catch(function () { return []; })
+    ]).then(function (results) {
+      var noteFiles = (results[0] || []).filter(function (entry) {
+        return entry && entry.type === 'file' && /\.(md|markdown)$/i.test(entry.name || entry.relativePath || '');
+      });
+      var overview = noteFiles.concat(results[1] || []).find(function (entry) {
+        var value = String(entry && (entry.relativePath || entry.name) || '').replace(/\\/g, '/');
+        return entry && entry.type === 'file' && /(^|\/)overview\.md$/i.test(value);
+      });
+      var count = noteFiles.length;
+      var countKey = count === 1 ? 'overview.countOne' : 'overview.countMany';
+      var result = {
+        summary: [{
+          id: 'notes',
+          label: overviewText(api, 'overview.summary', null, 'Notes'),
+          count: count,
+          detail: overviewText(api, countKey, { count: count }, count + (count === 1 ? ' note' : ' notes')),
+          order: 10,
+          action: { workspaceItemId: 'verstak.notes.workspace' }
+        }]
+      };
+      if (overview) {
+        var relative = String(overview.relativePath || overview.name || '');
+        result.resources = [{
+          id: 'overview-note',
+          title: String(overview.name || fileName(relative) || 'Overview.md'),
+          meta: relative || overviewText(api, 'overview.overviewNote', null, 'Overview note'),
+          action: { workspaceItemId: 'verstak.notes.workspace' }
+        }];
+      }
+      return result;
+    });
+  }
+
+  window.VerstakPluginRegister(PLUGIN_ID, {
+    components: { NotesView: NotesView },
+    activate: function (api) {
+      if (!api || !api.commands || typeof api.commands.register !== 'function') return Promise.resolve();
+      return api.commands.register(OVERVIEW_COMMAND_ID, function (args) { return provideOverview(api, args); });
+    }
   });
 })();

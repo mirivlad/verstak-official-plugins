@@ -115,5 +115,12 @@
   "ui.updated": "Запись обновлена",
   "ui.workItem": "Выполненная работа",
   "ui.workspace": "Дело",
-  "ui.workspaceTitle": "Журнал · {workspace}"
+  "ui.workspaceTitle": "Журнал · {workspace}",
+  "contributions.commands.verstak.journal.provideOverview.title": "Данные для обзора",
+  "contributions.overviewProviders.verstak.journal.overview.label": "Журнал",
+  "overview.summary": "Журнал",
+  "overview.countOne": "{count} запись журнала",
+  "overview.countMany": "{count} записей журнала",
+  "overview.category": "Журнал",
+  "overview.continue": "Продолжить запись журнала «{title}»"
 }

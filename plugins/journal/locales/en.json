@@ -115,5 +115,12 @@
   "ui.updated": "Entry updated",
   "ui.workItem": "Work item",
   "ui.workspace": "Deal",
-  "ui.workspaceTitle": "Journal · {workspace}"
+  "ui.workspaceTitle": "Journal · {workspace}",
+  "contributions.commands.verstak.journal.provideOverview.title": "Provide Overview Signals",
+  "contributions.overviewProviders.verstak.journal.overview.label": "Journal",
+  "overview.summary": "Journal",
+  "overview.countOne": "{count} journal entry",
+  "overview.countMany": "{count} journal entries",
+  "overview.category": "Journal",
+  "overview.continue": "Continue journal entry “{title}”"
 }

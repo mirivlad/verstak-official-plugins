@@ -75,5 +75,17 @@
   "ui.subscriptionsUnavailable": "Обновления активности недоступны. Повторите попытку.",
   "ui.title": "Активность",
   "ui.truncated": "Показаны последние {shown} из {total}",
-  "ui.workspaceTitle": "Активность · {workspace}"
+  "ui.workspaceTitle": "Активность · {workspace}",
+  "contributions.commands.verstak.activity.provideOverview.title": "Данные для обзора",
+  "contributions.overviewProviders.verstak.activity.overview.label": "Активность",
+  "overview.summary": "Активность",
+  "overview.files": "Файлы",
+  "overview.eventCountOne": "{count} событие",
+  "overview.eventCountMany": "{count} событий",
+  "overview.fileCountOne": "{count} недавнее изменение",
+  "overview.fileCountMany": "{count} недавних изменений",
+  "overview.notesCategory": "Заметки",
+  "overview.filesCategory": "Файлы",
+  "overview.possibleJournalEntry": "Возможная запись журнала",
+  "overview.candidateMeta": "{minutes} мин · {activities} действий"
 }

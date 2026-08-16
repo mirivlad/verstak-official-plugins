@@ -19,6 +19,7 @@
   var ASSIGN_ACTIVITY_COMMAND = 'verstak.activity.assignBrowserActivity';
   var LIST_RULES_COMMAND = 'verstak.activity.listBrowserActivityRules';
   var REMOVE_RULE_COMMAND = 'verstak.activity.removeBrowserActivityRule';
+  var OVERVIEW_COMMAND_ID = 'verstak.browser-inbox.provideOverview';
 
   function injectStyles() {
     if (document.getElementById('browser-inbox-style-injected')) return;
@@ -1761,10 +1762,96 @@
     }
   };
 
+
+  function overviewText(api, key, params, fallback) {
+    if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
+    return fallback || key;
+  }
+
+  function overviewCaptureTitle(capture) {
+    return text(capture && (capture.title || capture.fileName || capture.url || capture.captureId)).trim() || 'Untitled';
+  }
+
+  function overviewCaptureKind(api, capture) {
+    var kind = text(capture && capture.kind).toLowerCase();
+    var suffix = kind === 'page' ? 'Page' : kind === 'selection' ? 'Selection' : kind === 'link' ? 'Link' : kind === 'file' ? 'File' : 'Item';
+    return overviewText(api, 'overview.capture' + suffix, null, suffix);
+  }
+
+  function overviewCapturesFromSettings(settings) {
+    settings = settings || {};
+    var bindings = normalizeDomainBindings(settings.domainBindings);
+    var all = [];
+    globalCaptureKeys(settings).forEach(function (key) {
+      all = all.concat(normalizeStoredCaptures(settings[key], key));
+    });
+    return sortCaptures(all).map(function (capture) {
+      if (!capture.workspaceRootPath) {
+        var bound = bindings[domainFromCapture(capture)];
+        if (bound) {
+          capture.workspaceRootPath = bound;
+          capture.workspaceName = bound;
+        }
+      }
+      return capture;
+    });
+  }
+
+  function provideOverview(api, args) {
+    var workspace = cleanWorkspace(args && args.workspaceRootPath);
+    if (!workspace || !api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve({});
+    return api.settings.read().then(function (settings) {
+      var captures = overviewCapturesFromSettings(settings).filter(function (capture) {
+        return cleanWorkspace(capture.workspaceRootPath) === workspace && text(capture.globalState || 'inbox') !== 'archived';
+      });
+      var pending = captures.filter(function (capture) { return capture.processed !== true; });
+      var count = pending.length;
+      var action = { workspaceItemId: 'verstak.browser-inbox.workspace' };
+      return {
+        summary: [{
+          id: 'captures',
+          label: overviewText(api, 'overview.summary', null, 'Inbox'),
+          count: count,
+          detail: overviewText(api, count === 1 ? 'overview.countOne' : 'overview.countMany', { count: count }, count + (count === 1 ? ' capture to review' : ' captures to review')),
+          order: 30,
+          action: action
+        }],
+        attention: pending.map(function (capture) {
+          return {
+            id: capture.captureId,
+            title: overviewCaptureTitle(capture),
+            meta: overviewCaptureKind(api, capture),
+            occurredAt: capture.capturedAt || capture.receivedAt || '',
+            action: action
+          };
+        }),
+        recent: captures.map(function (capture) {
+          return {
+            id: capture.captureId,
+            title: overviewCaptureKind(api, capture) + ' — ' + overviewCaptureTitle(capture),
+            meta: capture.domain || capture.url || '',
+            occurredAt: capture.capturedAt || capture.receivedAt || '',
+            categoryId: 'captures',
+            categoryLabel: overviewText(api, 'overview.category', null, 'Browser'),
+            action: action
+          };
+        }),
+        lastActiveAt: captures.length ? (captures[0].capturedAt || captures[0].receivedAt || '') : ''
+      };
+    }).catch(function (err) {
+      console.warn('[verstak.browser-inbox] overview provider:', err);
+      return {};
+    });
+  }
+
   window.VerstakPluginRegister(PLUGIN_ID, {
     components: {
       BrowserInboxView: BrowserInboxView,
       BrowserInboxSettings: BrowserInboxSettings
+    },
+    activate: function (api) {
+      if (!api || !api.commands || typeof api.commands.register !== 'function') return Promise.resolve();
+      return api.commands.register(OVERVIEW_COMMAND_ID, function (args) { return provideOverview(api, args); });
     }
   });
 })();

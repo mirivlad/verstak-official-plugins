@@ -5,7 +5,13 @@
   "version": "0.1.0",
   "apiVersion": "0.1.0",
   "description": "Deal-scoped notes manager for Markdown files in canonical Notes folders with create, rename, trash, and Workbench integration.",
-  "localization": { "defaultLocale": "en", "locales": { "en": "locales/en.json", "ru": "locales/ru.json" } },
+  "localization": {
+    "defaultLocale": "en",
+    "locales": {
+      "en": "locales/en.json",
+      "ru": "locales/ru.json"
+    }
+  },
   "source": "official",
   "icon": "edit",
   "provides": [
@@ -21,7 +27,8 @@
     "files.delete",
     "events.subscribe",
     "workbench.open",
-    "ui.register"
+    "ui.register",
+    "commands.register"
   ],
   "frontend": {
     "entry": "frontend/src/index.js"
@@ -34,6 +41,20 @@
         "icon": "edit",
         "order": 10,
         "component": "NotesView"
+      }
+    ],
+    "commands": [
+      {
+        "id": "verstak.notes.provideOverview",
+        "title": "Provide Overview Signals",
+        "handler": "verstak.notes.provideOverview"
+      }
+    ],
+    "overviewProviders": [
+      {
+        "id": "verstak.notes.overview",
+        "label": "Notes",
+        "handler": "verstak.notes.provideOverview"
       }
     ]
   }

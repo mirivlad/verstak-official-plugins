@@ -47,5 +47,11 @@
   "ui.trashError": "Could not move the note to trash. Please try again.",
   "ui.trashTitle": "Move Note to Trash",
   "ui.trashed": "Note moved to trash",
-  "ui.trashing": "Moving note to trash..."
+  "ui.trashing": "Moving note to trash...",
+  "contributions.commands.verstak.notes.provideOverview.title": "Provide Overview Signals",
+  "contributions.overviewProviders.verstak.notes.overview.label": "Notes",
+  "overview.summary": "Notes",
+  "overview.countOne": "{count} note",
+  "overview.countMany": "{count} notes",
+  "overview.overviewNote": "Overview note"
 }

@@ -65,5 +65,11 @@
   "ui.delete": "Удалить",
   "ui.untitled": "Задача без названия",
   "ui.count": "Задач: {count}",
-  "ui.filteredCount": "Показано {visible} из {count}"
+  "ui.filteredCount": "Показано {visible} из {count}",
+  "contributions.commands.verstak.todo.provideOverview.title": "Данные для обзора",
+  "contributions.overviewProviders.verstak.todo.overview.label": "Задачи",
+  "overview.overdue": "Просрочено",
+  "overview.dueSoon": "Срок скоро",
+  "overview.reminderDue": "Напоминание",
+  "overview.due": "Срок {date}"
 }
