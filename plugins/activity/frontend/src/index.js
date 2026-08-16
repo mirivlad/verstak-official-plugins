@@ -1375,7 +1375,7 @@
       if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function' || typeof CustomEvent !== 'function') return;
       window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', {
         detail: {
-          kind: 'journal',
+          workspaceItemId: 'verstak.journal.workspace',
           toolRequest: { type: 'work-session-candidate', candidate: candidate }
         }
       }));
