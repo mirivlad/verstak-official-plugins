@@ -723,7 +723,7 @@
         return av - bv || text(b.updatedAt).localeCompare(text(a.updatedAt));
       });
       return {
-        attention: todos.map(function (todo) {
+        attention: todos.map(function (todo, index) {
           var state = todoOverviewState(api, todo);
           var due = todo.dueAt ? overviewText(api, 'overview.due', { date: todo.dueAt }, 'Due ' + todo.dueAt) : '';
           return {
@@ -731,6 +731,7 @@
             title: todo.title || 'Untitled',
             meta: due ? state + ' · ' + due : state,
             occurredAt: todo.reminderAt || todo.dueAt || todo.updatedAt || todo.createdAt || '',
+            order: 10 + index,
             action: { workspaceItemId: 'verstak.todo.workspace' }
           };
         }),

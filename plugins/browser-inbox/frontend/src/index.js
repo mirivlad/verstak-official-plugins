@@ -1816,12 +1816,13 @@
           order: 30,
           action: action
         }],
-        attention: pending.map(function (capture) {
+        attention: pending.map(function (capture, index) {
           return {
             id: capture.captureId,
             title: overviewCaptureTitle(capture),
             meta: overviewCaptureKind(api, capture),
             occurredAt: capture.capturedAt || capture.receivedAt || '',
+            order: 100 + index,
             action: action
           };
         }),
