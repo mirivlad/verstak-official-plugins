@@ -43,8 +43,7 @@ jobs:
           s = s.replace("var relative = text(overview.relativePath || overview.name);", "var relative = String(overview.relativePath || overview.name || '');")
           s = s.replace("title: text(overview.name || fileName(relative) || 'Overview.md'),", "title: String(overview.name || fileName(relative) || 'Overview.md'),")
 
-          # Official plugin catalogs are deliberately flat. Also localize every
-          # manifest contribution introduced by the provider contract.
+          # Official plugin catalogs are flat. Localize every new manifest contribution.
           start = s.index('def add_manifest_provider(')
           end = s.index('\n\ndef add_locale', start)
           s = s[:start] + '''def add_manifest_provider(name, command_id, provider_id, label, needs_commands_permission=True):
@@ -81,7 +80,7 @@ jobs:
                   path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + '\\n')
           ''' + s[end:]
 
-          # Only provider plugins have to expose source-level workspace targets.
+          # Only provider plugins need source-level workspace target validation.
           s = s.replace(
               "  const source = manifest.frontend && manifest.frontend.entry ? fs.readFileSync",
               "  if (!(contributes.overviewProviders || []).length) continue;\\n  const source = manifest.frontend && manifest.frontend.entry ? fs.readFileSync"
@@ -91,6 +90,17 @@ jobs:
       - name: Apply provider patch
         working-directory: work/verstak-official-plugins
         run: python3 .github/scripts/apply_overview_providers.py
+      - name: Fix generated guard newline
+        working-directory: work/verstak-official-plugins
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/check-overview-providers.js')
+          s = p.read_text()
+          literal = r"continue;\n  const source"
+          assert literal in s, 'expected literal \\n marker not found'
+          p.write_text(s.replace(literal, "continue;\n  const source", 1))
+          PY
       - name: Check official plugins
         working-directory: work/verstak-official-plugins
         run: bash scripts/check.sh
