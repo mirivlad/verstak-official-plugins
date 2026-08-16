@@ -365,6 +365,18 @@
       window.__filesHistoryByWorkspace = window.__filesHistoryByWorkspace || {};
       var historyKey = workspaceRoot || workspaceName;
       var savedHistory = window.__filesHistoryByWorkspace[historyKey] || { stack: [''], index: 0, currentPath: '' };
+      var toolRequest = props && props.toolRequest;
+      var requestedFolderPath = '';
+      var hasFolderRequest = !!(toolRequest && toolRequest.type === 'open-folder');
+      if (hasFolderRequest) {
+        var rawRequestedFolderPath = String(toolRequest.path || '');
+        var requestedSegments = rawRequestedFolderPath.split('/').filter(Boolean);
+        if (requestedSegments.indexOf('..') === -1 && rawRequestedFolderPath[0] !== '/') {
+          requestedFolderPath = cleanPath(rawRequestedFolderPath);
+        } else {
+          hasFolderRequest = false;
+        }
+      }
       var currentPath = cleanPath(savedHistory.currentPath || '');
       var entries = [];
       var selectedPaths = {};
@@ -388,6 +400,12 @@
       if (historyStack[historyIndex] !== currentPath) {
         historyStack = [currentPath];
         historyIndex = 0;
+      }
+      if (hasFolderRequest) {
+        if (historyIndex < historyStack.length - 1) historyStack = historyStack.slice(0, historyIndex + 1);
+        if (historyStack[historyStack.length - 1] !== requestedFolderPath) historyStack.push(requestedFolderPath);
+        historyIndex = historyStack.length - 1;
+        currentPath = requestedFolderPath;
       }
       var navigatingHistory = false;
 
@@ -1713,6 +1731,7 @@
       });
 
       updateHistoryButtons();
+      saveHistoryState();
       loadContributionActions();
       loadEntries();
 
