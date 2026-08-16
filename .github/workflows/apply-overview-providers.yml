@@ -26,6 +26,22 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - name: Correct one-shot Notes anchor
+        working-directory: work/verstak-official-plugins
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('.github/scripts/apply_overview_providers.py')
+          s = p.read_text()
+          s = s.replace(
+              'replace_once(notes, "  NotesView.unmount = function (containerEl) {", notes_provider + "  NotesView.unmount = function (containerEl) {")',
+              'replace_once(notes, "  window.VerstakPluginRegister(\'verstak.notes\', {", notes_provider + "  window.VerstakPluginRegister(\'verstak.notes\', {")'
+          )
+          s = s.replace("var value = text(entry && (entry.relativePath || entry.name)).replace(/\\\\/g, '/');", "var value = String(entry && (entry.relativePath || entry.name) || '').replace(/\\\\/g, '/');")
+          s = s.replace("var relative = text(overview.relativePath || overview.name);", "var relative = String(overview.relativePath || overview.name || '');")
+          s = s.replace("title: text(overview.name || fileName(relative) || 'Overview.md'),", "title: String(overview.name || fileName(relative) || 'Overview.md'),")
+          p.write_text(s)
+          PY
       - name: Apply provider patch
         working-directory: work/verstak-official-plugins
         run: python3 .github/scripts/apply_overview_providers.py
