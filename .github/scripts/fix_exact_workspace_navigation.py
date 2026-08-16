@@ -24,6 +24,11 @@ replace_once(
     "detail: {\n          kind: 'journal',\n          toolRequest: {",
     "detail: {\n          workspaceItemId: 'verstak.journal.workspace',\n          toolRequest: {",
 )
+replace_once(
+    'scripts/smoke-todo-plugin.js',
+    "if (!journalEvent || !journalEvent.detail || journalEvent.detail.kind !== 'journal') {",
+    "if (!journalEvent || !journalEvent.detail || journalEvent.detail.workspaceItemId !== 'verstak.journal.workspace') {",
+)
 
 # Guard the exact migration: these producers must not fall back to semantic kind matching.
 for path in ['plugins/activity/frontend/src/index.js', 'plugins/todo/frontend/src/index.js']:
