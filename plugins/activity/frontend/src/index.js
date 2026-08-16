@@ -23,6 +23,7 @@
   var SESSION_REGISTRY_KEY = 'activity-session-registry-v2';
   var SESSION_HANDLING_KEY = 'activity-session-handling-v2';
   var WORKLOG_COMMAND_ID = 'verstak.activity.suggestWorklog';
+  var OVERVIEW_COMMAND_ID = 'verstak.activity.provideOverview';
   var LIST_BROWSER_COMMAND_ID = 'verstak.activity.listBrowserActivity';
   var ASSIGN_BROWSER_COMMAND_ID = 'verstak.activity.assignBrowserActivity';
   var BROWSER_ACTIVITY_TYPE = 'browser.activity.domain';
@@ -1531,6 +1532,103 @@
     };
   };
 
+
+  function overviewTranslate(api, key, params, fallback) {
+    if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
+    return fallback || key;
+  }
+
+  function overviewAction(workspaceItemId, toolRequest) {
+    var action = { workspaceItemId: workspaceItemId };
+    if (toolRequest) action.toolRequest = toolRequest;
+    return action;
+  }
+
+  function provideOverview(api, args) {
+    var workspace = cleanWorkspace(args && args.workspaceRootPath);
+    if (!workspace || !api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve({});
+    var rawPromise = readRawRecords(api).catch(function () { return []; });
+    return Promise.all([
+      api.settings.read().catch(function () { return {}; }),
+      rawPromise,
+      listWorkSessionCandidates(api, { workspaceRootPath: workspace }).catch(function () { return { candidates: [] }; })
+    ]).then(function (results) {
+      var settings = results[0] || {};
+      var raw = Array.isArray(results[1]) ? results[1] : [];
+      var events = (raw.length ? eventsFromRecords(raw, workspace) : eventsFromSettings(settings, workspace)).filter(function (event) {
+        return !isServiceActivity(event);
+      });
+      var meaningful = events.filter(isMeaningfulActivity);
+      var recent = meaningful.filter(function (event) {
+        var type = text(event && event.type).toLowerCase();
+        return type.indexOf('note.') === 0 || type.indexOf('file.') === 0;
+      }).map(function (event) {
+        var type = text(event.type).toLowerCase();
+        var isNote = type.indexOf('note.') === 0;
+        return {
+          id: event.activityId,
+          title: humanEventTitle(event, function (key, params, fallback) { return overviewTranslate(api, key, params, fallback); }),
+          occurredAt: event.occurredAt || event.receivedAt || '',
+          categoryId: isNote ? 'notes' : 'files',
+          categoryLabel: overviewTranslate(api, isNote ? 'overview.notesCategory' : 'overview.filesCategory', null, isNote ? 'Notes' : 'Files'),
+          action: overviewAction(isNote ? 'verstak.notes.workspace' : 'verstak.files.workspace')
+        };
+      });
+      var resume = events.filter(function (event) {
+        var type = text(event && event.type).toLowerCase();
+        return type === 'note.opened' || type === 'note.saved' || type === 'note.edited' || type === 'file.changed' || type === 'file.created';
+      }).map(function (event) {
+        var type = text(event.type).toLowerCase();
+        var isNote = type.indexOf('note.') === 0;
+        return {
+          id: event.activityId,
+          title: humanEventTitle(event, function (key, params, fallback) { return overviewTranslate(api, key, params, fallback); }),
+          occurredAt: event.occurredAt || event.receivedAt || '',
+          action: overviewAction(isNote ? 'verstak.notes.workspace' : 'verstak.files.workspace')
+        };
+      });
+      var fileRecent = recent.filter(function (item) { return item.categoryId === 'files'; }).length;
+      var candidates = (results[2] && Array.isArray(results[2].candidates)) ? results[2].candidates : [];
+      var attention = candidates.map(function (candidate) {
+        return {
+          id: candidate.candidateId,
+          title: overviewTranslate(api, 'overview.possibleJournalEntry', null, 'Possible journal entry'),
+          meta: overviewTranslate(api, 'overview.candidateMeta', {
+            minutes: candidate.estimatedMinutes || 0,
+            activities: candidate.activityCount || (candidate.activityIds || []).length || 0
+          }, (candidate.estimatedMinutes || 0) + ' min · ' + (candidate.activityCount || 0) + ' activities'),
+          occurredAt: candidate.endedAt || candidate.startedAt || '',
+          action: overviewAction('verstak.journal.workspace', { type: 'work-session-candidate', candidate: candidate })
+        };
+      });
+      var eventCount = events.length;
+      return {
+        summary: [
+          {
+            id: 'activity',
+            label: overviewTranslate(api, 'overview.summary', null, 'Activity'),
+            count: eventCount,
+            detail: overviewTranslate(api, eventCount === 1 ? 'overview.eventCountOne' : 'overview.eventCountMany', { count: eventCount }, eventCount + (eventCount === 1 ? ' recorded event' : ' recorded events')),
+            order: 40,
+            action: overviewAction('verstak.activity.workspace')
+          },
+          {
+            id: 'files',
+            label: overviewTranslate(api, 'overview.files', null, 'Files'),
+            count: fileRecent,
+            detail: overviewTranslate(api, fileRecent === 1 ? 'overview.fileCountOne' : 'overview.fileCountMany', { count: fileRecent }, fileRecent + (fileRecent === 1 ? ' recent change' : ' recent changes')),
+            order: 20,
+            action: overviewAction('verstak.files.workspace')
+          }
+        ],
+        resume: resume,
+        attention: attention,
+        recent: recent,
+        lastActiveAt: events.length ? (events[0].occurredAt || events[0].receivedAt || '') : ''
+      };
+    });
+  }
+
   ActivityView.unmount = function (containerEl) {
     if (containerEl && typeof containerEl.__activityUnmount === 'function') {
       containerEl.__activityUnmount();
@@ -1550,6 +1648,9 @@
       return Promise.all([
         api.commands.register(WORKLOG_COMMAND_ID, function (args) {
           return listWorkSessionCandidates(api, args);
+        }),
+        api.commands.register(OVERVIEW_COMMAND_ID, function (args) {
+          return provideOverview(api, args);
         }),
         api.commands.register(LIST_BROWSER_COMMAND_ID, function (args) {
           return listBrowserActivity(api, args);

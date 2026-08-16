@@ -5,7 +5,13 @@
   "version": "0.1.0",
   "apiVersion": "0.1.0",
   "description": "Global and Deal-scoped todo tracking with due and reminder metadata.",
-  "localization": { "defaultLocale": "en", "locales": { "en": "locales/en.json", "ru": "locales/ru.json" } },
+  "localization": {
+    "defaultLocale": "en",
+    "locales": {
+      "en": "locales/en.json",
+      "ru": "locales/ru.json"
+    }
+  },
   "source": "official",
   "icon": "list-todo",
   "provides": [
@@ -20,11 +26,17 @@
     "files.read",
     "storage.namespace",
     "ui.register",
-    "notifications.schedule"
+    "notifications.schedule",
+    "commands.register"
   ],
   "sync": {
     "records": [
-      { "id": "todos", "storage": "settings", "key": "todos:global", "identity": "id" }
+      {
+        "id": "todos",
+        "storage": "settings",
+        "key": "todos:global",
+        "identity": "id"
+      }
     ]
   },
   "frontend": {
@@ -55,6 +67,20 @@
         "icon": "list-todo",
         "order": 30,
         "component": "TodoView"
+      }
+    ],
+    "commands": [
+      {
+        "id": "verstak.todo.provideOverview",
+        "title": "Provide Overview Signals",
+        "handler": "verstak.todo.provideOverview"
+      }
+    ],
+    "overviewProviders": [
+      {
+        "id": "verstak.todo.overview",
+        "label": "Todo",
+        "handler": "verstak.todo.provideOverview"
       }
     ]
   }

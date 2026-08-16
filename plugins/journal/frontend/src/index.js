@@ -11,6 +11,7 @@
   var ACTIVITY_PLUGIN_ID = 'verstak.activity';
   var ASSIGN_ACTIVITY_COMMAND = 'verstak.activity.assignBrowserActivity';
   var SET_RULE_COMMAND = 'verstak.activity.setBrowserActivityRule';
+  var OVERVIEW_COMMAND_ID = 'verstak.journal.provideOverview';
 
   function injectStyles() {
     if (document.getElementById('journal-style-injected')) return;
@@ -1778,6 +1779,58 @@
     }
   };
 
+
+  function overviewText(api, key, params, fallback) {
+    if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
+    return fallback || key;
+  }
+
+  function provideOverview(api, args) {
+    var workspace = cleanWorkspace(args && args.workspaceRootPath);
+    if (!workspace || !api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve({});
+    var key = WORKLOG_PREFIX + encodeKey(workspace);
+    return api.settings.read().then(function (settings) {
+      var entries = sortEntries(normalizeEntries((settings || {})[key], key).filter(function (entry) {
+        return cleanWorkspace(entry.workspaceRootPath) === workspace;
+      }));
+      var action = { workspaceItemId: 'verstak.journal.workspace' };
+      var count = entries.length;
+      return {
+        summary: [{
+          id: 'journal',
+          label: overviewText(api, 'overview.summary', null, 'Journal'),
+          count: count,
+          detail: overviewText(api, count === 1 ? 'overview.countOne' : 'overview.countMany', { count: count }, count + (count === 1 ? ' journal entry' : ' journal entries')),
+          order: 50,
+          action: action
+        }],
+        resume: entries.map(function (entry) {
+          return {
+            id: entry.entryId,
+            title: overviewText(api, 'overview.continue', { title: entry.title }, 'Continue journal entry “' + entry.title + '”'),
+            occurredAt: entry.date,
+            action: action
+          };
+        }),
+        recent: entries.map(function (entry) {
+          return {
+            id: entry.entryId,
+            title: entry.title,
+            meta: entry.minutes ? entry.minutes + ' min' : '',
+            occurredAt: entry.date,
+            categoryId: 'journal',
+            categoryLabel: overviewText(api, 'overview.category', null, 'Journal'),
+            action: action
+          };
+        }),
+        lastActiveAt: entries.length ? entries[0].date : ''
+      };
+    }).catch(function (err) {
+      console.warn('[verstak.journal] overview provider:', err);
+      return {};
+    });
+  }
+
   JournalView.unmount = function (containerEl) {
     if (containerEl) containerEl.innerHTML = '';
   };
@@ -1785,6 +1838,10 @@
   window.VerstakPluginRegister(PLUGIN_ID, {
     components: {
       JournalView: JournalView
+    },
+    activate: function (api) {
+      if (!api || !api.commands || typeof api.commands.register !== 'function') return Promise.resolve();
+      return api.commands.register(OVERVIEW_COMMAND_ID, function (args) { return provideOverview(api, args); });
     }
   });
 })();

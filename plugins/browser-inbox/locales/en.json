@@ -112,5 +112,16 @@
   "ui.workspaceCapturesArchived": "Deal materials archived",
   "ui.workspaceFilter": "Deal filter",
   "ui.workspaceLoadError": "Deal assignment is unavailable. Please try again.",
-  "ui.workspaceTitle": "Browser · {workspace}"
+  "ui.workspaceTitle": "Browser · {workspace}",
+  "contributions.commands.verstak.browser-inbox.provideOverview.title": "Provide Overview Signals",
+  "contributions.overviewProviders.verstak.browser-inbox.overview.label": "Browser",
+  "overview.summary": "Inbox",
+  "overview.countOne": "{count} capture to review",
+  "overview.countMany": "{count} captures to review",
+  "overview.category": "Browser",
+  "overview.capturePage": "Page",
+  "overview.captureSelection": "Selection",
+  "overview.captureLink": "Link",
+  "overview.captureFile": "File",
+  "overview.captureItem": "Item"
 }

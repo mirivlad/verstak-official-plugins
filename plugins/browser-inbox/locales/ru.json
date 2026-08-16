@@ -112,5 +112,16 @@
   "ui.workspaceCapturesArchived": "Материалы Дела архивированы",
   "ui.workspaceFilter": "Фильтр Дела",
   "ui.workspaceLoadError": "Назначение Дела недоступно. Повторите попытку.",
-  "ui.workspaceTitle": "Браузер · {workspace}"
+  "ui.workspaceTitle": "Браузер · {workspace}",
+  "contributions.commands.verstak.browser-inbox.provideOverview.title": "Данные для обзора",
+  "contributions.overviewProviders.verstak.browser-inbox.overview.label": "Браузер",
+  "overview.summary": "Входящие",
+  "overview.countOne": "{count} материал на разбор",
+  "overview.countMany": "{count} материалов на разбор",
+  "overview.category": "Браузер",
+  "overview.capturePage": "Страница",
+  "overview.captureSelection": "Фрагмент",
+  "overview.captureLink": "Ссылка",
+  "overview.captureFile": "Файл",
+  "overview.captureItem": "Материал"
 }
