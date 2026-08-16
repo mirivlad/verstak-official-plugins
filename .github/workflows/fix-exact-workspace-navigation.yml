@@ -1,0 +1,39 @@
+name: fix-exact-workspace-navigation
+
+on:
+  push:
+    branches: [fix/exact-workspace-navigation]
+    paths:
+      - '.github/scripts/fix_exact_workspace_navigation.py'
+      - '.github/workflows/fix-exact-workspace-navigation.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/exact-workspace-navigation
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+      - name: Apply exact navigation patch
+        run: python3 .github/scripts/fix_exact_workspace_navigation.py
+      - name: Run repository checks
+        run: bash scripts/check.sh
+      - name: Remove one-shot machinery and commit
+        run: |
+          rm -f .github/scripts/fix_exact_workspace_navigation.py .github/workflows/fix-exact-workspace-navigation.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'fix: use exact workspace item navigation'
+          git push origin HEAD:fix/exact-workspace-navigation
