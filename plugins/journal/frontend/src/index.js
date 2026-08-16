@@ -12,6 +12,7 @@
   var ASSIGN_ACTIVITY_COMMAND = 'verstak.activity.assignBrowserActivity';
   var SET_RULE_COMMAND = 'verstak.activity.setBrowserActivityRule';
   var OVERVIEW_COMMAND_ID = 'verstak.journal.provideOverview';
+  var SEARCH_COMMAND_ID = 'verstak.journal.search';
 
   function injectStyles() {
     if (document.getElementById('journal-style-injected')) return;
@@ -610,6 +611,84 @@
     return parsed;
   }
 
+  // Providers are read-only views over the same Markdown documents the Journal
+  // UI owns. Legacy settings are only a fallback for entries that have not yet
+  // reached the vault; when both copies exist, the human-readable file wins.
+  function readJournalDealEntries(api, dealRoot) {
+    var deal = cleanWorkspace(dealRoot);
+    if (!deal || !api || !api.files || typeof api.files.list !== 'function' || typeof api.files.readText !== 'function') {
+      return Promise.resolve([]);
+    }
+    return api.files.list(journalFolderPath(deal)).then(function (found) {
+      var months = (Array.isArray(found) ? found : []).map(function (item) {
+        if (!item || item.type === 'folder') return null;
+        var match = MONTH_FILE.exec(text(item.name));
+        return match ? { month: match[1], path: text(item.relativePath) } : null;
+      }).filter(Boolean);
+      return Promise.all(months.map(function (item) {
+        return api.files.readText(item.path).then(function (content) {
+          return parseMonthFile(content, deal, item.month);
+        }).catch(function (err) {
+          console.warn('[verstak.journal] read ' + item.path + ':', err);
+          return [];
+        });
+      }));
+    }).then(function (lists) {
+      var all = [];
+      lists.forEach(function (list) { all = all.concat(list); });
+      return all;
+    }).catch(function () {
+      return [];
+    });
+  }
+
+  function journalDealRoots(api, settings, workspaceRoot) {
+    var scoped = cleanWorkspace(workspaceRoot);
+    if (scoped) return Promise.resolve([scoped]);
+    var seen = {};
+    var roots = [];
+    function add(value) {
+      var root = cleanWorkspace(value);
+      if (!root || seen[root]) return;
+      seen[root] = true;
+      roots.push(root);
+    }
+    worklogKeys(settings || {}).map(decodeWorkspaceKey).forEach(add);
+    if (!api || !api.workspaces || typeof api.workspaces.list !== 'function') return Promise.resolve(roots);
+    return api.workspaces.list().then(function (entries) {
+      (Array.isArray(entries) ? entries : []).forEach(function (entry) { add(entry && entry.rootPath); });
+      return roots;
+    }).catch(function () { return roots; });
+  }
+
+  function legacyJournalDealEntries(settings, dealRoot) {
+    var deal = cleanWorkspace(dealRoot);
+    var key = WORKLOG_PREFIX + encodeKey(deal);
+    return normalizeEntries((settings || {})[key], key).map(function (entry) {
+      entry.workspaceRootPath = deal;
+      return entry;
+    });
+  }
+
+  function readJournalEntries(api, workspaceRoot) {
+    var readSettings = api && api.settings && typeof api.settings.read === 'function'
+      ? api.settings.read().catch(function () { return {}; })
+      : Promise.resolve({});
+    return readSettings.then(function (settings) {
+      settings = settings || {};
+      return journalDealRoots(api, settings, workspaceRoot).then(function (deals) {
+        return deals.reduce(function (chain, deal) {
+          return chain.then(function (all) {
+            return readJournalDealEntries(api, deal).then(function (canonical) {
+              // canonical is first so sortEntries' de-duplication preserves it.
+              return all.concat(canonical, legacyJournalDealEntries(settings, deal));
+            });
+          });
+        }, Promise.resolve([]));
+      });
+    }).then(sortEntries);
+  }
+
   function candidateDate(value) {
     var date = new Date(value || '');
     return isNaN(date.getTime()) ? today() : date.toISOString().slice(0, 10);
@@ -899,33 +978,7 @@
     }
 
     function readDealEntries(dealRoot) {
-      var deal = cleanWorkspace(dealRoot);
-      if (!deal || !api || !api.files || typeof api.files.list !== 'function' || typeof api.files.readText !== 'function') {
-        return Promise.resolve([]);
-      }
-      return api.files.list(journalFolderPath(deal)).then(function (found) {
-        var months = (Array.isArray(found) ? found : []).map(function (item) {
-          if (!item || item.type === 'folder') return null;
-          var match = MONTH_FILE.exec(text(item.name));
-          return match ? { month: match[1], path: text(item.relativePath) } : null;
-        }).filter(Boolean);
-        return Promise.all(months.map(function (item) {
-          return api.files.readText(item.path).then(function (content) {
-            return parseMonthFile(content, deal, item.month);
-          }).catch(function (err) {
-            console.warn('[verstak.journal] read ' + item.path + ':', err);
-            return [];
-          });
-        }));
-      }).then(function (lists) {
-        var all = [];
-        lists.forEach(function (list) { all = all.concat(list); });
-        return all;
-      }).catch(function () {
-        // A Deal nobody has journalled in has no journal folder, which is not
-        // an error and must not be reported as one.
-        return [];
-      });
+      return readJournalDealEntries(api, dealRoot);
     }
 
     function writeMonths(dealRoot, months, entryList) {
@@ -1785,14 +1838,12 @@
     return fallback || key;
   }
 
+
   function provideOverview(api, args) {
     var workspace = cleanWorkspace(args && args.workspaceRootPath);
-    if (!workspace || !api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve({});
-    var key = WORKLOG_PREFIX + encodeKey(workspace);
-    return api.settings.read().then(function (settings) {
-      var entries = sortEntries(normalizeEntries((settings || {})[key], key).filter(function (entry) {
-        return cleanWorkspace(entry.workspaceRootPath) === workspace;
-      }));
+    if (!workspace) return Promise.resolve({});
+    return readJournalEntries(api, workspace).then(function (entries) {
+      entries = entries.filter(function (entry) { return cleanWorkspace(entry.workspaceRootPath) === workspace; });
       var action = { workspaceItemId: 'verstak.journal.workspace' };
       var count = entries.length;
       return {
@@ -1831,6 +1882,56 @@
     });
   }
 
+  function journalSearchScore(entry, query) {
+    var q = text(query).trim().toLowerCase();
+    if (!q) return 0;
+    var title = text(entry && entry.title).toLowerCase();
+    var summary = text(entry && entry.summary).toLowerCase();
+    var workspace = cleanWorkspace(entry && entry.workspaceRootPath).toLowerCase();
+    var date = text(entry && entry.date).toLowerCase();
+    if (title === q) return 120;
+    if (title.indexOf(q) === 0) return 100;
+    if (title.indexOf(q) !== -1) return 90;
+    if (summary.indexOf(q) !== -1) return 70;
+    if (workspace.indexOf(q) !== -1 || date.indexOf(q) !== -1) return 50;
+    return 0;
+  }
+
+  function provideSearch(api, args) {
+    args = args || {};
+    var query = text(args.query).trim();
+    var workspace = cleanWorkspace(args.workspaceRootPath);
+    var limit = Math.max(1, Number(args.limit) || 50);
+    if (query.length < 2) return Promise.resolve({ results: [] });
+    return readJournalEntries(api, workspace).then(function (entries) {
+      var ranked = entries.map(function (entry) {
+        return { entry: entry, score: journalSearchScore(entry, query) };
+      }).filter(function (row) { return row.score > 0; }).sort(function (a, b) {
+        return b.score - a.score || text(b.entry.date).localeCompare(text(a.entry.date));
+      });
+      return {
+        results: ranked.slice(0, limit).map(function (row) {
+          var entry = row.entry;
+          return {
+            id: entry.entryId,
+            title: entry.title,
+            subtitle: [entry.workspaceRootPath, entry.date].filter(Boolean).join(' · '),
+            snippet: entry.summary || '',
+            categoryId: 'journal',
+            categoryLabel: overviewText(api, 'overview.category', null, 'Journal'),
+            score: row.score,
+            action: {
+              kind: 'workspace-item',
+              workspaceRootPath: entry.workspaceRootPath,
+              workspaceItemId: 'verstak.journal.workspace'
+            }
+          };
+        }),
+        partial: ranked.length > limit
+      };
+    });
+  }
+
   JournalView.unmount = function (containerEl) {
     if (containerEl) containerEl.innerHTML = '';
   };
@@ -1841,7 +1942,10 @@
     },
     activate: function (api) {
       if (!api || !api.commands || typeof api.commands.register !== 'function') return Promise.resolve();
-      return api.commands.register(OVERVIEW_COMMAND_ID, function (args) { return provideOverview(api, args); });
+      return Promise.all([
+        api.commands.register(OVERVIEW_COMMAND_ID, function (args) { return provideOverview(api, args); }),
+        api.commands.register(SEARCH_COMMAND_ID, function (args) { return provideSearch(api, args); })
+      ]);
     }
   });
 })();

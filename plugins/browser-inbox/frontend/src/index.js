@@ -20,6 +20,7 @@
   var LIST_RULES_COMMAND = 'verstak.activity.listBrowserActivityRules';
   var REMOVE_RULE_COMMAND = 'verstak.activity.removeBrowserActivityRule';
   var OVERVIEW_COMMAND_ID = 'verstak.browser-inbox.provideOverview';
+  var SEARCH_COMMAND_ID = 'verstak.browser-inbox.search';
 
   function injectStyles() {
     if (document.getElementById('browser-inbox-style-injected')) return;
@@ -1845,6 +1846,70 @@
     });
   }
 
+
+  function browserSearchScore(capture, query) {
+    var q = text(query).trim().toLowerCase();
+    var title = overviewCaptureTitle(capture).toLowerCase();
+    var url = text(capture && capture.url).toLowerCase();
+    var domain = text(capture && capture.domain).toLowerCase();
+    var body = text(capture && (capture.text || capture.fileText)).toLowerCase();
+    var workspace = cleanWorkspace(capture && capture.workspaceRootPath).toLowerCase();
+    if (title === q) return 120;
+    if (title.indexOf(q) === 0) return 100;
+    if (title.indexOf(q) !== -1) return 90;
+    if (url.indexOf(q) !== -1 || domain.indexOf(q) !== -1) return 80;
+    if (body.indexOf(q) !== -1) return 70;
+    if (workspace.indexOf(q) !== -1) return 50;
+    return 0;
+  }
+
+  function provideSearch(api, args) {
+    args = args || {};
+    var query = text(args.query).trim();
+    var workspace = cleanWorkspace(args.workspaceRootPath);
+    var limit = Math.max(1, Number(args.limit) || 50);
+    if (query.length < 2 || !api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve({ results: [] });
+    return api.settings.read().then(function (settings) {
+      var captures = overviewCapturesFromSettings(settings).filter(function (capture) {
+        if (text(capture.globalState || 'inbox') === 'archived') return false;
+        return !workspace || cleanWorkspace(capture.workspaceRootPath) === workspace;
+      });
+      var ranked = captures.map(function (capture) {
+        return { capture: capture, score: browserSearchScore(capture, query) };
+      }).filter(function (row) { return row.score > 0; }).sort(function (a, b) {
+        return b.score - a.score || text(b.capture.capturedAt || b.capture.receivedAt).localeCompare(text(a.capture.capturedAt || a.capture.receivedAt));
+      });
+      return {
+        results: ranked.slice(0, limit).map(function (row) {
+          var capture = row.capture;
+          var deal = cleanWorkspace(capture.workspaceRootPath);
+          return {
+            id: capture.captureId,
+            title: overviewCaptureTitle(capture),
+            subtitle: capture.url || capture.domain || deal || overviewCaptureKind(api, capture),
+            snippet: capture.text || capture.fileText || '',
+            categoryId: 'browser',
+            categoryLabel: overviewText(api, 'overview.category', null, 'Browser'),
+            score: row.score,
+            action: deal ? {
+              kind: 'workspace-item',
+              workspaceRootPath: deal,
+              workspaceItemId: 'verstak.browser-inbox.workspace'
+            } : {
+              kind: 'view',
+              viewId: 'verstak.browser-inbox.view',
+              pluginId: PLUGIN_ID
+            }
+          };
+        }),
+        partial: ranked.length > limit
+      };
+    }).catch(function (err) {
+      console.warn('[verstak.browser-inbox] search provider:', err);
+      return { results: [] };
+    });
+  }
+
   window.VerstakPluginRegister(PLUGIN_ID, {
     components: {
       BrowserInboxView: BrowserInboxView,
@@ -1852,7 +1917,10 @@
     },
     activate: function (api) {
       if (!api || !api.commands || typeof api.commands.register !== 'function') return Promise.resolve();
-      return api.commands.register(OVERVIEW_COMMAND_ID, function (args) { return provideOverview(api, args); });
+      return Promise.all([
+        api.commands.register(OVERVIEW_COMMAND_ID, function (args) { return provideOverview(api, args); }),
+        api.commands.register(SEARCH_COMMAND_ID, function (args) { return provideSearch(api, args); })
+      ]);
     }
   });
 })();

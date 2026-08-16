@@ -90,6 +90,11 @@
         "id": "verstak.activity.provideOverview",
         "title": "Provide Overview Signals",
         "handler": "verstak.activity.provideOverview"
+      },
+      {
+        "id": "verstak.activity.search",
+        "title": "Search Activity",
+        "handler": "verstak.activity.search"
       }
     ],
     "worklogProviders": [
@@ -127,6 +132,13 @@
         "id": "verstak.activity.overview",
         "label": "Activity",
         "handler": "verstak.activity.provideOverview"
+      }
+    ],
+    "searchProviders": [
+      {
+        "id": "verstak.activity.search-provider",
+        "label": "Activity",
+        "handler": "verstak.activity.search"
       }
     ]
   }

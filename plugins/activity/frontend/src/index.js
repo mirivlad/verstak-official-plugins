@@ -24,6 +24,7 @@
   var SESSION_HANDLING_KEY = 'activity-session-handling-v2';
   var WORKLOG_COMMAND_ID = 'verstak.activity.suggestWorklog';
   var OVERVIEW_COMMAND_ID = 'verstak.activity.provideOverview';
+  var SEARCH_COMMAND_ID = 'verstak.activity.search';
   var LIST_BROWSER_COMMAND_ID = 'verstak.activity.listBrowserActivity';
   var ASSIGN_BROWSER_COMMAND_ID = 'verstak.activity.assignBrowserActivity';
   var BROWSER_ACTIVITY_TYPE = 'browser.activity.domain';
@@ -1630,6 +1631,74 @@
     });
   }
 
+
+  function activitySearchScore(activity, query, title, summary) {
+    var q = text(query).trim().toLowerCase();
+    var normalizedTitle = text(title).toLowerCase();
+    var normalizedSummary = text(summary).toLowerCase();
+    var type = text(activity && activity.type).toLowerCase();
+    var source = text(activity && activity.sourcePluginId).toLowerCase();
+    var workspace = candidateWorkspace(activity).toLowerCase();
+    var payload = '';
+    try { payload = JSON.stringify((activity && activity.payload) || {}).toLowerCase(); } catch (_) {}
+    if (normalizedTitle === q) return 120;
+    if (normalizedTitle.indexOf(q) === 0) return 100;
+    if (normalizedTitle.indexOf(q) !== -1) return 90;
+    if (normalizedSummary.indexOf(q) !== -1) return 75;
+    if (type.indexOf(q) !== -1 || source.indexOf(q) !== -1) return 65;
+    if (workspace.indexOf(q) !== -1 || payload.indexOf(q) !== -1) return 50;
+    return 0;
+  }
+
+  function provideSearch(api, args) {
+    args = args || {};
+    var query = text(args.query).trim();
+    var workspace = cleanWorkspace(args.workspaceRootPath);
+    var limit = Math.max(1, Number(args.limit) || 50);
+    if (query.length < 2) return Promise.resolve({ results: [] });
+    var settingsPromise = api && api.settings && typeof api.settings.read === 'function'
+      ? api.settings.read().catch(function () { return {}; })
+      : Promise.resolve({});
+    return Promise.all([settingsPromise, readRawRecords(api).catch(function () { return []; })]).then(function (values) {
+      var settings = values[0] || {};
+      var raw = Array.isArray(values[1]) ? values[1] : [];
+      var events = raw.length ? eventsFromRecords(raw, workspace) : eventsFromSettings(settings, workspace);
+      var translate = function (key, params, fallback) { return overviewTranslate(api, key, params, fallback); };
+      var ranked = events.filter(function (event) { return !isServiceActivity(event); }).map(function (event) {
+        var title = humanEventTitle(event, translate);
+        var summary = humanSummary(event, translate);
+        return { event: event, title: title, summary: summary, score: activitySearchScore(event, query, title, summary) };
+      }).filter(function (row) { return row.score > 0; }).sort(function (a, b) {
+        return b.score - a.score || text(b.event.occurredAt || b.event.receivedAt).localeCompare(text(a.event.occurredAt || a.event.receivedAt));
+      });
+      return {
+        results: ranked.slice(0, limit).map(function (row) {
+          var event = row.event;
+          var deal = candidateWorkspace(event);
+          return {
+            id: event.activityId,
+            title: row.title,
+            subtitle: [deal, eventKind(event, translate)].filter(Boolean).join(' · '),
+            snippet: row.summary || '',
+            categoryId: 'activity',
+            categoryLabel: overviewTranslate(api, 'overview.summary', null, 'Activity'),
+            score: row.score,
+            action: deal ? {
+              kind: 'workspace-item',
+              workspaceRootPath: deal,
+              workspaceItemId: 'verstak.activity.workspace'
+            } : {
+              kind: 'view',
+              viewId: 'verstak.activity.view',
+              pluginId: PLUGIN_ID
+            }
+          };
+        }),
+        partial: ranked.length > limit
+      };
+    });
+  }
+
   ActivityView.unmount = function (containerEl) {
     if (containerEl && typeof containerEl.__activityUnmount === 'function') {
       containerEl.__activityUnmount();
@@ -1652,6 +1721,9 @@
         }),
         api.commands.register(OVERVIEW_COMMAND_ID, function (args) {
           return provideOverview(api, args);
+        }),
+        api.commands.register(SEARCH_COMMAND_ID, function (args) {
+          return provideSearch(api, args);
         }),
         api.commands.register(LIST_BROWSER_COMMAND_ID, function (args) {
           return listBrowserActivity(api, args);
