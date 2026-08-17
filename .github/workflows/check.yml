@@ -49,3 +49,36 @@ jobs:
       - name: Manifests, locales and plugin smokes
         run: bash scripts/check.sh
         working-directory: verstak-official-plugins
+
+  # A manifest change here can break the desktop shell without any commit
+  # landing there. The desktop icon set is generated from these manifests, so
+  # retiring a plugin or renaming its icon leaves the committed core.js/sprite.js
+  # stale in a repository whose own CI has no reason to run. That happened twice:
+  # the folder-appearance retirement broke desktop main 29 minutes after desktop
+  # went green, and nobody saw it until someone pushed there days later.
+  #
+  # This job runs the desktop's own contract check against *this* branch, so the
+  # break surfaces on the pull request that causes it.
+  desktop-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: verstak-official-plugins
+
+      - uses: actions/checkout@v4
+        with:
+          repository: mirivlad/verstak
+          path: verstak-desktop
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install desktop frontend dependencies
+        run: npm ci
+        working-directory: verstak-desktop/frontend
+
+      - name: Desktop icon assets still match these manifests
+        run: node scripts/generate-icon-assets.mjs --check
+        working-directory: verstak-desktop
