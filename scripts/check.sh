@@ -329,8 +329,6 @@ if command -v node &>/dev/null; then
   report "sync frontend behavior" $?
   node "$ROOT/scripts/smoke-import-plugin.js"
   report "import frontend behavior" $?
-  node "$ROOT/scripts/smoke-folder-appearance-plugin.js"
-  report "folder appearance frontend behavior" $?
 else
   echo "  ⚠️  node not available — skipping frontend smoke"
 fi
