@@ -162,6 +162,14 @@ for plugin_dir in "$ROOT"/plugins/*/; do
       FAILED_PLUGINS="$FAILED_PLUGINS $plugin_name"
       continue
     fi
+    if python3 "$ROOT/scripts/validate_manifest.py" "$plugin_dir/plugin.json"; then
+      echo "  ✅ plugin.json: supported contributions"
+    else
+      echo "  ❌ plugin.json: unsupported contribution contract"
+      FAILED=1
+      FAILED_PLUGINS="$FAILED_PLUGINS $plugin_name"
+      continue
+    fi
   else
     echo "  ℹ️  python3 not available — skipping JSON validation"
   fi
