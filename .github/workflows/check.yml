@@ -38,6 +38,14 @@ jobs:
       - name: Confirm the SDK schema is reachable
         run: test -f verstak-sdk/schemas/manifest.json
 
+      - name: Build shipping plugin packages
+        run: bash scripts/build.sh
+        working-directory: verstak-official-plugins
+
+      - name: Validate packaged frontend assets
+        run: python3 scripts/check-packaged-frontend-assets.py
+        working-directory: verstak-official-plugins
+
       - name: Manifests, locales and plugin smokes
         run: bash scripts/check.sh
         working-directory: verstak-official-plugins
