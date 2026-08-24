@@ -11,6 +11,7 @@ const checks = [
   ['plugins/journal/frontend/src/index.js', '.journal-input.journal-select'],
   ['plugins/trash/frontend/src/index.js', '.trash-select'],
   ['plugins/secrets/frontend/src/index.js', '.secrets-select'],
+  ['plugins/projects/frontend/src/index.js', '.projects-select'],
 ];
 
 function escapeRegExp(value) {
