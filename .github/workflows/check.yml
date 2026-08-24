@@ -7,33 +7,13 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: check-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  bootstrap-projects:
-    if: github.event_name == 'pull_request' && github.head_ref == 'feat/projects-mvp'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: feat/projects-mvp
-      - name: Apply prepared Projects patch once
-        run: |
-          base64 -d .github/projects-mvp.patch.gz.b64 | gzip -d > /tmp/projects-mvp.patch
-          if git apply --check /tmp/projects-mvp.patch; then
-            git apply --index /tmp/projects-mvp.patch
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -m "feat: add Projects management plugin"
-            git push origin HEAD:feat/projects-mvp
-          else
-            echo "Patch already applied; nothing to bootstrap."
-          fi
-
   check:
     runs-on: ubuntu-latest
     steps:
