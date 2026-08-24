@@ -53,5 +53,8 @@
   "overview.summary": "Notes",
   "overview.countOne": "{count} note",
   "overview.countMany": "{count} notes",
-  "overview.overviewNote": "Overview note"
+  "overview.overviewNote": "Overview note",
+  "contributions.commands.verstak.notes.list.title": "List Notes",
+  "contributions.commands.verstak.notes.create.title": "Create Note",
+  "contributions.commands.verstak.notes.open.title": "Open Note"
 }
