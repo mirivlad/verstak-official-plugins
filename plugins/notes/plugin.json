@@ -48,6 +48,21 @@
         "id": "verstak.notes.provideOverview",
         "title": "Provide Overview Signals",
         "handler": "verstak.notes.provideOverview"
+      },
+      {
+        "id": "verstak.notes.list",
+        "title": "List Notes",
+        "handler": "verstak.notes.list"
+      },
+      {
+        "id": "verstak.notes.create",
+        "title": "Create Note",
+        "handler": "verstak.notes.create"
+      },
+      {
+        "id": "verstak.notes.open",
+        "title": "Open Note",
+        "handler": "verstak.notes.open"
       }
     ],
     "overviewProviders": [
@@ -57,5 +72,12 @@
         "handler": "verstak.notes.provideOverview"
       }
     ]
+  },
+  "capabilityOperations": {
+    "verstak/notes/v1": {
+      "list": "verstak.notes.list",
+      "create": "verstak.notes.create",
+      "open": "verstak.notes.open"
+    }
   }
 }

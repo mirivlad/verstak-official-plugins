@@ -53,5 +53,8 @@
   "overview.summary": "Заметки",
   "overview.countOne": "{count} заметка",
   "overview.countMany": "{count} заметок",
-  "overview.overviewNote": "Обзорная заметка"
+  "overview.overviewNote": "Обзорная заметка",
+  "contributions.commands.verstak.notes.list.title": "Список заметок",
+  "contributions.commands.verstak.notes.create.title": "Создать заметку",
+  "contributions.commands.verstak.notes.open.title": "Открыть заметку"
 }
