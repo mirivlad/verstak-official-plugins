@@ -321,6 +321,8 @@ if command -v node &>/dev/null; then
   report "todo frontend behavior" $?
   node "$ROOT/scripts/smoke-capability-operations.js"
   report "capability operation behavior" $?
+  node "$ROOT/scripts/smoke-projects-plugin.js"
+  report "projects frontend behavior" $?
   node "$ROOT/scripts/smoke-search-plugin.js"
   report "search frontend behavior" $?
   node "$ROOT/scripts/smoke-domain-search-providers.js"
