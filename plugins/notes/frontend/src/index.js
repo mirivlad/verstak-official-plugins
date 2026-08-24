@@ -8,6 +8,9 @@
 
   var PLUGIN_ID = 'verstak.notes';
   var OVERVIEW_COMMAND_ID = 'verstak.notes.provideOverview';
+  var LIST_COMMAND_ID = 'verstak.notes.list';
+  var CREATE_COMMAND_ID = 'verstak.notes.create';
+  var OPEN_COMMAND_ID = 'verstak.notes.open';
 
   function injectStyles() {
     if (document.getElementById('notes-style-injected')) return;
@@ -967,6 +970,69 @@
     return fallback || key;
   }
 
+  function capabilityNoteFromEntry(parent, entry) {
+    return {
+      title: titleFromFilename(entry && entry.name),
+      filename: String((entry && entry.name) || ''),
+      path: String((entry && entry.relativePath) || ''),
+      parentPath: cleanPath(parent),
+      modifiedAt: (entry && entry.modifiedAt) || ''
+    };
+  }
+
+  function listNotesCapability(api, args) {
+    var workspace = cleanPath(args && args.workspaceRootPath);
+    return api.files.list(notesFolderPath(workspace)).then(function (entries) {
+      return (entries || []).filter(function (entry) {
+        return entry && entry.type === 'file' && /\.(md|markdown)$/i.test(entry.name || '');
+      }).map(function (entry) {
+        return capabilityNoteFromEntry(workspace, entry);
+      }).sort(function (a, b) {
+        return String(a.title || '').localeCompare(String(b.title || ''), undefined, { sensitivity: 'base' });
+      });
+    }).catch(function (err) {
+      if (isNotFoundError(err)) return [];
+      throw err;
+    });
+  }
+
+  function createNoteCapability(api, args) {
+    var workspace = cleanPath(args && args.workspaceRootPath);
+    var title = String((args && args.title) || '').trim();
+    if (!title) return Promise.reject(new Error('note title must not be empty'));
+    var folder = notesFolderPath(workspace);
+    var path = folder + '/' + normalizeNoteFilename(title);
+    return api.files.createFolder(folder).catch(function (err) {
+      if (!isConflictError(err)) throw err;
+    }).then(function () {
+      return api.files.writeText(path, '# ' + title + '\n', { createIfMissing: true, overwrite: false });
+    }).then(function () {
+      return { title: title, filename: path.slice(path.lastIndexOf('/') + 1), path: path, parentPath: workspace };
+    }).catch(function (err) {
+      if (isConflictError(err)) return { title: title, path: path, parentPath: workspace, conflict: true };
+      throw err;
+    });
+  }
+
+  function openNoteCapability(api, args) {
+    var path = cleanPath(args && args.path);
+    if (!path) return Promise.reject(new Error('note path must not be empty'));
+    var workspace = cleanPath((args && args.workspaceRootPath) || parentPath(parentPath(path)));
+    return api.workbench.openResource({
+      kind: 'vault-file',
+      path: path,
+      mode: (args && args.mode) === 'edit' ? 'edit' : 'view',
+      extension: /\.markdown$/i.test(path) ? '.markdown' : '.md',
+      context: {
+        sourcePluginId: PLUGIN_ID,
+        sourceView: 'notes',
+        isInsideNotesFolder: true,
+        notesMode: true,
+        notesScopePath: workspace
+      }
+    });
+  }
+
   function provideOverview(api, args) {
     var workspace = cleanPath(args && args.workspaceRootPath);
     if (!workspace || !api || !api.files || typeof api.files.list !== 'function') return Promise.resolve({});
@@ -1011,7 +1077,12 @@
     components: { NotesView: NotesView },
     activate: function (api) {
       if (!api || !api.commands || typeof api.commands.register !== 'function') return Promise.resolve();
-      return api.commands.register(OVERVIEW_COMMAND_ID, function (args) { return provideOverview(api, args); });
+      return Promise.all([
+        api.commands.register(OVERVIEW_COMMAND_ID, function (args) { return provideOverview(api, args); }),
+        api.commands.register(LIST_COMMAND_ID, function (args) { return listNotesCapability(api, args); }),
+        api.commands.register(CREATE_COMMAND_ID, function (args) { return createNoteCapability(api, args); }),
+        api.commands.register(OPEN_COMMAND_ID, function (args) { return openNoteCapability(api, args); })
+      ]);
     }
   });
 })();

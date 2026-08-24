@@ -74,6 +74,21 @@
         "id": "verstak.todo.provideOverview",
         "title": "Provide Overview Signals",
         "handler": "verstak.todo.provideOverview"
+      },
+      {
+        "id": "verstak.todo.list",
+        "title": "List Todos",
+        "handler": "verstak.todo.list"
+      },
+      {
+        "id": "verstak.todo.create",
+        "title": "Create Todo",
+        "handler": "verstak.todo.create"
+      },
+      {
+        "id": "verstak.todo.setStatus",
+        "title": "Set Todo Status",
+        "handler": "verstak.todo.setStatus"
       }
     ],
     "overviewProviders": [
@@ -83,5 +98,12 @@
         "handler": "verstak.todo.provideOverview"
       }
     ]
+  },
+  "capabilityOperations": {
+    "todo.workspace": {
+      "list": "verstak.todo.list",
+      "create": "verstak.todo.create",
+      "setStatus": "verstak.todo.setStatus"
+    }
   }
 }

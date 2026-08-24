@@ -71,5 +71,8 @@
   "overview.overdue": "Overdue",
   "overview.dueSoon": "Due soon",
   "overview.reminderDue": "Reminder due",
-  "overview.due": "Due {date}"
+  "overview.due": "Due {date}",
+  "contributions.commands.verstak.todo.list.title": "List Todos",
+  "contributions.commands.verstak.todo.create.title": "Create Todo",
+  "contributions.commands.verstak.todo.setStatus.title": "Set Todo Status"
 }
