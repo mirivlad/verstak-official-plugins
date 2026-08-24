@@ -1,0 +1,105 @@
+{
+  "schemaVersion": 1,
+  "id": "verstak.projects",
+  "name": "Projects",
+  "version": "0.1.0",
+  "apiVersion": "0.1.0",
+  "description": "Project context and lightweight project management with optional Notes, Todos, Files, and Activity integration.",
+  "localization": {
+    "defaultLocale": "en",
+    "locales": {
+      "en": "locales/en.json",
+      "ru": "locales/ru.json"
+    }
+  },
+  "source": "official",
+  "icon": "folder",
+  "provides": [
+    "verstak/projects/v1"
+  ],
+  "optionalRequires": [
+    "verstak/notes/v1",
+    "todo.workspace",
+    "verstak/files/v1",
+    "activity.log"
+  ],
+  "permissions": [
+    "storage.namespace",
+    "files.read",
+    "files.openExternal",
+    "events.publish",
+    "ui.register",
+    "commands.register"
+  ],
+  "sync": {
+    "records": [
+      {
+        "id": "projects",
+        "storage": "settings",
+        "key": "projects:global",
+        "identity": "id"
+      }
+    ]
+  },
+  "frontend": {
+    "entry": "frontend/src/index.js"
+  },
+  "contributes": {
+    "views": [
+      {
+        "id": "verstak.projects.view",
+        "title": "Projects",
+        "icon": "folder",
+        "component": "ProjectsView"
+      }
+    ],
+    "sidebarItems": [
+      {
+        "id": "verstak.projects.sidebar",
+        "title": "Projects",
+        "icon": "folder",
+        "view": "verstak.projects.view",
+        "position": 34
+      }
+    ],
+    "workspaceItems": [
+      {
+        "id": "verstak.projects.workspace",
+        "title": "Project",
+        "icon": "folder",
+        "order": 5,
+        "component": "ProjectsView"
+      }
+    ],
+    "commands": [
+      {
+        "id": "verstak.projects.list",
+        "title": "List Projects",
+        "handler": "verstak.projects.list"
+      },
+      {
+        "id": "verstak.projects.get",
+        "title": "Get Project",
+        "handler": "verstak.projects.get"
+      },
+      {
+        "id": "verstak.projects.provideOverview",
+        "title": "Provide Overview Signals",
+        "handler": "verstak.projects.provideOverview"
+      }
+    ],
+    "overviewProviders": [
+      {
+        "id": "verstak.projects.overview",
+        "label": "Projects",
+        "handler": "verstak.projects.provideOverview"
+      }
+    ]
+  },
+  "capabilityOperations": {
+    "verstak/projects/v1": {
+      "list": "verstak.projects.list",
+      "get": "verstak.projects.get"
+    }
+  }
+}
