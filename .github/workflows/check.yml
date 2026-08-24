@@ -15,19 +15,23 @@ concurrency:
 
 jobs:
   bootstrap:
-    if: github.event_name == 'push' && github.event.head_commit.message == 'chore: bootstrap capability adapter patch v2'
+    if: github.event_name == 'pull_request' && github.head_ref == 'feat/project-capability-adapters'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: feat/project-capability-adapters
-      - name: Apply prepared capability patch
+      - name: Apply prepared capability patch once
         run: |
-          git apply --index .github/project-capability-adapters.patch
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "feat: expose notes and todo capability operations"
-          git push origin HEAD:feat/project-capability-adapters
+          if git apply --check .github/project-capability-adapters.patch; then
+            git apply --index .github/project-capability-adapters.patch
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "feat: expose notes and todo capability operations"
+            git push origin HEAD:feat/project-capability-adapters
+          else
+            echo "Patch already applied; nothing to bootstrap."
+          fi
 
   check:
     runs-on: ubuntu-latest
