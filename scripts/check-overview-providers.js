@@ -22,5 +22,5 @@ for (const manifest of manifests) {
     if (!workspaceIds.has(match[1])) throw new Error(`${manifest.id}: unknown Overview workspaceItemId ${match[1]}`);
   }
 }
-if (providers !== 5) throw new Error(`expected 5 official Overview providers, found ${providers}`);
+if (providers !== 6) throw new Error(`expected 6 official Overview providers, found ${providers}`);
 console.log(`OK ${providers} Overview providers use declared commands and exact workspace item ids`);
