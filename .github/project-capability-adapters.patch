@@ -1,0 +1,458 @@
+diff --git a/plugins/notes/frontend/src/index.js b/plugins/notes/frontend/src/index.js
+index f4825e4..e6a934e 100644
+--- a/plugins/notes/frontend/src/index.js
++++ b/plugins/notes/frontend/src/index.js
+@@ -8,6 +8,9 @@
+ 
+   var PLUGIN_ID = 'verstak.notes';
+   var OVERVIEW_COMMAND_ID = 'verstak.notes.provideOverview';
++  var LIST_COMMAND_ID = 'verstak.notes.list';
++  var CREATE_COMMAND_ID = 'verstak.notes.create';
++  var OPEN_COMMAND_ID = 'verstak.notes.open';
+ 
+   function injectStyles() {
+     if (document.getElementById('notes-style-injected')) return;
+@@ -967,6 +970,69 @@
+     return fallback || key;
+   }
+ 
++  function capabilityNoteFromEntry(parent, entry) {
++    return {
++      title: titleFromFilename(entry && entry.name),
++      filename: String((entry && entry.name) || ''),
++      path: String((entry && entry.relativePath) || ''),
++      parentPath: cleanPath(parent),
++      modifiedAt: (entry && entry.modifiedAt) || ''
++    };
++  }
++
++  function listNotesCapability(api, args) {
++    var workspace = cleanPath(args && args.workspaceRootPath);
++    return api.files.list(notesFolderPath(workspace)).then(function (entries) {
++      return (entries || []).filter(function (entry) {
++        return entry && entry.type === 'file' && /\.(md|markdown)$/i.test(entry.name || '');
++      }).map(function (entry) {
++        return capabilityNoteFromEntry(workspace, entry);
++      }).sort(function (a, b) {
++        return String(a.title || '').localeCompare(String(b.title || ''), undefined, { sensitivity: 'base' });
++      });
++    }).catch(function (err) {
++      if (isNotFoundError(err)) return [];
++      throw err;
++    });
++  }
++
++  function createNoteCapability(api, args) {
++    var workspace = cleanPath(args && args.workspaceRootPath);
++    var title = String((args && args.title) || '').trim();
++    if (!title) return Promise.reject(new Error('note title must not be empty'));
++    var folder = notesFolderPath(workspace);
++    var path = folder + '/' + normalizeNoteFilename(title);
++    return api.files.createFolder(folder).catch(function (err) {
++      if (!isConflictError(err)) throw err;
++    }).then(function () {
++      return api.files.writeText(path, '# ' + title + '\n', { createIfMissing: true, overwrite: false });
++    }).then(function () {
++      return { title: title, filename: path.slice(path.lastIndexOf('/') + 1), path: path, parentPath: workspace };
++    }).catch(function (err) {
++      if (isConflictError(err)) return { title: title, path: path, parentPath: workspace, conflict: true };
++      throw err;
++    });
++  }
++
++  function openNoteCapability(api, args) {
++    var path = cleanPath(args && args.path);
++    if (!path) return Promise.reject(new Error('note path must not be empty'));
++    var workspace = cleanPath((args && args.workspaceRootPath) || parentPath(parentPath(path)));
++    return api.workbench.openResource({
++      kind: 'vault-file',
++      path: path,
++      mode: (args && args.mode) === 'edit' ? 'edit' : 'view',
++      extension: /\.markdown$/i.test(path) ? '.markdown' : '.md',
++      context: {
++        sourcePluginId: PLUGIN_ID,
++        sourceView: 'notes',
++        isInsideNotesFolder: true,
++        notesMode: true,
++        notesScopePath: workspace
++      }
++    });
++  }
++
+   function provideOverview(api, args) {
+     var workspace = cleanPath(args && args.workspaceRootPath);
+     if (!workspace || !api || !api.files || typeof api.files.list !== 'function') return Promise.resolve({});
+@@ -1011,7 +1077,12 @@
+     components: { NotesView: NotesView },
+     activate: function (api) {
+       if (!api || !api.commands || typeof api.commands.register !== 'function') return Promise.resolve();
+-      return api.commands.register(OVERVIEW_COMMAND_ID, function (args) { return provideOverview(api, args); });
++      return Promise.all([
++        api.commands.register(OVERVIEW_COMMAND_ID, function (args) { return provideOverview(api, args); }),
++        api.commands.register(LIST_COMMAND_ID, function (args) { return listNotesCapability(api, args); }),
++        api.commands.register(CREATE_COMMAND_ID, function (args) { return createNoteCapability(api, args); }),
++        api.commands.register(OPEN_COMMAND_ID, function (args) { return openNoteCapability(api, args); })
++      ]);
+     }
+   });
+ })();
+diff --git a/plugins/notes/locales/en.json b/plugins/notes/locales/en.json
+index 4ad8408..428a18d 100644
+--- a/plugins/notes/locales/en.json
++++ b/plugins/notes/locales/en.json
+@@ -53,5 +53,8 @@
+   "overview.summary": "Notes",
+   "overview.countOne": "{count} note",
+   "overview.countMany": "{count} notes",
+-  "overview.overviewNote": "Overview note"
++  "overview.overviewNote": "Overview note",
++  "contributions.commands.verstak.notes.list.title": "List Notes",
++  "contributions.commands.verstak.notes.create.title": "Create Note",
++  "contributions.commands.verstak.notes.open.title": "Open Note"
+ }
+diff --git a/plugins/notes/locales/ru.json b/plugins/notes/locales/ru.json
+index d21e052..b774110 100644
+--- a/plugins/notes/locales/ru.json
++++ b/plugins/notes/locales/ru.json
+@@ -53,5 +53,8 @@
+   "overview.summary": "Заметки",
+   "overview.countOne": "{count} заметка",
+   "overview.countMany": "{count} заметок",
+-  "overview.overviewNote": "Обзорная заметка"
++  "overview.overviewNote": "Обзорная заметка",
++  "contributions.commands.verstak.notes.list.title": "Список заметок",
++  "contributions.commands.verstak.notes.create.title": "Создать заметку",
++  "contributions.commands.verstak.notes.open.title": "Открыть заметку"
+ }
+diff --git a/plugins/notes/plugin.json b/plugins/notes/plugin.json
+index 7eba464..524a129 100644
+--- a/plugins/notes/plugin.json
++++ b/plugins/notes/plugin.json
+@@ -48,6 +48,21 @@
+         "id": "verstak.notes.provideOverview",
+         "title": "Provide Overview Signals",
+         "handler": "verstak.notes.provideOverview"
++      },
++      {
++        "id": "verstak.notes.list",
++        "title": "List Notes",
++        "handler": "verstak.notes.list"
++      },
++      {
++        "id": "verstak.notes.create",
++        "title": "Create Note",
++        "handler": "verstak.notes.create"
++      },
++      {
++        "id": "verstak.notes.open",
++        "title": "Open Note",
++        "handler": "verstak.notes.open"
+       }
+     ],
+     "overviewProviders": [
+@@ -57,5 +72,12 @@
+         "handler": "verstak.notes.provideOverview"
+       }
+     ]
++  },
++  "capabilityOperations": {
++    "verstak/notes/v1": {
++      "list": "verstak.notes.list",
++      "create": "verstak.notes.create",
++      "open": "verstak.notes.open"
++    }
+   }
+ }
+diff --git a/plugins/todo/frontend/src/index.js b/plugins/todo/frontend/src/index.js
+index 6d67e5b..5a2dab1 100644
+--- a/plugins/todo/frontend/src/index.js
++++ b/plugins/todo/frontend/src/index.js
+@@ -12,6 +12,9 @@
+   var STATUS_VALUES = ['open', 'done', 'cancelled'];
+   var PRIORITY_VALUES = ['low', 'normal', 'high'];
+   var OVERVIEW_COMMAND_ID = 'verstak.todo.provideOverview';
++  var LIST_COMMAND_ID = 'verstak.todo.list';
++  var CREATE_COMMAND_ID = 'verstak.todo.create';
++  var SET_STATUS_COMMAND_ID = 'verstak.todo.setStatus';
+ 
+   var STYLES = [
+     '.todo-root{display:flex;flex-direction:column;height:100%;min-height:0;container-type:inline-size;background:var(--vt-color-background,#101020);color:var(--vt-color-text-primary,#f4f7fb);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}',
+@@ -711,6 +714,95 @@
+     return '';
+   }
+ 
++  function loadTodoRecords(api) {
++    if (!api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve([]);
++    return api.settings.read().then(function (settings) {
++      return sortTodos(normalizeTodos((settings || {})[GLOBAL_KEY]));
++    });
++  }
++
++  function capabilityNotificationRequests(todoList) {
++    return sortTodos(todoList).filter(function (todo) {
++      return todo.status === 'open' && todo.reminderAt;
++    }).map(function (todo) {
++      var dueAt = new Date(todo.reminderAt);
++      if (isNaN(dueAt.getTime())) return null;
++      return { id: todo.id, dueAt: dueAt.toISOString(), title: 'Todo reminder', body: todo.title || 'Untitled todo' };
++    }).filter(function (item) { return item !== null; });
++  }
++
++  function persistTodoRecords(api, todoList) {
++    var records = sortTodos(todoList);
++    return api.settings.write(GLOBAL_KEY, storageTodos(records)).then(function () {
++      if (api.notifications && typeof api.notifications.replace === 'function') {
++        return api.notifications.replace(capabilityNotificationRequests(records));
++      }
++    }).then(function () { return records; });
++  }
++
++  function listTodosCapability(api, args) {
++    var workspace = cleanWorkspace(args && args.workspaceRootPath);
++    var requestedStatus = text(args && args.status).trim().toLowerCase();
++    return loadTodoRecords(api).then(function (todos) {
++      return todos.filter(function (todo) {
++        if (workspace && cleanWorkspace(todo.workspaceRootPath) !== workspace) return false;
++        if (requestedStatus && requestedStatus !== 'all' && todo.status !== requestedStatus) return false;
++        return true;
++      });
++    });
++  }
++
++  function createTodoCapability(api, args) {
++    args = args || {};
++    var title = text(args.title).trim();
++    if (!title) return Promise.reject(new Error('todo title must not be empty'));
++    var workspace = cleanWorkspace(args.workspaceRootPath);
++    var timestamp = now();
++    var todo = normalizeTodo({
++      id: todoId(workspace, title),
++      title: title,
++      description: args.description,
++      workspaceRootPath: workspace,
++      workspaceName: workspace,
++      status: 'open',
++      priority: args.priority,
++      dueAt: args.dueAt,
++      reminderDate: args.reminderDate,
++      reminderAt: args.reminderAt,
++      createdAt: timestamp,
++      updatedAt: timestamp,
++      sourceUrl: args.sourceUrl
++    });
++    return loadTodoRecords(api).then(function (todos) {
++      return persistTodoRecords(api, [todo].concat(todos));
++    }).then(function () { return todo; });
++  }
++
++  function setTodoStatusCapability(api, args) {
++    args = args || {};
++    var id = text(args.id).trim();
++    var status = text(args.status).trim().toLowerCase();
++    if (!id) return Promise.reject(new Error('todo id must not be empty'));
++    if (STATUS_VALUES.indexOf(status) === -1) return Promise.reject(new Error('unsupported todo status: ' + status));
++    var updated = null;
++    return loadTodoRecords(api).then(function (todos) {
++      var found = false;
++      var timestamp = now();
++      var next = todos.map(function (todo) {
++        if (todo.id !== id) return todo;
++        found = true;
++        updated = Object.assign({}, todo, {
++          status: status,
++          completedAt: status === 'done' ? (todo.completedAt || timestamp) : '',
++          updatedAt: timestamp
++        });
++        return updated;
++      });
++      if (!found) throw new Error('todo not found: ' + id);
++      return persistTodoRecords(api, next);
++    }).then(function () { return updated; });
++  }
++
+   function provideOverview(api, args) {
+     var workspace = cleanWorkspace(args && args.workspaceRootPath);
+     if (!workspace || !api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve({});
+@@ -753,7 +845,12 @@
+     },
+     activate: function (api) {
+       if (!api || !api.commands || typeof api.commands.register !== 'function') return Promise.resolve();
+-      return api.commands.register(OVERVIEW_COMMAND_ID, function (args) { return provideOverview(api, args); });
++      return Promise.all([
++        api.commands.register(OVERVIEW_COMMAND_ID, function (args) { return provideOverview(api, args); }),
++        api.commands.register(LIST_COMMAND_ID, function (args) { return listTodosCapability(api, args); }),
++        api.commands.register(CREATE_COMMAND_ID, function (args) { return createTodoCapability(api, args); }),
++        api.commands.register(SET_STATUS_COMMAND_ID, function (args) { return setTodoStatusCapability(api, args); })
++      ]);
+     }
+   });
+ })();
+diff --git a/plugins/todo/locales/en.json b/plugins/todo/locales/en.json
+index bf7c422..ad0b5a7 100644
+--- a/plugins/todo/locales/en.json
++++ b/plugins/todo/locales/en.json
+@@ -71,5 +71,8 @@
+   "overview.overdue": "Overdue",
+   "overview.dueSoon": "Due soon",
+   "overview.reminderDue": "Reminder due",
+-  "overview.due": "Due {date}"
++  "overview.due": "Due {date}",
++  "contributions.commands.verstak.todo.list.title": "List Todos",
++  "contributions.commands.verstak.todo.create.title": "Create Todo",
++  "contributions.commands.verstak.todo.setStatus.title": "Set Todo Status"
+ }
+diff --git a/plugins/todo/locales/ru.json b/plugins/todo/locales/ru.json
+index 13a0984..6a39b5d 100644
+--- a/plugins/todo/locales/ru.json
++++ b/plugins/todo/locales/ru.json
+@@ -71,5 +71,8 @@
+   "overview.overdue": "Просрочено",
+   "overview.dueSoon": "Срок скоро",
+   "overview.reminderDue": "Напоминание",
+-  "overview.due": "Срок {date}"
++  "overview.due": "Срок {date}",
++  "contributions.commands.verstak.todo.list.title": "Список задач",
++  "contributions.commands.verstak.todo.create.title": "Создать задачу",
++  "contributions.commands.verstak.todo.setStatus.title": "Изменить статус задачи"
+ }
+diff --git a/plugins/todo/plugin.json b/plugins/todo/plugin.json
+index 74bb1ba..9837faa 100644
+--- a/plugins/todo/plugin.json
++++ b/plugins/todo/plugin.json
+@@ -74,6 +74,21 @@
+         "id": "verstak.todo.provideOverview",
+         "title": "Provide Overview Signals",
+         "handler": "verstak.todo.provideOverview"
++      },
++      {
++        "id": "verstak.todo.list",
++        "title": "List Todos",
++        "handler": "verstak.todo.list"
++      },
++      {
++        "id": "verstak.todo.create",
++        "title": "Create Todo",
++        "handler": "verstak.todo.create"
++      },
++      {
++        "id": "verstak.todo.setStatus",
++        "title": "Set Todo Status",
++        "handler": "verstak.todo.setStatus"
+       }
+     ],
+     "overviewProviders": [
+@@ -83,5 +98,12 @@
+         "handler": "verstak.todo.provideOverview"
+       }
+     ]
++  },
++  "capabilityOperations": {
++    "todo.workspace": {
++      "list": "verstak.todo.list",
++      "create": "verstak.todo.create",
++      "setStatus": "verstak.todo.setStatus"
++    }
+   }
+ }
+diff --git a/scripts/check.sh b/scripts/check.sh
+index dbca729..808ca81 100755
+--- a/scripts/check.sh
++++ b/scripts/check.sh
+@@ -319,6 +319,8 @@ if command -v node &>/dev/null; then
+   report "browser inbox frontend behavior" $?
+   node "$ROOT/scripts/smoke-todo-plugin.js"
+   report "todo frontend behavior" $?
++  node "$ROOT/scripts/smoke-capability-operations.js"
++  report "capability operation behavior" $?
+   node "$ROOT/scripts/smoke-search-plugin.js"
+   report "search frontend behavior" $?
+   node "$ROOT/scripts/smoke-domain-search-providers.js"
+diff --git a/scripts/smoke-capability-operations.js b/scripts/smoke-capability-operations.js
+new file mode 100644
+index 0000000..87a53b1
+--- /dev/null
++++ b/scripts/smoke-capability-operations.js
+@@ -0,0 +1,83 @@
++#!/usr/bin/env node
++const fs = require('fs');
++const path = require('path');
++const vm = require('vm');
++const root = path.resolve(__dirname, '..');
++
++function loadBundle(name) {
++  const source = fs.readFileSync(path.join(root, 'plugins', name, 'frontend', 'src', 'index.js'), 'utf8');
++  let bundle = null;
++  const sandbox = { console, setTimeout, clearTimeout, Date, Math, Promise, document: {}, window: {} };
++  sandbox.window.VerstakPluginRegister = (_id, value) => { bundle = value; };
++  sandbox.window.window = sandbox.window;
++  vm.runInNewContext(source, sandbox, { filename: name + '/index.js' });
++  if (!bundle || typeof bundle.activate !== 'function') throw new Error(name + ' did not register activate()');
++  return bundle;
++}
++
++function commandApi(extra = {}) {
++  const handlers = new Map();
++  return {
++    handlers,
++    api: Object.assign({
++      commands: {
++        register: async (id, handler) => { handlers.set(id, handler); return () => handlers.delete(id); },
++      },
++    }, extra),
++  };
++}
++
++(async () => {
++  const entries = new Map();
++  const opened = [];
++  const notes = commandApi({
++    files: {
++      list: async (dir) => Array.from(entries.entries())
++        .filter(([key]) => key.startsWith(dir + '/') && !key.slice(dir.length + 1).includes('/'))
++        .map(([key, value]) => ({ name: path.basename(key), relativePath: key, type: value.type, modifiedAt: value.modifiedAt || '' })),
++      createFolder: async (dir) => { if (entries.has(dir)) throw new Error('conflict'); entries.set(dir, { type: 'folder' }); },
++      writeText: async (file, content, options = {}) => {
++        if (entries.has(file) && !options.overwrite) throw new Error('conflict');
++        entries.set(file, { type: 'file', content });
++      },
++    },
++    workbench: { openResource: async (request) => { opened.push(request); return { status: 'opened' }; } },
++  });
++  await loadBundle('notes').activate(notes.api);
++  const createNote = notes.handlers.get('verstak.notes.create');
++  const listNotes = notes.handlers.get('verstak.notes.list');
++  const openNote = notes.handlers.get('verstak.notes.open');
++  if (!createNote || !listNotes || !openNote) throw new Error('notes capability handlers were not registered');
++  const created = await createNote({ workspaceRootPath: 'Project', title: 'Architecture' });
++  if (created.path !== 'Project/Notes/Architecture.md') throw new Error('notes create returned wrong path');
++  const listed = await listNotes({ workspaceRootPath: 'Project' });
++  if (listed.length !== 1 || listed[0].title !== 'Architecture') throw new Error('notes list did not return created note');
++  await openNote({ workspaceRootPath: 'Project', path: created.path });
++  if (!opened.length || opened[0].path !== created.path) throw new Error('notes open did not route to workbench');
++
++  const settings = {};
++  let notifications = [];
++  const todo = commandApi({
++    settings: {
++      read: async () => settings,
++      write: async (key, value) => { settings[key] = value; return settings; },
++    },
++    notifications: { replace: async (items) => { notifications = items; } },
++    i18n: { t: (_key, _params, fallback) => fallback },
++  });
++  await loadBundle('todo').activate(todo.api);
++  const createTodo = todo.handlers.get('verstak.todo.create');
++  const listTodos = todo.handlers.get('verstak.todo.list');
++  const setStatus = todo.handlers.get('verstak.todo.setStatus');
++  if (!createTodo || !listTodos || !setStatus) throw new Error('todo capability handlers were not registered');
++  const task = await createTodo({ workspaceRootPath: 'Project', title: 'Ship MVP', priority: 'high' });
++  const tasks = await listTodos({ workspaceRootPath: 'Project', status: 'open' });
++  if (tasks.length !== 1 || tasks[0].id !== task.id) throw new Error('todo list did not return created task');
++  const done = await setStatus({ id: task.id, status: 'done' });
++  if (done.status !== 'done') throw new Error('todo setStatus returned the wrong status');
++  const openAfter = await listTodos({ workspaceRootPath: 'Project', status: 'open' });
++  if (openAfter.length !== 0) throw new Error('todo setStatus did not remove task from open list');
++  if (!Array.isArray(notifications)) throw new Error('todo capability persistence did not sync notifications');
++
++  console.log('capability operation smoke passed');
++})().catch((err) => { console.error(err); process.exit(1); });
