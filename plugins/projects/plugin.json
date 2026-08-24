@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "verstak.projects",
   "name": "Projects",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "apiVersion": "0.1.0",
   "description": "Project context and lightweight project management with optional Notes, Todos, Files, and Activity integration.",
   "localization": {
