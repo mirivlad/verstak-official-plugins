@@ -1,0 +1,25 @@
+name: apply-capability-adapters
+
+on:
+  push:
+    branches:
+      - feat/project-capability-adapters
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'chore: bootstrap capability adapter patch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/project-capability-adapters
+      - name: Apply prepared patch
+        run: |
+          git apply --index .github/project-capability-adapters.patch
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "feat: expose notes and todo capability operations"
+          git push origin HEAD:feat/project-capability-adapters
