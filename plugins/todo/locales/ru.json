@@ -71,5 +71,8 @@
   "overview.overdue": "Просрочено",
   "overview.dueSoon": "Срок скоро",
   "overview.reminderDue": "Напоминание",
-  "overview.due": "Срок {date}"
+  "overview.due": "Срок {date}",
+  "contributions.commands.verstak.todo.list.title": "Список задач",
+  "contributions.commands.verstak.todo.create.title": "Создать задачу",
+  "contributions.commands.verstak.todo.setStatus.title": "Изменить статус задачи"
 }

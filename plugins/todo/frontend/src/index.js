@@ -12,6 +12,9 @@
   var STATUS_VALUES = ['open', 'done', 'cancelled'];
   var PRIORITY_VALUES = ['low', 'normal', 'high'];
   var OVERVIEW_COMMAND_ID = 'verstak.todo.provideOverview';
+  var LIST_COMMAND_ID = 'verstak.todo.list';
+  var CREATE_COMMAND_ID = 'verstak.todo.create';
+  var SET_STATUS_COMMAND_ID = 'verstak.todo.setStatus';
 
   var STYLES = [
     '.todo-root{display:flex;flex-direction:column;height:100%;min-height:0;container-type:inline-size;background:var(--vt-color-background,#101020);color:var(--vt-color-text-primary,#f4f7fb);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}',
@@ -711,6 +714,95 @@
     return '';
   }
 
+  function loadTodoRecords(api) {
+    if (!api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve([]);
+    return api.settings.read().then(function (settings) {
+      return sortTodos(normalizeTodos((settings || {})[GLOBAL_KEY]));
+    });
+  }
+
+  function capabilityNotificationRequests(todoList) {
+    return sortTodos(todoList).filter(function (todo) {
+      return todo.status === 'open' && todo.reminderAt;
+    }).map(function (todo) {
+      var dueAt = new Date(todo.reminderAt);
+      if (isNaN(dueAt.getTime())) return null;
+      return { id: todo.id, dueAt: dueAt.toISOString(), title: 'Todo reminder', body: todo.title || 'Untitled todo' };
+    }).filter(function (item) { return item !== null; });
+  }
+
+  function persistTodoRecords(api, todoList) {
+    var records = sortTodos(todoList);
+    return api.settings.write(GLOBAL_KEY, storageTodos(records)).then(function () {
+      if (api.notifications && typeof api.notifications.replace === 'function') {
+        return api.notifications.replace(capabilityNotificationRequests(records));
+      }
+    }).then(function () { return records; });
+  }
+
+  function listTodosCapability(api, args) {
+    var workspace = cleanWorkspace(args && args.workspaceRootPath);
+    var requestedStatus = text(args && args.status).trim().toLowerCase();
+    return loadTodoRecords(api).then(function (todos) {
+      return todos.filter(function (todo) {
+        if (workspace && cleanWorkspace(todo.workspaceRootPath) !== workspace) return false;
+        if (requestedStatus && requestedStatus !== 'all' && todo.status !== requestedStatus) return false;
+        return true;
+      });
+    });
+  }
+
+  function createTodoCapability(api, args) {
+    args = args || {};
+    var title = text(args.title).trim();
+    if (!title) return Promise.reject(new Error('todo title must not be empty'));
+    var workspace = cleanWorkspace(args.workspaceRootPath);
+    var timestamp = now();
+    var todo = normalizeTodo({
+      id: todoId(workspace, title),
+      title: title,
+      description: args.description,
+      workspaceRootPath: workspace,
+      workspaceName: workspace,
+      status: 'open',
+      priority: args.priority,
+      dueAt: args.dueAt,
+      reminderDate: args.reminderDate,
+      reminderAt: args.reminderAt,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      sourceUrl: args.sourceUrl
+    });
+    return loadTodoRecords(api).then(function (todos) {
+      return persistTodoRecords(api, [todo].concat(todos));
+    }).then(function () { return todo; });
+  }
+
+  function setTodoStatusCapability(api, args) {
+    args = args || {};
+    var id = text(args.id).trim();
+    var status = text(args.status).trim().toLowerCase();
+    if (!id) return Promise.reject(new Error('todo id must not be empty'));
+    if (STATUS_VALUES.indexOf(status) === -1) return Promise.reject(new Error('unsupported todo status: ' + status));
+    var updated = null;
+    return loadTodoRecords(api).then(function (todos) {
+      var found = false;
+      var timestamp = now();
+      var next = todos.map(function (todo) {
+        if (todo.id !== id) return todo;
+        found = true;
+        updated = Object.assign({}, todo, {
+          status: status,
+          completedAt: status === 'done' ? (todo.completedAt || timestamp) : '',
+          updatedAt: timestamp
+        });
+        return updated;
+      });
+      if (!found) throw new Error('todo not found: ' + id);
+      return persistTodoRecords(api, next);
+    }).then(function () { return updated; });
+  }
+
   function provideOverview(api, args) {
     var workspace = cleanWorkspace(args && args.workspaceRootPath);
     if (!workspace || !api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve({});
@@ -753,7 +845,12 @@
     },
     activate: function (api) {
       if (!api || !api.commands || typeof api.commands.register !== 'function') return Promise.resolve();
-      return api.commands.register(OVERVIEW_COMMAND_ID, function (args) { return provideOverview(api, args); });
+      return Promise.all([
+        api.commands.register(OVERVIEW_COMMAND_ID, function (args) { return provideOverview(api, args); }),
+        api.commands.register(LIST_COMMAND_ID, function (args) { return listTodosCapability(api, args); }),
+        api.commands.register(CREATE_COMMAND_ID, function (args) { return createTodoCapability(api, args); }),
+        api.commands.register(SET_STATUS_COMMAND_ID, function (args) { return setTodoStatusCapability(api, args); })
+      ]);
     }
   });
 })();
