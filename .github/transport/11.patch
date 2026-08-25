@@ -1,0 +1,13 @@
+diff --git a/scripts/smoke-notes-plugin.js b/scripts/smoke-notes-plugin.js
+index 269e8d4..884c802 100755
+--- a/scripts/smoke-notes-plugin.js
++++ b/scripts/smoke-notes-plugin.js
+@@ -238,7 +238,7 @@ function makeApi(options = {}) {
+ }
+ 
+ async function flush() {
+-  for (let i = 0; i < 8; i++) {
++  for (let i = 0; i < 20; i++) {
+     await Promise.resolve();
+   }
+ }
