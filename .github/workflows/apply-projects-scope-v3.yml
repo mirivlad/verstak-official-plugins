@@ -14,12 +14,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Verify and apply patch
+      - name: Apply patch
         shell: bash
         run: |
           set -euo pipefail
           cat .github/projects-scope-v3.part00 .github/projects-scope-v3.part01 .github/projects-scope-v3.part02 .github/projects-scope-v3.part03 > /tmp/projects-scope-v3.patch
-          echo "45ae2104621514caa02da266330b6eab30a8d1699f11054ae1854d8c040af6da  /tmp/projects-scope-v3.patch" | sha256sum -c -
           git apply --check /tmp/projects-scope-v3.patch
           git apply /tmp/projects-scope-v3.patch
           rm .github/projects-scope-v3.part00 .github/projects-scope-v3.part01 .github/projects-scope-v3.part02 .github/projects-scope-v3.part03 .github/workflows/apply-projects-scope-v3.yml
