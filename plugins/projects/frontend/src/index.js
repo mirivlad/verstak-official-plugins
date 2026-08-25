@@ -17,7 +17,6 @@
     tasks: { capability: 'todo.workspace', label: 'Tasks' },
     notes: { capability: 'verstak/notes/v1', label: 'Notes' },
     files: { capability: 'verstak/files/v1', label: 'Files' },
-    activity: { capability: 'activity.log', label: 'Activity' }
   };
 
   var STYLES = [
@@ -71,12 +70,15 @@
     '.projects-modal-title{font-size:1rem;font-weight:700}.projects-field{display:grid;gap:.32rem}.projects-label{font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3)}.projects-textarea{min-height:6.2rem;resize:vertical}.projects-modal-actions{display:flex;justify-content:flex-end;gap:.45rem;margin-top:.3rem}',
     '.projects-picker{position:relative}.projects-picker-button{width:100%;display:flex;align-items:center;gap:.6rem;justify-content:space-between;text-align:left;box-sizing:border-box;font:inherit;font-size:.8rem;padding:.49rem .58rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-surface-input,#0f1424);color:var(--vt-color-text-primary,#f4f7fb);cursor:pointer;outline:none}',
     '.projects-picker-value{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.projects-picker-caret{color:var(--vt-color-text-muted,#7f8aa3)}',
-    '.projects-picker-popover{position:absolute;z-index:3;left:0;right:0;top:calc(100% + .3rem);max-height:20rem;display:flex;flex-direction:column;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-md,6px);background:var(--vt-color-surface,#15152c);box-shadow:0 12px 28px rgba(0,0,0,.36);overflow:hidden}',
+    '.projects-picker-popover{position:relative;z-index:3;margin-top:.3rem;max-height:20rem;display:flex;flex-direction:column;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-md,6px);background:var(--vt-color-surface,#15152c);box-shadow:0 12px 28px rgba(0,0,0,.36);overflow:hidden}',
     '.projects-picker-search{margin:.55rem;width:calc(100% - 1.1rem)}.projects-picker-list{overflow:auto;padding:.2rem 0 .35rem}',
     '.projects-picker-row{width:100%;box-sizing:border-box;display:flex;align-items:center;gap:.45rem;border:0;background:transparent;color:var(--vt-color-text-secondary,#b7c0d4);padding:.42rem .62rem;font:inherit;font-size:.78rem;text-align:left;cursor:pointer;outline:none}',
     '.projects-picker-row:hover,.projects-picker-row.active{background:var(--vt-color-surface-hover,#1b2440);color:var(--vt-color-text-primary,#f4f7fb)}.projects-picker-row.selected{color:var(--vt-color-accent,#4ecca3)}',
     '.projects-picker-indent{display:inline-block;flex:none}.projects-picker-folder{font-weight:620;color:var(--vt-color-text-secondary,#b7c0d4)}.projects-picker-path{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.projects-picker-check{margin-left:auto;color:var(--vt-color-accent,#4ecca3)}',
     '.projects-picker-separator{height:1px;background:var(--vt-color-border,#202b46);margin:.25rem .55rem}',
+    '.projects-root.portfolio{display:block;overflow:hidden}.projects-root.portfolio .projects-sidebar{width:100%;max-width:none;min-width:0;height:100%;border-right:0;background:var(--vt-color-background,#101020)}.projects-root.portfolio .projects-main{display:none}.projects-root.portfolio .projects-toolbar{padding:.85rem 1rem}.projects-root.portfolio .projects-search{margin:.7rem 1rem .2rem;width:calc(100% - 2rem);max-width:32rem}.projects-root.portfolio .projects-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(16rem,1fr));align-content:start;gap:.75rem;padding:.8rem 1rem 1.2rem}.projects-root.portfolio .projects-card{min-height:8.4rem;padding:.85rem .9rem;border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface-muted,#111629);align-content:start}.projects-root.portfolio .projects-card:hover{border-color:var(--vt-color-border-strong,#2c456a);background:var(--vt-color-surface-hover,#1b2440)}.projects-root.portfolio .projects-card.selected{box-shadow:none}.projects-root.portfolio .projects-card-title{font-size:.95rem}.projects-card-progress{margin-top:.38rem;display:grid;gap:.28rem}.projects-card-progress-line{display:flex;align-items:center;gap:.55rem;font-size:.68rem;color:var(--vt-color-text-muted,#7f8aa3)}.projects-card-progress-track{height:.3rem;flex:1;border-radius:999px;background:var(--vt-color-surface-hover,#1b2440);overflow:hidden}.projects-card-progress-track>span{display:block;height:100%;background:var(--vt-color-accent,#4ecca3)}.projects-card-next{font-size:.72rem;color:var(--vt-color-text-secondary,#b7c0d4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.projects-root.deal .projects-sidebar{display:none}.projects-root.deal .projects-main{width:100%}.projects-project-switcher{display:flex;align-items:center;gap:.55rem;padding:.48rem .9rem;border-bottom:1px solid var(--vt-color-border,#202b46);background:var(--vt-color-surface-muted,#111629)}.projects-project-switcher-label{font-size:.7rem;color:var(--vt-color-text-muted,#7f8aa3)}.projects-project-switcher .projects-select{max-width:22rem;min-width:12rem}.projects-header-actions{display:flex;gap:.45rem;align-items:center}',
+    '.projects-root.portfolio .projects-sidebar{width:100%;min-width:0;max-width:none;border-right:0;background:var(--vt-color-background,#101020)}.projects-root.portfolio .projects-main{display:none}.projects-root.portfolio .projects-toolbar{padding:1rem 1.1rem .75rem;background:var(--vt-color-background,#101020)}.projects-root.portfolio .projects-title{font-size:1.05rem}.projects-root.portfolio .projects-search{margin:.1rem 1.1rem .85rem;width:min(34rem,calc(100% - 2.2rem))}.projects-root.portfolio .projects-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(16rem,1fr));gap:.75rem;align-content:start;padding:0 1.1rem 1.2rem}.projects-root.portfolio .projects-card{border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface-muted,#111629);padding:.82rem .9rem;min-height:8rem}.projects-root.portfolio .projects-card:hover{border-color:var(--vt-color-border-strong,#2c456a);background:var(--vt-color-surface-hover,#1b2440)}.projects-card-progress{margin-top:.25rem}.projects-card-progress-line{display:flex;align-items:center;gap:.55rem;font-size:.68rem;color:var(--vt-color-text-muted,#7f8aa3)}.projects-card-progress-track{height:.3rem;flex:1;border-radius:999px;background:var(--vt-color-surface-hover,#1b2440);overflow:hidden}.projects-card-progress-track>span{display:block;height:100%;background:var(--vt-color-accent,#4ecca3)}.projects-card-next{font-size:.7rem;color:var(--vt-color-text-secondary,#b7c0d4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '@container(max-width:760px){.projects-root{flex-direction:column}.projects-sidebar{width:100%;max-width:none;min-width:0;height:14rem;border-right:0;border-bottom:1px solid var(--vt-color-border,#202b46)}.projects-main{min-height:0}.projects-header{padding:.78rem}.projects-pane{padding:.8rem}.projects-history-item{grid-template-columns:1fr;gap:.15rem}.projects-modal{width:100%}}'
   ].join('\n');
 
@@ -171,7 +173,7 @@
         if (!node || !node.kind) return;
         var path = cleanPath(node.path || node.rootPath);
         var nextParents = parents.concat([text(node.name)]).filter(Boolean);
-        rows.push({ kind: node.kind, id: text(node.id), name: text(node.name), path: path, depth: depth, label: path || nextParents.join(' / '), parents: parents.slice(), children: Array.isArray(node.children) ? node.children : [] });
+        rows.push({ kind: node.kind, id: text(node.id), name: text(node.name), path: path, depth: depth, label: nextParents.join('/') || path, parents: parents.slice(), children: Array.isArray(node.children) ? node.children : [] });
         walk(node.children || [], depth + 1, nextParents);
       });
     }
@@ -199,12 +201,13 @@
   function ProjectsViewMount(container, props, api) {
     injectStyles();
     container.innerHTML = '';
-    container.className = 'projects-root';
+    var contextWorkspace = contextFromProps(props);
+    var portfolioMode = !contextWorkspace.id && !contextWorkspace.path;
+    container.className = 'projects-root ' + (portfolioMode ? 'portfolio' : 'deal');
     container.setAttribute('data-plugin-id', PLUGIN_ID);
 
-    var contextWorkspace = contextFromProps(props);
     var projects = [];
-    var selectedId = '';
+    var selectedId = text(props && props.toolRequest && props.toolRequest.projectId);
     var activeTab = 'overview';
     var filterText = '';
     var disposed = false;
@@ -241,6 +244,15 @@
       if (project && project.workspaceRootPath) return tr('ui.linkedDealUnavailable', { deal: project.workspaceRootPath }, 'Linked Deal unavailable · ' + project.workspaceRootPath);
       return '';
     }
+    function projectProgress(project) {
+      var milestones = project && Array.isArray(project.milestones) ? project.milestones : [];
+      if (!milestones.length) return { percent: 0, done: 0, total: 0 };
+      var done = milestones.filter(function (item) { return item.status === 'done'; }).length;
+      return { percent: Math.round(done * 100 / milestones.length), done: done, total: milestones.length };
+    }
+    function nextMilestone(project) {
+      return ((project && project.milestones) || []).find(function (item) { return item.status !== 'done'; }) || null;
+    }
     function matchesContext(project) {
       if (!contextWorkspace.id && !contextWorkspace.path) return true;
       if (contextWorkspace.id && project.workspaceId) return project.workspaceId === contextWorkspace.id;
@@ -255,6 +267,7 @@
       });
     }
     function ensureSelection() {
+      if (portfolioMode) { selectedId = ''; return; }
       var visible = visibleProjects();
       if (!visible.some(function (project) { return project.id === selectedId; })) selectedId = visible[0] ? visible[0].id : '';
     }
@@ -286,68 +299,108 @@
 
     function renderSidebar() {
       sidebar.innerHTML = '';
-      var title = contextWorkspace.path ? tr('ui.workspaceTitle', { workspace: contextWorkspace.path }, 'Project · ' + contextWorkspace.path) : tr('ui.title', null, 'Projects');
+      if (!portfolioMode) return;
       sidebar.appendChild(el('div', { className: 'projects-toolbar' }, [
-        el('div', { className: 'projects-title', textContent: title }),
+        el('div', { className: 'projects-title', textContent: tr('ui.title', null, 'Projects') }),
         el('button', { className: 'projects-btn primary', 'data-project-action': 'new', textContent: tr('ui.newProject', null, 'New project'), onClick: function () { showProjectForm(null); } })
       ]));
       var search = el('input', { className: 'projects-search', 'data-project-search': '', placeholder: tr('ui.searchLocal', null, 'Filter projects…') });
       search.value = filterText;
-      search.addEventListener('input', function () { filterText = search.value; renderSidebar(); ensureSelection(); renderMain(); });
+      search.addEventListener('input', function () { filterText = search.value; renderSidebar(); });
       sidebar.appendChild(search);
-      var list = el('div', { className: 'projects-list', 'data-project-list': '' });
+      var list = el('div', { className: 'projects-list', 'data-project-list': '', 'data-project-portfolio': '' });
       var visible = visibleProjects();
       if (!visible.length) {
         list.appendChild(el('div', { className: 'projects-empty' }, [
-          el('div', { textContent: contextWorkspace.path ? tr('ui.emptyWorkspace', null, 'No project is linked to this Deal yet.') : tr('ui.empty', null, 'No projects yet.') }),
-          contextWorkspace.path ? el('button', { className: 'projects-btn primary', textContent: tr('ui.createForWorkspace', null, 'Create project for this Deal'), onClick: function () { showProjectForm(null); } }) : null
+          el('div', { textContent: filterText ? tr('ui.noMatches', null, 'No matching projects.') : tr('ui.empty', null, 'No projects yet.') })
         ]));
       } else {
         visible.forEach(function (project) {
+          var deal = findDeal(project);
           var meta = [el('span', { className: 'projects-badge ' + project.status, textContent: tr('ui.status.' + project.status, null, project.status) })];
           if (project.priority !== 'normal') meta.push(el('span', { className: 'projects-badge ' + project.priority, textContent: tr('ui.priority.' + project.priority, null, project.priority) }));
-          var label = dealLabel(project);
-          list.appendChild(el('button', {
-            className: 'projects-card' + (project.id === selectedId ? ' selected' : ''), type: 'button', 'data-project-id': project.id,
-            onClick: function () { selectedId = project.id; activeTab = 'overview'; render(); }
-          }, [
+          var label = dealLabel(project) || tr('ui.noLinkedDeal', null, 'No linked Deal');
+          var progress = projectProgress(project);
+          var next = nextMilestone(project);
+          var children = [
             el('div', { className: 'projects-card-title', textContent: project.name }),
             el('div', { className: 'projects-card-meta' }, meta),
-            label ? el('div', { className: 'projects-card-deal', textContent: label }) : null
-          ]));
+            el('div', { className: 'projects-card-deal', textContent: label })
+          ];
+          if (progress.total) {
+            children.push(el('div', { className: 'projects-card-progress' }, [
+              el('div', { className: 'projects-card-progress-line' }, [
+                el('span', { textContent: progress.percent + '%' }),
+                el('span', { className: 'projects-card-progress-track' }, [el('span', { style: { width: progress.percent + '%' } })])
+              ])
+            ]));
+          }
+          if (next) children.push(el('div', { className: 'projects-card-next', textContent: tr('ui.nextMilestone', { milestone: next.title }, 'Next: ' + next.title) }));
+          list.appendChild(el('button', {
+            className: 'projects-card', type: 'button', 'data-project-id': project.id, 'data-project-card': '',
+            title: deal ? tr('ui.openProjectInDeal', { deal: label }, 'Open in ' + label) : tr('ui.repairProjectDeal', null, 'Repair linked Deal'),
+            onClick: function () { if (deal) openProjectInDeal(project); else showProjectForm(project); }
+          }, children));
         });
       }
       sidebar.appendChild(list);
     }
 
-    function openLinkedDeal(project) {
+    function navigateToDeal(project, includeProject) {
       var deal = findDeal(project);
-      if (!deal) return;
-      window.dispatchEvent(new CustomEvent('verstak:workspace-selected', { detail: { workspaceId: deal.id, workspaceName: deal.path } }));
+      if (!deal) return false;
+      var request = { workspaceId: deal.id, workspaceRootPath: deal.path };
+      if (includeProject) {
+        request.workspaceItemId = 'verstak.projects.workspace';
+        request.toolRequest = { projectId: project.id };
+      }
+      if (api.navigation && typeof api.navigation.openWorkspace === 'function') {
+        api.navigation.openWorkspace(request);
+      } else {
+        window.dispatchEvent(new CustomEvent('verstak:workspace-selected', { detail: { workspaceId: deal.id, workspaceName: deal.path } }));
+        if (includeProject) setTimeout(function () { window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', { detail: { workspaceItemId: 'verstak.projects.workspace', toolRequest: { projectId: project.id }, workspaceRootPath: deal.path } })); }, 0);
+      }
+      return true;
     }
+    function openLinkedDeal(project) { navigateToDeal(project, false); }
+    function openProjectInDeal(project) { navigateToDeal(project, true); }
 
     function renderMain() {
       main.innerHTML = '';
+      if (portfolioMode) return;
+      var visible = visibleProjects();
       var project = selectedProject();
+      if (visible.length > 1) {
+        var select = el('select', { className: 'projects-select', 'data-project-switcher': '', 'aria-label': tr('ui.project', null, 'Project') });
+        visible.forEach(function (item) { select.appendChild(el('option', { value: item.id, textContent: item.name })); });
+        select.value = project ? project.id : visible[0].id;
+        select.addEventListener('change', function () { selectedId = select.value; activeTab = 'overview'; renderMain(); });
+        main.appendChild(el('div', { className: 'projects-project-switcher' }, [
+          el('span', { className: 'projects-project-switcher-label', textContent: tr('ui.project', null, 'Project') }), select
+        ]));
+      }
       if (!project) {
-        main.appendChild(el('div', { className: 'projects-empty' }, [el('div', { textContent: contextWorkspace.path ? tr('ui.emptyWorkspace', null, 'No project is linked to this Deal yet.') : tr('ui.empty', null, 'No projects yet.') })]));
+        main.appendChild(el('div', { className: 'projects-empty' }, [
+          el('div', { textContent: tr('ui.emptyWorkspace', null, 'No project is linked to this Deal yet.') }),
+          el('button', { className: 'projects-btn primary', textContent: tr('ui.createForWorkspace', null, 'Create project for this Deal'), onClick: function () { showProjectForm(null); } })
+        ]));
         return;
       }
       var tags = (project.tags || []).map(function (tag) { return el('span', { className: 'projects-badge', textContent: tag }); });
-      var linked = dealLabel(project);
-      var deal = findDeal(project);
       var meta = [
         el('span', { className: 'projects-badge ' + project.status, textContent: tr('ui.status.' + project.status, null, project.status) }),
         el('span', { className: 'projects-badge ' + project.priority, textContent: tr('ui.priority.' + project.priority, null, project.priority) })
       ].concat(tags);
-      if (linked) meta.push(el('button', { className: 'projects-deal-link' + (deal ? '' : ' unresolved'), type: 'button', disabled: deal ? null : 'disabled', 'data-project-linked-deal': project.workspaceId || project.workspaceRootPath, textContent: linked, onClick: function () { openLinkedDeal(project); } }));
       main.appendChild(el('div', { className: 'projects-header' }, [
         el('div', { className: 'projects-header-main' }, [
           el('div', { className: 'projects-header-name', textContent: project.name }),
           project.description ? el('div', { className: 'projects-header-description', textContent: project.description }) : null,
           el('div', { className: 'projects-meta' }, meta)
         ]),
-        el('button', { className: 'projects-btn', 'data-project-action': 'edit', textContent: tr('ui.editProject', null, 'Edit'), onClick: function () { showProjectForm(project); } })
+        el('div', { className: 'projects-header-actions' }, [
+          el('button', { className: 'projects-btn', 'data-project-action': 'new', textContent: tr('ui.newProject', null, 'New project'), onClick: function () { showProjectForm(null); } }),
+          el('button', { className: 'projects-btn', 'data-project-action': 'edit', textContent: tr('ui.editProject', null, 'Edit'), onClick: function () { showProjectForm(project); } })
+        ])
       ]));
       var tabs = el('div', { className: 'projects-tabs', role: 'tablist' });
       TABS.forEach(function (tab) {
@@ -358,6 +411,7 @@
       main.appendChild(pane);
       renderTab(pane, project);
     }
+
     function render() { if (disposed) return; ensureSelection(); renderSidebar(); renderMain(); }
 
     function defaultDealSelection(project) {
@@ -392,7 +446,7 @@
         var deal = selectedDeal();
         if (deal) return deal.label;
         if (selected.path) return tr('ui.linkedDealUnavailable', { deal: selected.path }, 'Linked Deal unavailable · ' + selected.path);
-        return tr('ui.noLinkedDeal', null, 'No linked Deal');
+        return tr('ui.chooseDeal', null, 'Choose a Deal');
       }
       function renderButton() {
         button.innerHTML = '';
@@ -436,8 +490,6 @@
       }
       function renderList() {
         list.innerHTML = '';
-        list.appendChild(el('button', { className: 'projects-picker-row' + (!selected.id && !selected.path ? ' selected' : ''), type: 'button', 'data-picker-selectable': 'true', 'data-deal-unlink': '', onClick: function () { selectDeal(null); } }, [el('span', { className: 'projects-picker-path', textContent: tr('ui.noLinkedDealOption', null, 'Do not link to a Deal') }), (!selected.id && !selected.path) ? el('span', { className: 'projects-picker-check', textContent: '✓' }) : null]));
-        list.appendChild(el('div', { className: 'projects-picker-separator' }));
         var q = query.trim().toLowerCase();
         if (q) {
           workspaceOptions.filter(function (deal) { return (deal.label + ' ' + deal.name).toLowerCase().indexOf(q) !== -1; }).forEach(function (deal) { list.appendChild(makeDealRow(deal, 0, true)); });
@@ -485,6 +537,11 @@
       function submit() {
         var projectName = name.value.trim();
         if (!projectName) { error.textContent = tr('ui.nameRequired', null, 'Project name is required.'); error.style.display = ''; name.focus(); return; }
+        var resolvedDeal = workspaceOptions.find(function (deal) {
+          return (dealSelection.id && deal.id === dealSelection.id) || (!dealSelection.id && dealSelection.path && deal.path === dealSelection.path);
+        });
+        if (!resolvedDeal) { error.textContent = tr('ui.dealRequired', null, 'Choose a Deal for this project.'); error.style.display = ''; picker.open(); return; }
+        dealSelection = { id: resolvedDeal.id, path: resolvedDeal.path };
         var next = {
           name: projectName, description: description.value, status: normalizeStatus(status.value), priority: normalizePriority(priority.value), tags: normalizeTags(tags.value),
           workspaceId: text(dealSelection.id), workspaceRootPath: cleanPath(dealSelection.path)
@@ -508,7 +565,7 @@
             var oldLabel = dealLabel(target) || tr('ui.noLinkedDeal', null, 'No linked Deal');
             var temp = Object.assign({}, target, { workspaceId: next.workspaceId, workspaceRootPath: next.workspaceRootPath });
             var newLabel = dealLabel(temp) || tr('ui.noLinkedDeal', null, 'No linked Deal');
-            addEvent(target, next.workspaceId || next.workspaceRootPath ? 'project.linked' : 'project.unlinked', newLabel, oldLabel, newLabel); changes++;
+            addEvent(target, 'project.linked', newLabel, oldLabel, newLabel); changes++;
           }
           if (!changes) { close(); return; }
           target.name = next.name; target.description = next.description; target.status = next.status; target.priority = next.priority; target.tags = next.tags; target.workspaceId = next.workspaceId; target.workspaceRootPath = next.workspaceRootPath;
@@ -519,7 +576,7 @@
         el('div', { className: 'projects-modal-title', textContent: editing ? tr('ui.editProjectTitle', null, 'Edit project') : tr('ui.newProject', null, 'New project') }), error,
         field(tr('ui.name', null, 'Name'), name), field(tr('ui.description', null, 'Description'), description),
         el('div', { className: 'projects-form-row' }, [field(tr('ui.status', null, 'Status'), status), field(tr('ui.priority', null, 'Priority'), priority)]),
-        field(tr('ui.tags', null, 'Tags'), tags), field(tr('ui.linkedDeal', null, 'Linked Deal'), picker.node, tr('ui.linkedDealHint', null, 'Optional. Tasks, Notes, Files and Activity use this Deal as their context.')),
+        field(tr('ui.tags', null, 'Tags'), tags), field(tr('ui.linkedDeal', null, 'Linked Deal'), picker.node, tr('ui.linkedDealHint', null, 'Required. This project lives inside the selected Deal; Tasks, Notes and Files created here are scoped to it.')),
         el('div', { className: 'projects-modal-actions' }, [el('button', { className: 'projects-btn', type: 'button', textContent: tr('ui.cancel', null, 'Cancel'), onClick: close }), el('button', { className: 'projects-btn primary', type: 'button', 'data-project-save': '', textContent: tr('ui.save', null, 'Save'), onClick: submit })])
       ]));
       container.appendChild(overlay); name.focus();
@@ -531,42 +588,46 @@
       else if (activeTab === 'tasks') renderTasks(pane, project);
       else if (activeTab === 'notes') renderNotes(pane, project);
       else if (activeTab === 'links') renderLinks(pane, project);
-      else if (activeTab === 'files') renderProviderTool(pane, project, 'files');
-      else if (activeTab === 'activity') renderProviderTool(pane, project, 'activity');
+      else if (activeTab === 'files') renderFiles(pane, project);
+      else if (activeTab === 'activity') renderProjectActivity(pane, project);
     }
 
     function section(title, children) { return el('section', { className: 'projects-section' }, [el('div', { className: 'projects-section-title', textContent: title })].concat(children || [])); }
     function renderOverview(pane, project) {
-      var milestones = project.milestones || [];
-      var done = milestones.filter(function (item) { return item.status === 'done'; }).length;
-      var open = milestones.filter(function (item) { return item.status !== 'done'; }).slice(0, 4);
-      var percent = milestones.length ? Math.round(done * 100 / milestones.length) : 0;
-      var milestoneChildren = [el('div', { className: 'projects-progress-row' }, [el('div', { className: 'projects-section-value', textContent: tr('ui.countMilestones', { done: done, total: milestones.length }, done + '/' + milestones.length + ' milestones done') }), el('div', { className: 'projects-progress' }, [el('span', { style: { width: percent + '%' } })])])];
-      open.forEach(function (item) { milestoneChildren.push(el('div', { className: 'projects-row' }, [el('div', { className: 'projects-row-main' }, [el('div', { className: 'projects-row-title', textContent: item.title }), item.dueAt ? el('div', { className: 'projects-row-meta', textContent: item.dueAt }) : null]) ])); });
-      if (!milestones.length) milestoneChildren = [el('div', { className: 'projects-section-value', textContent: tr('ui.noMilestones', null, 'No milestones yet.') })];
-      pane.appendChild(section(tr('ui.tab.milestones', null, 'Milestones'), milestoneChildren));
+      var progress = projectProgress(project);
+      var next = nextMilestone(project);
+      var progressChildren = [];
+      if (progress.total) {
+        progressChildren.push(el('div', { className: 'projects-progress-row' }, [
+          el('div', { className: 'projects-section-value', textContent: tr('ui.countMilestones', { done: progress.done, total: progress.total }, progress.done + '/' + progress.total + ' milestones done') }),
+          el('div', { className: 'projects-progress' }, [el('span', { style: { width: progress.percent + '%' } })])
+        ]));
+        if (next) progressChildren.push(el('div', { className: 'projects-row' }, [el('div', { className: 'projects-row-main' }, [
+          el('div', { className: 'projects-row-title', textContent: tr('ui.nextMilestone', { milestone: next.title }, 'Next: ' + next.title) }),
+          next.dueAt ? el('div', { className: 'projects-row-meta', textContent: next.dueAt }) : null
+        ])]));
+      } else {
+        progressChildren.push(el('div', { className: 'projects-section-value', textContent: tr('ui.noMilestones', null, 'No milestones yet.') }));
+      }
+      pane.appendChild(section(tr('ui.progress', null, 'Progress'), progressChildren));
 
       if (project.workspaceRootPath && capabilityState.tasks) {
         var taskValue = el('div', { className: 'projects-section-value', textContent: tr('ui.loading', null, 'Loading…') });
-        pane.appendChild(section(tr('ui.tab.tasks', null, 'Tasks'), [taskValue]));
-        api.capabilities.invoke('todo.workspace', 'list', { workspaceRootPath: project.workspaceRootPath, status: 'open' }).then(function (wrapped) { var tasks = commandValue(wrapped); if (!disposed) taskValue.textContent = tr('ui.countTasks', { count: Array.isArray(tasks) ? tasks.length : 0 }, (Array.isArray(tasks) ? tasks.length : 0) + ' open tasks'); }).catch(function () { if (!disposed) taskValue.textContent = tr('ui.summaryUnavailable', null, 'Summary unavailable'); });
-      }
-      if (project.workspaceRootPath && capabilityState.notes) {
-        var noteValue = el('div', { className: 'projects-section-value', textContent: tr('ui.loading', null, 'Loading…') });
-        pane.appendChild(section(tr('ui.tab.notes', null, 'Notes'), [noteValue]));
-        api.capabilities.invoke('verstak/notes/v1', 'list', { workspaceRootPath: project.workspaceRootPath }).then(function (wrapped) { var notes = commandValue(wrapped); if (!disposed) noteValue.textContent = tr('ui.countNotes', { count: Array.isArray(notes) ? notes.length : 0 }, (Array.isArray(notes) ? notes.length : 0) + ' notes'); }).catch(function () { if (!disposed) noteValue.textContent = tr('ui.summaryUnavailable', null, 'Summary unavailable'); });
+        pane.appendChild(section(tr('ui.nextActions', null, 'Open tasks'), [taskValue]));
+        api.capabilities.invoke('todo.workspace', 'list', { workspaceRootPath: project.workspaceRootPath, projectId: project.id, status: 'open' }).then(function (wrapped) {
+          var tasks = commandValue(wrapped); tasks = Array.isArray(tasks) ? tasks : [];
+          if (!disposed) taskValue.textContent = tr('ui.countTasks', { count: tasks.length }, tasks.length + ' open tasks');
+        }).catch(function () { if (!disposed) taskValue.textContent = tr('ui.summaryUnavailable', null, 'Summary unavailable'); });
       }
 
-      var recent = (project.events || []).slice(-8).reverse();
+      var recent = (project.events || []).slice(-4).reverse();
       var history = el('div', { className: 'projects-history' });
       if (!recent.length) history.appendChild(el('div', { className: 'projects-section-value', textContent: tr('ui.noHistory', null, 'No project changes recorded yet.') }));
-      recent.forEach(function (item) { history.appendChild(el('div', { className: 'projects-history-item' }, [el('div', { className: 'projects-history-time', textContent: item.at ? new Date(item.at).toLocaleString() : '' }), el('div', { textContent: historyText(item) })])); });
+      recent.forEach(function (item) { history.appendChild(el('div', { className: 'projects-history-item' }, [
+        el('div', { className: 'projects-history-time', textContent: item.at ? new Date(item.at).toLocaleString() : '' }),
+        el('div', { textContent: historyText(item) })
+      ])); });
       pane.appendChild(section(tr('ui.recentActivity', null, 'Recent project history'), [history]));
-
-      if ((project.links || []).length) {
-        var links = (project.links || []).slice(0, 4).map(function (link) { return el('div', { className: 'projects-row' }, [el('div', { className: 'projects-row-main' }, [el('div', { className: 'projects-row-title', textContent: link.label }), el('div', { className: 'projects-row-meta', textContent: link.url })])]); });
-        pane.appendChild(section(tr('ui.tab.links', null, 'Links'), links));
-      }
     }
 
     function historyText(item) {
@@ -615,11 +676,11 @@
       pane.appendChild(el('div', { className: 'projects-section-value', textContent: tr('ui.loading', null, 'Loading…') })); loadTasks(pane, project).catch(function (error) { capabilityError(pane, error); });
     }
     function loadTasks(pane, project) {
-      return api.capabilities.invoke('todo.workspace', 'list', { workspaceRootPath: project.workspaceRootPath, status: 'all' }).then(function (wrapped) {
+      return api.capabilities.invoke('todo.workspace', 'list', { workspaceRootPath: project.workspaceRootPath, projectId: project.id, status: 'all' }).then(function (wrapped) {
         var tasks = commandValue(wrapped); tasks = Array.isArray(tasks) ? tasks : []; pane.innerHTML = '';
         var input = el('input', { className: 'projects-input', placeholder: tr('ui.taskTitle', null, 'Task title') });
         var priority = el('select', { className: 'projects-select' }); PRIORITY_VALUES.forEach(function (value) { priority.appendChild(el('option', { value: value, textContent: tr('ui.priority.' + value, null, value) })); }); priority.value = 'normal';
-        pane.appendChild(el('div', { className: 'projects-form-row' }, [input, priority, el('button', { className: 'projects-btn primary', textContent: tr('ui.addTask', null, 'Add task'), onClick: function () { var value = input.value.trim(); if (!value) return; api.capabilities.invoke('todo.workspace', 'create', { workspaceRootPath: project.workspaceRootPath, title: value, priority: priority.value }).then(function () { return loadTasks(pane, project); }).catch(function (error) { capabilityError(pane, error); }); } })]));
+        pane.appendChild(el('div', { className: 'projects-form-row' }, [input, priority, el('button', { className: 'projects-btn primary', textContent: tr('ui.addTask', null, 'Add task'), onClick: function () { var value = input.value.trim(); if (!value) return; api.capabilities.invoke('todo.workspace', 'create', { workspaceRootPath: project.workspaceRootPath, projectId: project.id, title: value, priority: priority.value }).then(function () { return loadTasks(pane, project); }).catch(function (error) { capabilityError(pane, error); }); } })]));
         var list = el('div'); if (!tasks.length) list.appendChild(el('div', { className: 'projects-section-value', textContent: tr('ui.noTasks', null, 'No tasks for this project.') }));
         tasks.forEach(function (task) { list.appendChild(el('div', { className: 'projects-row', 'data-project-task': task.id }, [el('input', { className: 'projects-check', type: 'checkbox', checked: task.status === 'done' ? 'checked' : null, onChange: function (event) { api.capabilities.invoke('todo.workspace', 'setStatus', { id: task.id, status: event.target.checked ? 'done' : 'open' }).then(function () { return loadTasks(pane, project); }).catch(function (error) { capabilityError(pane, error); }); } }), el('div', { className: 'projects-row-main' }, [el('div', { className: 'projects-row-title', textContent: task.title || '' }), el('div', { className: 'projects-row-meta', textContent: tr('ui.priority.' + (task.priority || 'normal'), null, task.priority || 'normal') + (task.dueAt ? ' · ' + task.dueAt : '') })]) ])); }); pane.appendChild(list);
       });
@@ -631,12 +692,12 @@
       pane.appendChild(el('div', { className: 'projects-section-value', textContent: tr('ui.loading', null, 'Loading…') })); loadNotes(pane, project).catch(function (error) { capabilityError(pane, error); });
     }
     function loadNotes(pane, project) {
-      return api.capabilities.invoke('verstak/notes/v1', 'list', { workspaceRootPath: project.workspaceRootPath }).then(function (wrapped) {
+      return api.capabilities.invoke('verstak/notes/v1', 'list', { workspaceRootPath: project.workspaceRootPath, projectId: project.id }).then(function (wrapped) {
         var notes = commandValue(wrapped); notes = Array.isArray(notes) ? notes : []; pane.innerHTML = '';
         var input = el('input', { className: 'projects-input', placeholder: tr('ui.noteTitle', null, 'Note title') });
-        pane.appendChild(el('div', { className: 'projects-form-row' }, [input, el('button', { className: 'projects-btn primary', textContent: tr('ui.addNote', null, 'Create note'), onClick: function () { var value = input.value.trim(); if (!value) return; api.capabilities.invoke('verstak/notes/v1', 'create', { workspaceRootPath: project.workspaceRootPath, title: value }).then(function (created) { var valueCreated = commandValue(created); if (valueCreated && valueCreated.conflict) throw new Error('note already exists'); return loadNotes(pane, project); }).catch(function (error) { capabilityError(pane, error); }); } })]));
+        pane.appendChild(el('div', { className: 'projects-form-row' }, [input, el('button', { className: 'projects-btn primary', textContent: tr('ui.addNote', null, 'Create note'), onClick: function () { var value = input.value.trim(); if (!value) return; api.capabilities.invoke('verstak/notes/v1', 'create', { workspaceRootPath: project.workspaceRootPath, projectId: project.id, title: value }).then(function (created) { var valueCreated = commandValue(created); if (valueCreated && valueCreated.conflict) throw new Error('note already exists'); return loadNotes(pane, project); }).catch(function (error) { capabilityError(pane, error); }); } })]));
         var list = el('div'); if (!notes.length) list.appendChild(el('div', { className: 'projects-section-value', textContent: tr('ui.noNotes', null, 'No notes for this project.') }));
-        notes.forEach(function (note) { list.appendChild(el('div', { className: 'projects-row', 'data-project-note': note.path }, [el('div', { className: 'projects-row-main' }, [el('div', { className: 'projects-row-title', textContent: note.title || note.filename || note.path }), el('div', { className: 'projects-row-meta', textContent: note.path || '' })]), el('button', { className: 'projects-btn', textContent: tr('ui.open', null, 'Open'), onClick: function () { api.capabilities.invoke('verstak/notes/v1', 'open', { workspaceRootPath: project.workspaceRootPath, path: note.path }).catch(function (error) { capabilityError(pane, error); }); } })])); }); pane.appendChild(list);
+        notes.forEach(function (note) { list.appendChild(el('div', { className: 'projects-row', 'data-project-note': note.path }, [el('div', { className: 'projects-row-main' }, [el('div', { className: 'projects-row-title', textContent: note.title || note.filename || note.path }), el('div', { className: 'projects-row-meta', textContent: note.path || '' })]), el('button', { className: 'projects-btn', textContent: tr('ui.open', null, 'Open'), onClick: function () { api.capabilities.invoke('verstak/notes/v1', 'open', { workspaceRootPath: project.workspaceRootPath, projectId: project.id, path: note.path }).catch(function (error) { capabilityError(pane, error); }); } })])); }); pane.appendChild(list);
       });
     }
 
@@ -647,14 +708,54 @@
       project.links.forEach(function (link) { list.appendChild(el('div', { className: 'projects-row', 'data-project-link': link.id }, [el('div', { className: 'projects-row-main' }, [el('div', { className: 'projects-row-title', textContent: link.label }), el('div', { className: 'projects-row-meta', textContent: link.url })]), el('button', { className: 'projects-btn', textContent: tr('ui.open', null, 'Open'), onClick: function () { api.files.openURL(link.url).catch(function (error) { capabilityError(pane, error); }); } }), el('button', { className: 'projects-btn', textContent: tr('ui.remove', null, 'Remove'), onClick: function () { project.links = project.links.filter(function (item) { return item.id !== link.id; }); addEvent(project, 'link.removed', link.label); persist('project.link.removed', project); } })])); }); pane.appendChild(list);
     }
 
-    function renderProviderTool(pane, project, toolKey) {
+    function renderFiles(pane, project) {
       if (!requireWorkspace(pane, project)) return;
-      if (!capabilityState[toolKey]) { providerUnavailable(pane, toolKey); return; }
+      if (!capabilityState.files) { providerUnavailable(pane, 'files'); return; }
       pane.appendChild(el('div', { className: 'projects-section-value', textContent: tr('ui.loading', null, 'Loading…') }));
-      resolveWorkspaceTool(OPTIONAL_TOOLS[toolKey].capability).then(function (tool) { pane.innerHTML = ''; if (!tool) { providerUnavailable(pane, toolKey); return; } pane.appendChild(el('div', { className: 'projects-tool-card' }, [el('div', { className: 'projects-tool-name', textContent: tool.title || OPTIONAL_TOOLS[toolKey].label }), el('button', { className: 'projects-btn primary', textContent: tr('ui.openTool', { tool: tool.title || OPTIONAL_TOOLS[toolKey].label }, 'Open ' + (tool.title || OPTIONAL_TOOLS[toolKey].label)), onClick: function () { openWorkspaceTool(project, tool.id); } })])); }).catch(function (error) { capabilityError(pane, error); });
+      loadFiles(pane, project).catch(function (error) { capabilityError(pane, error); });
     }
-    function resolveWorkspaceTool(capability) { return api.capabilities.get(capability).then(function (info) { if (!info || !info.available || !info.pluginId) return null; return api.contributions.list('workspaceItems').then(function (items) { return (items || []).find(function (item) { return item.pluginId === info.pluginId; }) || null; }); }); }
-    function openWorkspaceTool(project, workspaceItemId) { var deal = findDeal(project); window.dispatchEvent(new CustomEvent('verstak:workspace-selected', { detail: { workspaceId: deal ? deal.id : project.workspaceId, workspaceName: project.workspaceRootPath } })); setTimeout(function () { window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', { detail: { workspaceItemId: workspaceItemId } })); }, 0); }
+    function loadFiles(pane, project) {
+      return api.capabilities.invoke('verstak/files/v1', 'list', { workspaceRootPath: project.workspaceRootPath, projectId: project.id }).then(function (wrapped) {
+        var files = commandValue(wrapped); files = Array.isArray(files) ? files : []; pane.innerHTML = '';
+        var input = el('input', { className: 'projects-input', placeholder: tr('ui.fileName', null, 'File name') });
+        pane.appendChild(el('div', { className: 'projects-form-row' }, [input, el('button', { className: 'projects-btn primary', textContent: tr('ui.addFile', null, 'Create file'), onClick: function () {
+          var value = input.value.trim(); if (!value) return;
+          api.capabilities.invoke('verstak/files/v1', 'create', { workspaceRootPath: project.workspaceRootPath, projectId: project.id, name: value }).then(function (created) {
+            var result = commandValue(created); if (result && result.conflict) throw new Error('file already exists'); return loadFiles(pane, project);
+          }).catch(function (error) { capabilityError(pane, error); });
+        } })]));
+        var list = el('div');
+        if (!files.length) list.appendChild(el('div', { className: 'projects-section-value', textContent: tr('ui.noFiles', null, 'No files for this project.') }));
+        files.forEach(function (file) {
+          list.appendChild(el('div', { className: 'projects-row', 'data-project-file': file.path }, [
+            el('div', { className: 'projects-row-main' }, [
+              el('div', { className: 'projects-row-title', textContent: file.name || file.path }),
+              el('div', { className: 'projects-row-meta', textContent: [file.type || '', file.modifiedAt || ''].filter(Boolean).join(' · ') })
+            ]),
+            el('button', { className: 'projects-btn', textContent: tr('ui.open', null, 'Open'), onClick: function () {
+              api.capabilities.invoke('verstak/files/v1', 'open', { workspaceRootPath: project.workspaceRootPath, projectId: project.id, path: file.path }).catch(function (error) { capabilityError(pane, error); });
+            } })
+          ]));
+        });
+        pane.appendChild(list);
+      });
+    }
+
+    function renderProjectActivity(pane, project) {
+      var recent = (project.events || []).slice().reverse();
+      if (!recent.length) {
+        pane.appendChild(el('div', { className: 'projects-section-value', textContent: tr('ui.noHistory', null, 'No project changes recorded yet.') }));
+        return;
+      }
+      var history = el('div', { className: 'projects-history', 'data-project-activity': '' });
+      recent.forEach(function (item) {
+        history.appendChild(el('div', { className: 'projects-history-item' }, [
+          el('div', { className: 'projects-history-time', textContent: item.at ? new Date(item.at).toLocaleString() : '' }),
+          el('div', { textContent: historyText(item) })
+        ]));
+      });
+      pane.appendChild(history);
+    }
 
     function discoverCapabilities() { return Promise.all(Object.keys(OPTIONAL_TOOLS).map(function (key) { return api.capabilities.has(OPTIONAL_TOOLS[key].capability).then(function (available) { capabilityState[key] = !!available; }).catch(function () { capabilityState[key] = false; }); })); }
     function discoverWorkspaceTree() {

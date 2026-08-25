@@ -414,7 +414,7 @@ function makeApi(options = {}) {
 }
 
 async function flush() {
-  for (let i = 0; i < 8; i += 1) await Promise.resolve();
+  for (let i = 0; i < 20; i += 1) await Promise.resolve();
 }
 
 (async () => {

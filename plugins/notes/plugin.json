@@ -25,6 +25,7 @@
     "files.read",
     "files.write",
     "files.delete",
+    "storage.namespace",
     "events.subscribe",
     "workbench.open",
     "ui.register",
@@ -79,5 +80,15 @@
       "create": "verstak.notes.create",
       "open": "verstak.notes.open"
     }
+  },
+  "sync": {
+    "records": [
+      {
+        "id": "project-scopes",
+        "storage": "settings",
+        "key": "notes:projectScopes",
+        "identity": "path"
+      }
+    ]
   }
 }
