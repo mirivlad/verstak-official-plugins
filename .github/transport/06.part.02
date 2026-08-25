@@ -1,0 +1,120 @@
++          return (dealSelection.id && deal.id === dealSelection.id) || (!dealSelection.id && dealSelection.path && deal.path === dealSelection.path);
++        });
++        if (!resolvedDeal) { error.textContent = tr('ui.dealRequired', null, 'Choose a Deal for this project.'); error.style.display = ''; picker.open(); return; }
++        dealSelection = { id: resolvedDeal.id, path: resolvedDeal.path };
+         var next = {
+           name: projectName, description: description.value, status: normalizeStatus(status.value), priority: normalizePriority(priority.value), tags: normalizeTags(tags.value),
+           workspaceId: text(dealSelection.id), workspaceRootPath: cleanPath(dealSelection.path)
+@@ -508,7 +565,7 @@
+             var oldLabel = dealLabel(target) || tr('ui.noLinkedDeal', null, 'No linked Deal');
+             var temp = Object.assign({}, target, { workspaceId: next.workspaceId, workspaceRootPath: next.workspaceRootPath });
+             var newLabel = dealLabel(temp) || tr('ui.noLinkedDeal', null, 'No linked Deal');
+-            addEvent(target, next.workspaceId || next.workspaceRootPath ? 'project.linked' : 'project.unlinked', newLabel, oldLabel, newLabel); changes++;
++            addEvent(target, 'project.linked', newLabel, oldLabel, newLabel); changes++;
+           }
+           if (!changes) { close(); return; }
+           target.name = next.name; target.description = next.description; target.status = next.status; target.priority = next.priority; target.tags = next.tags; target.workspaceId = next.workspaceId; target.workspaceRootPath = next.workspaceRootPath;
+@@ -519,7 +576,7 @@
+         el('div', { className: 'projects-modal-title', textContent: editing ? tr('ui.editProjectTitle', null, 'Edit project') : tr('ui.newProject', null, 'New project') }), error,
+         field(tr('ui.name', null, 'Name'), name), field(tr('ui.description', null, 'Description'), description),
+         el('div', { className: 'projects-form-row' }, [field(tr('ui.status', null, 'Status'), status), field(tr('ui.priority', null, 'Priority'), priority)]),
+-        field(tr('ui.tags', null, 'Tags'), tags), field(tr('ui.linkedDeal', null, 'Linked Deal'), picker.node, tr('ui.linkedDealHint', null, 'Optional. Tasks, Notes, Files and Activity use this Deal as their context.')),
++        field(tr('ui.tags', null, 'Tags'), tags), field(tr('ui.linkedDeal', null, 'Linked Deal'), picker.node, tr('ui.linkedDealHint', null, 'Required. This project lives inside the selected Deal; Tasks, Notes and Files created here are scoped to it.')),
+         el('div', { className: 'projects-modal-actions' }, [el('button', { className: 'projects-btn', type: 'button', textContent: tr('ui.cancel', null, 'Cancel'), onClick: close }), el('button', { className: 'projects-btn primary', type: 'button', 'data-project-save': '', textContent: tr('ui.save', null, 'Save'), onClick: submit })])
+       ]));
+       container.appendChild(overlay); name.focus();
+@@ -531,42 +588,46 @@
+       else if (activeTab === 'tasks') renderTasks(pane, project);
+       else if (activeTab === 'notes') renderNotes(pane, project);
+       else if (activeTab === 'links') renderLinks(pane, project);
+-      else if (activeTab === 'files') renderProviderTool(pane, project, 'files');
+-      else if (activeTab === 'activity') renderProviderTool(pane, project, 'activity');
++      else if (activeTab === 'files') renderFiles(pane, project);
++      else if (activeTab === 'activity') renderProjectActivity(pane, project);
+     }
+ 
+     function section(title, children) { return el('section', { className: 'projects-section' }, [el('div', { className: 'projects-section-title', textContent: title })].concat(children || [])); }
+     function renderOverview(pane, project) {
+-      var milestones = project.milestones || [];
+-      var done = milestones.filter(function (item) { return item.status === 'done'; }).length;
+-      var open = milestones.filter(function (item) { return item.status !== 'done'; }).slice(0, 4);
+-      var percent = milestones.length ? Math.round(done * 100 / milestones.length) : 0;
+-      var milestoneChildren = [el('div', { className: 'projects-progress-row' }, [el('div', { className: 'projects-section-value', textContent: tr('ui.countMilestones', { done: done, total: milestones.length }, done + '/' + milestones.length + ' milestones done') }), el('div', { className: 'projects-progress' }, [el('span', { style: { width: percent + '%' } })])])];
+-      open.forEach(function (item) { milestoneChildren.push(el('div', { className: 'projects-row' }, [el('div', { className: 'projects-row-main' }, [el('div', { className: 'projects-row-title', textContent: item.title }), item.dueAt ? el('div', { className: 'projects-row-meta', textContent: item.dueAt }) : null]) ])); });
+-      if (!milestones.length) milestoneChildren = [el('div', { className: 'projects-section-value', textContent: tr('ui.noMilestones', null, 'No milestones yet.') })];
+-      pane.appendChild(section(tr('ui.tab.milestones', null, 'Milestones'), milestoneChildren));
++      var progress = projectProgress(project);
++      var next = nextMilestone(project);
++      var progressChildren = [];
++      if (progress.total) {
++        progressChildren.push(el('div', { className: 'projects-progress-row' }, [
++          el('div', { className: 'projects-section-value', textContent: tr('ui.countMilestones', { done: progress.done, total: progress.total }, progress.done + '/' + progress.total + ' milestones done') }),
++          el('div', { className: 'projects-progress' }, [el('span', { style: { width: progress.percent + '%' } })])
++        ]));
++        if (next) progressChildren.push(el('div', { className: 'projects-row' }, [el('div', { className: 'projects-row-main' }, [
++          el('div', { className: 'projects-row-title', textContent: tr('ui.nextMilestone', { milestone: next.title }, 'Next: ' + next.title) }),
++          next.dueAt ? el('div', { className: 'projects-row-meta', textContent: next.dueAt }) : null
++        ])]));
++      } else {
++        progressChildren.push(el('div', { className: 'projects-section-value', textContent: tr('ui.noMilestones', null, 'No milestones yet.') }));
++      }
++      pane.appendChild(section(tr('ui.progress', null, 'Progress'), progressChildren));
+ 
+       if (project.workspaceRootPath && capabilityState.tasks) {
+         var taskValue = el('div', { className: 'projects-section-value', textContent: tr('ui.loading', null, 'Loading…') });
+-        pane.appendChild(section(tr('ui.tab.tasks', null, 'Tasks'), [taskValue]));
+-        api.capabilities.invoke('todo.workspace', 'list', { workspaceRootPath: project.workspaceRootPath, status: 'open' }).then(function (wrapped) { var tasks = commandValue(wrapped); if (!disposed) taskValue.textContent = tr('ui.countTasks', { count: Array.isArray(tasks) ? tasks.length : 0 }, (Array.isArray(tasks) ? tasks.length : 0) + ' open tasks'); }).catch(function () { if (!disposed) taskValue.textContent = tr('ui.summaryUnavailable', null, 'Summary unavailable'); });
+-      }
+-      if (project.workspaceRootPath && capabilityState.notes) {
+-        var noteValue = el('div', { className: 'projects-section-value', textContent: tr('ui.loading', null, 'Loading…') });
+-        pane.appendChild(section(tr('ui.tab.notes', null, 'Notes'), [noteValue]));
+-        api.capabilities.invoke('verstak/notes/v1', 'list', { workspaceRootPath: project.workspaceRootPath }).then(function (wrapped) { var notes = commandValue(wrapped); if (!disposed) noteValue.textContent = tr('ui.countNotes', { count: Array.isArray(notes) ? notes.length : 0 }, (Array.isArray(notes) ? notes.length : 0) + ' notes'); }).catch(function () { if (!disposed) noteValue.textContent = tr('ui.summaryUnavailable', null, 'Summary unavailable'); });
++        pane.appendChild(section(tr('ui.nextActions', null, 'Open tasks'), [taskValue]));
++        api.capabilities.invoke('todo.workspace', 'list', { workspaceRootPath: project.workspaceRootPath, projectId: project.id, status: 'open' }).then(function (wrapped) {
++          var tasks = commandValue(wrapped); tasks = Array.isArray(tasks) ? tasks : [];
++          if (!disposed) taskValue.textContent = tr('ui.countTasks', { count: tasks.length }, tasks.length + ' open tasks');
++        }).catch(function () { if (!disposed) taskValue.textContent = tr('ui.summaryUnavailable', null, 'Summary unavailable'); });
+       }
+ 
+-      var recent = (project.events || []).slice(-8).reverse();
++      var recent = (project.events || []).slice(-4).reverse();
+       var history = el('div', { className: 'projects-history' });
+       if (!recent.length) history.appendChild(el('div', { className: 'projects-section-value', textContent: tr('ui.noHistory', null, 'No project changes recorded yet.') }));
+-      recent.forEach(function (item) { history.appendChild(el('div', { className: 'projects-history-item' }, [el('div', { className: 'projects-history-time', textContent: item.at ? new Date(item.at).toLocaleString() : '' }), el('div', { textContent: historyText(item) })])); });
++      recent.forEach(function (item) { history.appendChild(el('div', { className: 'projects-history-item' }, [
++        el('div', { className: 'projects-history-time', textContent: item.at ? new Date(item.at).toLocaleString() : '' }),
++        el('div', { textContent: historyText(item) })
++      ])); });
+       pane.appendChild(section(tr('ui.recentActivity', null, 'Recent project history'), [history]));
+-
+-      if ((project.links || []).length) {
+-        var links = (project.links || []).slice(0, 4).map(function (link) { return el('div', { className: 'projects-row' }, [el('div', { className: 'projects-row-main' }, [el('div', { className: 'projects-row-title', textContent: link.label }), el('div', { className: 'projects-row-meta', textContent: link.url })])]); });
+-        pane.appendChild(section(tr('ui.tab.links', null, 'Links'), links));
+-      }
+     }
+ 
+     function historyText(item) {
+@@ -615,11 +676,11 @@
+       pane.appendChild(el('div', { className: 'projects-section-value', textContent: tr('ui.loading', null, 'Loading…') })); loadTasks(pane, project).catch(function (error) { capabilityError(pane, error); });
+     }
+     function loadTasks(pane, project) {
+-      return api.capabilities.invoke('todo.workspace', 'list', { workspaceRootPath: project.workspaceRootPath, status: 'all' }).then(function (wrapped) {
++      return api.capabilities.invoke('todo.workspace', 'list', { workspaceRootPath: project.workspaceRootPath, projectId: project.id, status: 'all' }).then(function (wrapped) {
+         var tasks = commandValue(wrapped); tasks = Array.isArray(tasks) ? tasks : []; pane.innerHTML = '';
+         var input = el('input', { className: 'projects-input', placeholder: tr('ui.taskTitle', null, 'Task title') });
+         var priority = el('select', { className: 'projects-select' }); PRIORITY_VALUES.forEach(function (value) { priority.appendChild(el('option', { value: value, textContent: tr('ui.priority.' + value, null, value) })); }); priority.value = 'normal';
+-        pane.appendChild(el('div', { className: 'projects-form-row' }, [input, priority, el('button', { className: 'projects-btn primary', textContent: tr('ui.addTask', null, 'Add task'), onClick: function () { var value = input.value.trim(); if (!value) return; api.capabilities.invoke('todo.workspace', 'create', { workspaceRootPath: project.workspaceRootPath, title: value, priority: priority.value }).then(function () { return loadTasks(pane, project); }).catch(function (error) { capabilityError(pane, error); }); } })]));
++        pane.appendChild(el('div', { className: 'projects-form-row' }, [input, priority, el('button', { className: 'projects-btn primary', textContent: tr('ui.addTask', null, 'Add task'), onClick: function () { var value = input.value.trim(); if (!value) return; api.capabilities.invoke('todo.workspace', 'create', { workspaceRootPath: project.workspaceRootPath, projectId: project.id, title: value, priority: priority.value }).then(function () { return loadTasks(pane, project); }).catch(function (error) { capabilityError(pane, error); }); } })]));
+         var list = el('div'); if (!tasks.length) list.appendChild(el('div', { className: 'projects-section-value', textContent: tr('ui.noTasks', null, 'No tasks for this project.') }));
+         tasks.forEach(function (task) { list.appendChild(el('div', { className: 'projects-row', 'data-project-task': task.id }, [el('input', { className: 'projects-check', type: 'checkbox', checked: task.status === 'done' ? 'checked' : null, onChange: function (event) { api.capabilities.invoke('todo.workspace', 'setStatus', { id: task.id, status: event.target.checked ? 'done' : 'open' }).then(function () { return loadTasks(pane, project); }).catch(function (error) { capabilityError(pane, error); }); } }), el('div', { className: 'projects-row-main' }, [el('div', { className: 'projects-row-title', textContent: task.title || '' }), el('div', { className: 'projects-row-meta', textContent: tr('ui.priority.' + (task.priority || 'normal'), null, task.priority || 'normal') + (task.dueAt ? ' · ' + task.dueAt : '') })]) ])); }); pane.appendChild(list);
+       });
+@@ -631,12 +692,12 @@
+       pane.appendChild(el('div', { className: 'projects-section-value', textContent: tr('ui.loading', null, 'Loading…') })); loadNotes(pane, project).catch(function (error) { capabilityError(pane, error); });
+     }
+     function loadNotes(pane, project) {
+-      return api.capabilities.invoke('verstak/notes/v1', 'list', { workspaceRootPath: project.workspaceRootPath }).then(function (wrapped) {
++      return api.capabilities.invoke('verstak/notes/v1', 'list', { workspaceRootPath: project.workspaceRootPath, projectId: project.id }).then(function (wrapped) {
+         var notes = commandValue(wrapped); notes = Array.isArray(notes) ? notes : []; pane.innerHTML = '';
+         var input = el('input', { className: 'projects-input', placeholder: tr('ui.noteTitle', null, 'Note title') });
+-        pane.appendChild(el('div', { className: 'projects-form-row' }, [input, el('button', { className: 'projects-btn primary', textContent: tr('ui.addNote', null, 'Create note'), onClick: function () { var value = input.value.trim(); if (!value) return; api.capabilities.invoke('verstak/notes/v1', 'create', { workspaceRootPath: project.workspaceRootPath, title: value }).then(function (created) { var valueCreated = commandValue(created); if (valueCreated && valueCreated.conflict) throw new Error('note already exists'); return loadNotes(pane, project); }).catch(function (error) { capabilityError(pane, error); }); } })]));
++        pane.appendChild(el('div', { className: 'projects-form-row' }, [input, el('button', { className: 'projects-btn primary', textContent: tr('ui.addNote', null, 'Create note'), onClick: function () { var value = input.value.trim(); if (!value) return; api.capabilities.invoke('verstak/notes/v1', 'create', { workspaceRootPath: project.workspaceRootPath, projectId: project.id, title: value }).then(function (created) { var valueCreated = commandValue(created); if (valueCreated && valueCreated.conflict) throw new Error('note already exists'); return loadNotes(pane, project); }).catch(function (error) { capabilityError(pane, error); }); } })]));
