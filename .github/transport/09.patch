@@ -1,0 +1,46 @@
+diff --git a/plugins/todo/frontend/src/index.js b/plugins/todo/frontend/src/index.js
+index 5a2dab1..fab0522 100644
+--- a/plugins/todo/frontend/src/index.js
++++ b/plugins/todo/frontend/src/index.js
+@@ -170,6 +170,7 @@
+       description: text(value.description || value.body),
+       workspaceRootPath: cleanWorkspace(value.workspaceRootPath || value.workspaceName),
+       workspaceName: cleanWorkspace(value.workspaceName || value.workspaceRootPath),
++      projectId: text(value.projectId).trim(),
+       status: status,
+       priority: cleanPriority(value.priority),
+       dueAt: cleanDate(value.dueAt || value.dueDate),
+@@ -200,6 +201,7 @@
+         description: todo.description,
+         workspaceRootPath: todo.workspaceRootPath,
+         workspaceName: todo.workspaceName || todo.workspaceRootPath || '',
++        projectId: todo.projectId || '',
+         status: todo.status,
+         priority: todo.priority,
+         dueAt: todo.dueAt,
+@@ -741,11 +743,15 @@
+   }
+ 
+   function listTodosCapability(api, args) {
+-    var workspace = cleanWorkspace(args && args.workspaceRootPath);
+-    var requestedStatus = text(args && args.status).trim().toLowerCase();
++    args = args || {};
++    var workspace = cleanWorkspace(args.workspaceRootPath);
++    var requestedStatus = text(args.status).trim().toLowerCase();
++    var hasProjectFilter = Object.prototype.hasOwnProperty.call(args, 'projectId');
++    var projectId = text(args.projectId).trim();
+     return loadTodoRecords(api).then(function (todos) {
+       return todos.filter(function (todo) {
+         if (workspace && cleanWorkspace(todo.workspaceRootPath) !== workspace) return false;
++        if (hasProjectFilter && text(todo.projectId).trim() !== projectId) return false;
+         if (requestedStatus && requestedStatus !== 'all' && todo.status !== requestedStatus) return false;
+         return true;
+       });
+@@ -764,6 +770,7 @@
+       description: args.description,
+       workspaceRootPath: workspace,
+       workspaceName: workspace,
++      projectId: text(args.projectId).trim(),
+       status: 'open',
+       priority: args.priority,
+       dueAt: args.dueAt,
