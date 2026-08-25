@@ -5,7 +5,13 @@
   "version": "0.1.0",
   "apiVersion": "0.1.0",
   "description": "Deal-scoped vault file explorer with create, rename, trash, filtering, sorting, and Workbench openResource integration.",
-  "localization": { "defaultLocale": "en", "locales": { "en": "locales/en.json", "ru": "locales/ru.json" } },
+  "localization": {
+    "defaultLocale": "en",
+    "locales": {
+      "en": "locales/en.json",
+      "ru": "locales/ru.json"
+    }
+  },
   "source": "official",
   "icon": "folder",
   "provides": [
@@ -22,7 +28,9 @@
     "files.openExternal",
     "events.subscribe",
     "workbench.open",
-    "ui.register"
+    "ui.register",
+    "storage.namespace",
+    "commands.register"
   ],
   "frontend": {
     "entry": "frontend/src/index.js"
@@ -36,6 +44,40 @@
         "order": 20,
         "component": "FilesView"
       }
+    ],
+    "commands": [
+      {
+        "id": "verstak.files.list",
+        "title": "List Files",
+        "handler": "verstak.files.list"
+      },
+      {
+        "id": "verstak.files.create",
+        "title": "Create File",
+        "handler": "verstak.files.create"
+      },
+      {
+        "id": "verstak.files.open",
+        "title": "Open File",
+        "handler": "verstak.files.open"
+      }
     ]
+  },
+  "sync": {
+    "records": [
+      {
+        "id": "project-scopes",
+        "storage": "settings",
+        "key": "files:projectScopes",
+        "identity": "path"
+      }
+    ]
+  },
+  "capabilityOperations": {
+    "verstak/files/v1": {
+      "list": "verstak.files.list",
+      "create": "verstak.files.create",
+      "open": "verstak.files.open"
+    }
   }
 }
