@@ -1,0 +1,39 @@
+name: Apply Projects Scope v3 Real
+
+on:
+  push:
+    branches: [projects-scope-v3-real]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, 'projects: scope resources inside Deals') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          for p in .github/transport/00.patch .github/transport/01.patch .github/transport/02.patch .github/transport/03.patch .github/transport/04.patch .github/transport/05.patch; do git apply --check "$p"; git apply "$p"; done
+          cat .github/transport/06.part.00 .github/transport/06.part.01 .github/transport/06.part.02 .github/transport/06.part.03 > /tmp/06.patch
+          git apply --check /tmp/06.patch && git apply /tmp/06.patch
+          for p in .github/transport/07.patch .github/transport/08.patch .github/transport/09.patch .github/transport/10.patch .github/transport/11.patch; do git apply --check "$p"; git apply "$p"; done
+          cat .github/transport/12.part.00 .github/transport/12.part.01 > /tmp/12.patch
+          git apply --check /tmp/12.patch && git apply /tmp/12.patch
+          rm -rf .github/transport .github/workflows/apply-projects-scope-v3-real.yml
+      - name: Check
+        run: ./scripts/check.sh
+      - name: Commit result
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "projects: scope resources inside Deals"
+          git push origin HEAD:projects-scope-v3-real
