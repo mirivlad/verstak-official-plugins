@@ -1,0 +1,14 @@
+diff --git a/plugins/files/locales/en.json b/plugins/files/locales/en.json
+index e342957..47c25d6 100644
+--- a/plugins/files/locales/en.json
++++ b/plugins/files/locales/en.json
+@@ -82,5 +82,8 @@
+   "ui.trashError": "Could not move this item to trash. Please try again.",
+   "ui.trashManyConfirm": "Move {count} items to trash?",
+   "ui.up": "Up",
+-  "ui.vaultRelativePath": "Vault-relative path:"
++  "ui.vaultRelativePath": "Vault-relative path:",
++  "contributions.commands.verstak.files.list.title": "List Files",
++  "contributions.commands.verstak.files.create.title": "Create File",
++  "contributions.commands.verstak.files.open.title": "Open File"
+ }
