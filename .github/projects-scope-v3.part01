@@ -1,0 +1,320 @@
++        "title": "List Files",
++        "handler": "verstak.files.list"
++      },
++      {
++        "id": "verstak.files.create",
++        "title": "Create File",
++        "handler": "verstak.files.create"
++      },
++      {
++        "id": "verstak.files.open",
++        "title": "Open File",
++        "handler": "verstak.files.open"
++      }
+     ]
++  },
++  "sync": {
++    "records": [
++      {
++        "id": "project-scopes",
++        "storage": "settings",
++        "key": "files:projectScopes",
++        "identity": "path"
++      }
++    ]
++  },
++  "capabilityOperations": {
++    "verstak/files/v1": {
++      "list": "verstak.files.list",
++      "create": "verstak.files.create",
++      "open": "verstak.files.open"
++    }
+   }
+ }
+diff --git a/plugins/notes/frontend/src/index.js b/plugins/notes/frontend/src/index.js
+index e6a934e..14d8fe4 100644
+--- a/plugins/notes/frontend/src/index.js
++++ b/plugins/notes/frontend/src/index.js
+@@ -11,6 +11,7 @@
+   var LIST_COMMAND_ID = 'verstak.notes.list';
+   var CREATE_COMMAND_ID = 'verstak.notes.create';
+   var OPEN_COMMAND_ID = 'verstak.notes.open';
++  var PROJECT_SCOPE_KEY = 'notes:projectScopes';
+ 
+   function injectStyles() {
+     if (document.getElementById('notes-style-injected')) return;
+@@ -173,6 +174,64 @@
+     return /not.?found|does not exist|no such/i.test(msg);
+   }
+ 
++  function normalizeNoteProjectScopes(value) {
++    if (!Array.isArray(value)) return [];
++    var seen = {};
++    return value.map(function (item) {
++      item = item || {};
++      return { path: cleanPath(item.path), projectId: String(item.projectId || '').trim() };
++    }).filter(function (item) {
++      if (!item.path || !item.projectId || seen[item.path]) return false;
++      seen[item.path] = true;
++      return true;
++    });
++  }
++
++  function loadNoteProjectScopes(api) {
++    if (!api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve([]);
++    return api.settings.read(PROJECT_SCOPE_KEY).then(normalizeNoteProjectScopes);
++  }
++
++  function saveNoteProjectScopes(api, scopes) {
++    scopes = normalizeNoteProjectScopes(scopes);
++    if (!api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve(scopes);
++    return api.settings.write(PROJECT_SCOPE_KEY, scopes).then(function () { return scopes; });
++  }
++
++  function noteProjectId(scopes, path) {
++    path = cleanPath(path);
++    var match = (scopes || []).find(function (item) { return item.path === path; });
++    return match ? match.projectId : '';
++  }
++
++  function bindNoteProjectScope(api, path, projectId) {
++    path = cleanPath(path);
++    projectId = String(projectId || '').trim();
++    if (!path) return Promise.resolve([]);
++    return loadNoteProjectScopes(api).then(function (scopes) {
++      var next = scopes.filter(function (item) { return item.path !== path; });
++      if (projectId) next.push({ path: path, projectId: projectId });
++      return saveNoteProjectScopes(api, next);
++    });
++  }
++
++  function moveNoteProjectScope(api, fromPath, toPath) {
++    fromPath = cleanPath(fromPath);
++    toPath = cleanPath(toPath);
++    if (!fromPath || !toPath || fromPath === toPath) return Promise.resolve();
++    return loadNoteProjectScopes(api).then(function (scopes) {
++      var changed = false;
++      scopes.forEach(function (item) {
++        if (item.path === fromPath) { item.path = toPath; changed = true; }
++      });
++      return changed ? saveNoteProjectScopes(api, scopes) : scopes;
++    });
++  }
++
++  function removeNoteProjectScope(api, path) {
++    return bindNoteProjectScope(api, path, '');
++  }
++
+   var NotesView = {
+     mount: function (containerEl, props, api) {
+       injectStyles();
+@@ -270,6 +329,8 @@
+         var newPath = parentPath(notePath) + '/' + normalizeNoteFilename(trimmedTitle);
+         if (newPath === notePath) return Promise.resolve({ path: notePath });
+         return api.files.move(notePath, newPath, { overwrite: false }).then(function () {
++          return moveNoteProjectScope(api, notePath, newPath);
++        }).then(function () {
+           return { path: newPath };
+         }).catch(function (moveErr) {
+           if (isConflictError(moveErr)) return { path: newPath, conflict: true };
+@@ -732,6 +793,12 @@
+           });
+         })).then(function (sources) {
+           return api.files.writeText(targetPath, mergedContent(sources), { createIfMissing: true, overwrite: false });
++        }).then(function () {
++          return loadNoteProjectScopes(api).then(function (scopes) {
++            var ids = chosen.map(function (note) { return noteProjectId(scopes, note.path); });
++            var inherited = ids.length && ids.every(function (id) { return id && id === ids[0]; }) ? ids[0] : '';
++            return inherited ? bindNoteProjectScope(api, targetPath, inherited) : null;
++          });
+         }).then(function () {
+           if (disposed) return;
+           merging = false;
+@@ -874,6 +941,8 @@
+           if (!confirmed || disposed) return;
+           setStatus(tr('ui.trashing', null, 'Moving note to trash...'), 'loading');
+           api.files.trash(note.path).then(function () {
++            return removeNoteProjectScope(api, note.path);
++          }).then(function () {
+             if (disposed) return;
+             if (selectedPath === note.path) selectedPath = '';
+             delete selectedPaths[note.path];
+@@ -970,35 +1039,49 @@
+     return fallback || key;
+   }
+ 
+-  function capabilityNoteFromEntry(parent, entry) {
++  function capabilityNoteFromEntry(parent, entry, projectId) {
+     return {
+       title: titleFromFilename(entry && entry.name),
+       filename: String((entry && entry.name) || ''),
+       path: String((entry && entry.relativePath) || ''),
+       parentPath: cleanPath(parent),
++      projectId: String(projectId || ''),
+       modifiedAt: (entry && entry.modifiedAt) || ''
+     };
+   }
+ 
+   function listNotesCapability(api, args) {
+-    var workspace = cleanPath(args && args.workspaceRootPath);
+-    return api.files.list(notesFolderPath(workspace)).then(function (entries) {
+-      return (entries || []).filter(function (entry) {
++    args = args || {};
++    var workspace = cleanPath(args.workspaceRootPath);
++    var hasProjectFilter = Object.prototype.hasOwnProperty.call(args, 'projectId');
++    var projectId = String(args.projectId || '').trim();
++    return Promise.all([
++      api.files.list(notesFolderPath(workspace)).catch(function (err) {
++        if (isNotFoundError(err)) return [];
++        throw err;
++      }),
++      loadNoteProjectScopes(api)
++    ]).then(function (results) {
++      var entries = results[0] || [];
++      var scopes = results[1] || [];
++      return entries.filter(function (entry) {
+         return entry && entry.type === 'file' && /\.(md|markdown)$/i.test(entry.name || '');
+       }).map(function (entry) {
+-        return capabilityNoteFromEntry(workspace, entry);
++        var boundProjectId = noteProjectId(scopes, entry.relativePath);
++        return capabilityNoteFromEntry(workspace, entry, boundProjectId);
++      }).filter(function (note) {
++        return !hasProjectFilter || note.projectId === projectId;
+       }).sort(function (a, b) {
+         return String(a.title || '').localeCompare(String(b.title || ''), undefined, { sensitivity: 'base' });
+       });
+-    }).catch(function (err) {
+-      if (isNotFoundError(err)) return [];
+-      throw err;
+     });
+   }
+ 
+   function createNoteCapability(api, args) {
+-    var workspace = cleanPath(args && args.workspaceRootPath);
+-    var title = String((args && args.title) || '').trim();
++    args = args || {};
++    var workspace = cleanPath(args.workspaceRootPath);
++    var projectId = String(args.projectId || '').trim();
++    var title = String(args.title || '').trim();
+     if (!title) return Promise.reject(new Error('note title must not be empty'));
+     var folder = notesFolderPath(workspace);
+     var path = folder + '/' + normalizeNoteFilename(title);
+@@ -1007,9 +1090,11 @@
+     }).then(function () {
+       return api.files.writeText(path, '# ' + title + '\n', { createIfMissing: true, overwrite: false });
+     }).then(function () {
+-      return { title: title, filename: path.slice(path.lastIndexOf('/') + 1), path: path, parentPath: workspace };
++      return projectId ? bindNoteProjectScope(api, path, projectId) : null;
++    }).then(function () {
++      return { title: title, filename: path.slice(path.lastIndexOf('/') + 1), path: path, parentPath: workspace, projectId: projectId };
+     }).catch(function (err) {
+-      if (isConflictError(err)) return { title: title, path: path, parentPath: workspace, conflict: true };
++      if (isConflictError(err)) return { title: title, path: path, parentPath: workspace, projectId: projectId, conflict: true };
+       throw err;
+     });
+   }
+diff --git a/plugins/notes/plugin.json b/plugins/notes/plugin.json
+index 524a129..8e2cf28 100644
+--- a/plugins/notes/plugin.json
++++ b/plugins/notes/plugin.json
+@@ -25,6 +25,7 @@
+     "files.read",
+     "files.write",
+     "files.delete",
++    "storage.namespace",
+     "events.subscribe",
+     "workbench.open",
+     "ui.register",
+@@ -79,5 +80,15 @@
+       "create": "verstak.notes.create",
+       "open": "verstak.notes.open"
+     }
++  },
++  "sync": {
++    "records": [
++      {
++        "id": "project-scopes",
++        "storage": "settings",
++        "key": "notes:projectScopes",
++        "identity": "path"
++      }
++    ]
+   }
+ }
+diff --git a/plugins/projects/frontend/src/index.js b/plugins/projects/frontend/src/index.js
+index de53308..cd55439 100644
+--- a/plugins/projects/frontend/src/index.js
++++ b/plugins/projects/frontend/src/index.js
+@@ -17,7 +17,6 @@
+     tasks: { capability: 'todo.workspace', label: 'Tasks' },
+     notes: { capability: 'verstak/notes/v1', label: 'Notes' },
+     files: { capability: 'verstak/files/v1', label: 'Files' },
+-    activity: { capability: 'activity.log', label: 'Activity' }
+   };
+ 
+   var STYLES = [
+@@ -71,12 +70,15 @@
+     '.projects-modal-title{font-size:1rem;font-weight:700}.projects-field{display:grid;gap:.32rem}.projects-label{font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3)}.projects-textarea{min-height:6.2rem;resize:vertical}.projects-modal-actions{display:flex;justify-content:flex-end;gap:.45rem;margin-top:.3rem}',
+     '.projects-picker{position:relative}.projects-picker-button{width:100%;display:flex;align-items:center;gap:.6rem;justify-content:space-between;text-align:left;box-sizing:border-box;font:inherit;font-size:.8rem;padding:.49rem .58rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-surface-input,#0f1424);color:var(--vt-color-text-primary,#f4f7fb);cursor:pointer;outline:none}',
+     '.projects-picker-value{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.projects-picker-caret{color:var(--vt-color-text-muted,#7f8aa3)}',
+-    '.projects-picker-popover{position:absolute;z-index:3;left:0;right:0;top:calc(100% + .3rem);max-height:20rem;display:flex;flex-direction:column;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-md,6px);background:var(--vt-color-surface,#15152c);box-shadow:0 12px 28px rgba(0,0,0,.36);overflow:hidden}',
++    '.projects-picker-popover{position:relative;z-index:3;margin-top:.3rem;max-height:20rem;display:flex;flex-direction:column;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-md,6px);background:var(--vt-color-surface,#15152c);box-shadow:0 12px 28px rgba(0,0,0,.36);overflow:hidden}',
+     '.projects-picker-search{margin:.55rem;width:calc(100% - 1.1rem)}.projects-picker-list{overflow:auto;padding:.2rem 0 .35rem}',
+     '.projects-picker-row{width:100%;box-sizing:border-box;display:flex;align-items:center;gap:.45rem;border:0;background:transparent;color:var(--vt-color-text-secondary,#b7c0d4);padding:.42rem .62rem;font:inherit;font-size:.78rem;text-align:left;cursor:pointer;outline:none}',
+     '.projects-picker-row:hover,.projects-picker-row.active{background:var(--vt-color-surface-hover,#1b2440);color:var(--vt-color-text-primary,#f4f7fb)}.projects-picker-row.selected{color:var(--vt-color-accent,#4ecca3)}',
+     '.projects-picker-indent{display:inline-block;flex:none}.projects-picker-folder{font-weight:620;color:var(--vt-color-text-secondary,#b7c0d4)}.projects-picker-path{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.projects-picker-check{margin-left:auto;color:var(--vt-color-accent,#4ecca3)}',
+     '.projects-picker-separator{height:1px;background:var(--vt-color-border,#202b46);margin:.25rem .55rem}',
++    '.projects-root.portfolio{display:block;overflow:hidden}.projects-root.portfolio .projects-sidebar{width:100%;max-width:none;min-width:0;height:100%;border-right:0;background:var(--vt-color-background,#101020)}.projects-root.portfolio .projects-main{display:none}.projects-root.portfolio .projects-toolbar{padding:.85rem 1rem}.projects-root.portfolio .projects-search{margin:.7rem 1rem .2rem;width:calc(100% - 2rem);max-width:32rem}.projects-root.portfolio .projects-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(16rem,1fr));align-content:start;gap:.75rem;padding:.8rem 1rem 1.2rem}.projects-root.portfolio .projects-card{min-height:8.4rem;padding:.85rem .9rem;border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface-muted,#111629);align-content:start}.projects-root.portfolio .projects-card:hover{border-color:var(--vt-color-border-strong,#2c456a);background:var(--vt-color-surface-hover,#1b2440)}.projects-root.portfolio .projects-card.selected{box-shadow:none}.projects-root.portfolio .projects-card-title{font-size:.95rem}.projects-card-progress{margin-top:.38rem;display:grid;gap:.28rem}.projects-card-progress-line{display:flex;align-items:center;gap:.55rem;font-size:.68rem;color:var(--vt-color-text-muted,#7f8aa3)}.projects-card-progress-track{height:.3rem;flex:1;border-radius:999px;background:var(--vt-color-surface-hover,#1b2440);overflow:hidden}.projects-card-progress-track>span{display:block;height:100%;background:var(--vt-color-accent,#4ecca3)}.projects-card-next{font-size:.72rem;color:var(--vt-color-text-secondary,#b7c0d4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
++    '.projects-root.deal .projects-sidebar{display:none}.projects-root.deal .projects-main{width:100%}.projects-project-switcher{display:flex;align-items:center;gap:.55rem;padding:.48rem .9rem;border-bottom:1px solid var(--vt-color-border,#202b46);background:var(--vt-color-surface-muted,#111629)}.projects-project-switcher-label{font-size:.7rem;color:var(--vt-color-text-muted,#7f8aa3)}.projects-project-switcher .projects-select{max-width:22rem;min-width:12rem}.projects-header-actions{display:flex;gap:.45rem;align-items:center}',
++    '.projects-root.portfolio .projects-sidebar{width:100%;min-width:0;max-width:none;border-right:0;background:var(--vt-color-background,#101020)}.projects-root.portfolio .projects-main{display:none}.projects-root.portfolio .projects-toolbar{padding:1rem 1.1rem .75rem;background:var(--vt-color-background,#101020)}.projects-root.portfolio .projects-title{font-size:1.05rem}.projects-root.portfolio .projects-search{margin:.1rem 1.1rem .85rem;width:min(34rem,calc(100% - 2.2rem))}.projects-root.portfolio .projects-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(16rem,1fr));gap:.75rem;align-content:start;padding:0 1.1rem 1.2rem}.projects-root.portfolio .projects-card{border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface-muted,#111629);padding:.82rem .9rem;min-height:8rem}.projects-root.portfolio .projects-card:hover{border-color:var(--vt-color-border-strong,#2c456a);background:var(--vt-color-surface-hover,#1b2440)}.projects-card-progress{margin-top:.25rem}.projects-card-progress-line{display:flex;align-items:center;gap:.55rem;font-size:.68rem;color:var(--vt-color-text-muted,#7f8aa3)}.projects-card-progress-track{height:.3rem;flex:1;border-radius:999px;background:var(--vt-color-surface-hover,#1b2440);overflow:hidden}.projects-card-progress-track>span{display:block;height:100%;background:var(--vt-color-accent,#4ecca3)}.projects-card-next{font-size:.7rem;color:var(--vt-color-text-secondary,#b7c0d4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+     '@container(max-width:760px){.projects-root{flex-direction:column}.projects-sidebar{width:100%;max-width:none;min-width:0;height:14rem;border-right:0;border-bottom:1px solid var(--vt-color-border,#202b46)}.projects-main{min-height:0}.projects-header{padding:.78rem}.projects-pane{padding:.8rem}.projects-history-item{grid-template-columns:1fr;gap:.15rem}.projects-modal{width:100%}}'
+   ].join('\n');
+ 
+@@ -171,7 +173,7 @@
+         if (!node || !node.kind) return;
+         var path = cleanPath(node.path || node.rootPath);
+         var nextParents = parents.concat([text(node.name)]).filter(Boolean);
+-        rows.push({ kind: node.kind, id: text(node.id), name: text(node.name), path: path, depth: depth, label: path || nextParents.join(' / '), parents: parents.slice(), children: Array.isArray(node.children) ? node.children : [] });
++        rows.push({ kind: node.kind, id: text(node.id), name: text(node.name), path: path, depth: depth, label: nextParents.join('/') || path, parents: parents.slice(), children: Array.isArray(node.children) ? node.children : [] });
+         walk(node.children || [], depth + 1, nextParents);
+       });
+     }
+@@ -199,12 +201,13 @@
+   function ProjectsViewMount(container, props, api) {
+     injectStyles();
+     container.innerHTML = '';
+-    container.className = 'projects-root';
++    var contextWorkspace = contextFromProps(props);
++    var portfolioMode = !contextWorkspace.id && !contextWorkspace.path;
++    container.className = 'projects-root ' + (portfolioMode ? 'portfolio' : 'deal');
+     container.setAttribute('data-plugin-id', PLUGIN_ID);
+ 
+-    var contextWorkspace = contextFromProps(props);
+     var projects = [];
+-    var selectedId = '';
++    var selectedId = text(props && props.toolRequest && props.toolRequest.projectId);
+     var activeTab = 'overview';
+     var filterText = '';
+     var disposed = false;
+@@ -241,6 +244,15 @@
+       if (project && project.workspaceRootPath) return tr('ui.linkedDealUnavailable', { deal: project.workspaceRootPath }, 'Linked Deal unavailable · ' + project.workspaceRootPath);
+       return '';
+     }
++    function projectProgress(project) {
++      var milestones = project && Array.isArray(project.milestones) ? project.milestones : [];
++      if (!milestones.length) return { percent: 0, done: 0, total: 0 };
++      var done = milestones.filter(function (item) { return item.status === 'done'; }).length;
++      return { percent: Math.round(done * 100 / milestones.length), done: done, total: milestones.length };
++    }
++    function nextMilestone(project) {
++      return ((project && project.milestones) || []).find(function (item) { return item.status !== 'done'; }) || null;
++    }
+     function matchesContext(project) {
+       if (!contextWorkspace.id && !contextWorkspace.path) return true;
+       if (contextWorkspace.id && project.workspaceId) return project.workspaceId === contextWorkspace.id;
+@@ -255,6 +267,7 @@
+       });
+     }
+     function ensureSelection() {
++      if (portfolioMode) { selectedId = ''; return; }
+       var visible = visibleProjects();
