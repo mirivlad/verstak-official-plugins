@@ -1,0 +1,15 @@
+diff --git a/plugins/projects/locales/ru.json b/plugins/projects/locales/ru.json
+index 24f93d1..63dd094 100644
+--- a/plugins/projects/locales/ru.json
++++ b/plugins/projects/locales/ru.json
+@@ -21,7 +21,9 @@
+   "ui.priority": "Приоритет",
+   "ui.tags": "Метки",
+   "ui.linkedDeal": "Связанное дело",
+-  "ui.linkedDealHint": "Необязательно. Задачи, Заметки, Файлы и Активность используют это дело как свой контекст.",
++  "ui.linkedDealHint": "Обязательно. Проект находится внутри выбранного Дела; созданные здесь задачи, заметки и файлы относятся к этому проекту.",
++  "ui.chooseDeal": "Выберите Дело",
++  "ui.dealRequired": "Выберите Дело для этого проекта.",
+   "ui.noLinkedDeal": "Дело не связано",
+   "ui.noLinkedDealOption": "Не связывать с делом",
+   "ui.linkedDealUnavailable": "Связанное дело недоступно · {deal}",
