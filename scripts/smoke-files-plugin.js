@@ -7,6 +7,10 @@ const root = path.resolve(__dirname, '..');
 const sourcePath = path.join(root, 'plugins', 'files', 'frontend', 'src', 'index.js');
 const source = fs.readFileSync(sourcePath, 'utf8');
 
+if (/\bPROJECT_SCOPE_KEY\b|\bprojectId\b/.test(source)) {
+  throw new Error('Files must not retain Project-scoped runtime state');
+}
+
 class FakeNode {
   constructor(tagName) {
     this.tagName = String(tagName || '').toUpperCase();

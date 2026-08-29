@@ -11,7 +11,6 @@
   var LIST_COMMAND_ID = 'verstak.notes.list';
   var CREATE_COMMAND_ID = 'verstak.notes.create';
   var OPEN_COMMAND_ID = 'verstak.notes.open';
-  var PROJECT_SCOPE_KEY = 'notes:projectScopes';
 
   function injectStyles() {
     if (document.getElementById('notes-style-injected')) return;
@@ -174,64 +173,6 @@
     return /not.?found|does not exist|no such/i.test(msg);
   }
 
-  function normalizeNoteProjectScopes(value) {
-    if (!Array.isArray(value)) return [];
-    var seen = {};
-    return value.map(function (item) {
-      item = item || {};
-      return { path: cleanPath(item.path), projectId: String(item.projectId || '').trim() };
-    }).filter(function (item) {
-      if (!item.path || !item.projectId || seen[item.path]) return false;
-      seen[item.path] = true;
-      return true;
-    });
-  }
-
-  function loadNoteProjectScopes(api) {
-    if (!api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve([]);
-    return api.settings.read(PROJECT_SCOPE_KEY).then(normalizeNoteProjectScopes);
-  }
-
-  function saveNoteProjectScopes(api, scopes) {
-    scopes = normalizeNoteProjectScopes(scopes);
-    if (!api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve(scopes);
-    return api.settings.write(PROJECT_SCOPE_KEY, scopes).then(function () { return scopes; });
-  }
-
-  function noteProjectId(scopes, path) {
-    path = cleanPath(path);
-    var match = (scopes || []).find(function (item) { return item.path === path; });
-    return match ? match.projectId : '';
-  }
-
-  function bindNoteProjectScope(api, path, projectId) {
-    path = cleanPath(path);
-    projectId = String(projectId || '').trim();
-    if (!path) return Promise.resolve([]);
-    return loadNoteProjectScopes(api).then(function (scopes) {
-      var next = scopes.filter(function (item) { return item.path !== path; });
-      if (projectId) next.push({ path: path, projectId: projectId });
-      return saveNoteProjectScopes(api, next);
-    });
-  }
-
-  function moveNoteProjectScope(api, fromPath, toPath) {
-    fromPath = cleanPath(fromPath);
-    toPath = cleanPath(toPath);
-    if (!fromPath || !toPath || fromPath === toPath) return Promise.resolve();
-    return loadNoteProjectScopes(api).then(function (scopes) {
-      var changed = false;
-      scopes.forEach(function (item) {
-        if (item.path === fromPath) { item.path = toPath; changed = true; }
-      });
-      return changed ? saveNoteProjectScopes(api, scopes) : scopes;
-    });
-  }
-
-  function removeNoteProjectScope(api, path) {
-    return bindNoteProjectScope(api, path, '');
-  }
-
   var NotesView = {
     mount: function (containerEl, props, api) {
       injectStyles();
@@ -329,8 +270,6 @@
         var newPath = parentPath(notePath) + '/' + normalizeNoteFilename(trimmedTitle);
         if (newPath === notePath) return Promise.resolve({ path: notePath });
         return api.files.move(notePath, newPath, { overwrite: false }).then(function () {
-          return moveNoteProjectScope(api, notePath, newPath);
-        }).then(function () {
           return { path: newPath };
         }).catch(function (moveErr) {
           if (isConflictError(moveErr)) return { path: newPath, conflict: true };
@@ -794,12 +733,6 @@
         })).then(function (sources) {
           return api.files.writeText(targetPath, mergedContent(sources), { createIfMissing: true, overwrite: false });
         }).then(function () {
-          return loadNoteProjectScopes(api).then(function (scopes) {
-            var ids = chosen.map(function (note) { return noteProjectId(scopes, note.path); });
-            var inherited = ids.length && ids.every(function (id) { return id && id === ids[0]; }) ? ids[0] : '';
-            return inherited ? bindNoteProjectScope(api, targetPath, inherited) : null;
-          });
-        }).then(function () {
           if (disposed) return;
           merging = false;
           hideMerge();
@@ -941,8 +874,6 @@
           if (!confirmed || disposed) return;
           setStatus(tr('ui.trashing', null, 'Moving note to trash...'), 'loading');
           api.files.trash(note.path).then(function () {
-            return removeNoteProjectScope(api, note.path);
-          }).then(function () {
             if (disposed) return;
             if (selectedPath === note.path) selectedPath = '';
             delete selectedPaths[note.path];
@@ -1039,38 +970,43 @@
     return fallback || key;
   }
 
-  function capabilityNoteFromEntry(parent, entry, projectId) {
+  function capabilityNoteFromEntry(parent, entry) {
     return {
       title: titleFromFilename(entry && entry.name),
       filename: String((entry && entry.name) || ''),
       path: String((entry && entry.relativePath) || ''),
       parentPath: cleanPath(parent),
-      projectId: String(projectId || ''),
       modifiedAt: (entry && entry.modifiedAt) || ''
     };
   }
 
+  function resolveDealWorkspace(api, args) {
+    var scope = args && args.scope;
+    var workspaceId = String(scope && scope.workspaceId || '').trim();
+    if (!scope || scope.kind !== 'deal' || !workspaceId) return Promise.reject(new Error('DealScope.workspaceId is required'));
+    return api.workspaces.list().then(function (workspaces) {
+      var workspace = (workspaces || []).find(function (item) { return item && item.id === workspaceId; });
+      if (!workspace || !workspace.rootPath) throw new Error('Deal scope is not available to Notes');
+      return cleanPath(workspace.rootPath);
+    });
+  }
+
   function listNotesCapability(api, args) {
     args = args || {};
+    if (args.scope) {
+      return resolveDealWorkspace(api, args).then(function (workspaceRootPath) {
+        return listNotesCapability(api, { workspaceRootPath: workspaceRootPath });
+      });
+    }
     var workspace = cleanPath(args.workspaceRootPath);
-    var hasProjectFilter = Object.prototype.hasOwnProperty.call(args, 'projectId');
-    var projectId = String(args.projectId || '').trim();
-    return Promise.all([
-      api.files.list(notesFolderPath(workspace)).catch(function (err) {
-        if (isNotFoundError(err)) return [];
-        throw err;
-      }),
-      loadNoteProjectScopes(api)
-    ]).then(function (results) {
-      var entries = results[0] || [];
-      var scopes = results[1] || [];
+    return api.files.list(notesFolderPath(workspace)).catch(function (err) {
+      if (isNotFoundError(err)) return [];
+      throw err;
+    }).then(function (entries) {
       return entries.filter(function (entry) {
         return entry && entry.type === 'file' && /\.(md|markdown)$/i.test(entry.name || '');
       }).map(function (entry) {
-        var boundProjectId = noteProjectId(scopes, entry.relativePath);
-        return capabilityNoteFromEntry(workspace, entry, boundProjectId);
-      }).filter(function (note) {
-        return !hasProjectFilter || note.projectId === projectId;
+        return capabilityNoteFromEntry(workspace, entry);
       }).sort(function (a, b) {
         return String(a.title || '').localeCompare(String(b.title || ''), undefined, { sensitivity: 'base' });
       });
@@ -1079,8 +1015,12 @@
 
   function createNoteCapability(api, args) {
     args = args || {};
+    if (args.scope) {
+      return resolveDealWorkspace(api, args).then(function (workspaceRootPath) {
+        return createNoteCapability(api, Object.assign({}, args, { scope: undefined, workspaceRootPath: workspaceRootPath }));
+      });
+    }
     var workspace = cleanPath(args.workspaceRootPath);
-    var projectId = String(args.projectId || '').trim();
     var title = String(args.title || '').trim();
     if (!title) return Promise.reject(new Error('note title must not be empty'));
     var folder = notesFolderPath(workspace);
@@ -1090,16 +1030,19 @@
     }).then(function () {
       return api.files.writeText(path, '# ' + title + '\n', { createIfMissing: true, overwrite: false });
     }).then(function () {
-      return projectId ? bindNoteProjectScope(api, path, projectId) : null;
-    }).then(function () {
-      return { title: title, filename: path.slice(path.lastIndexOf('/') + 1), path: path, parentPath: workspace, projectId: projectId };
+      return { title: title, filename: path.slice(path.lastIndexOf('/') + 1), path: path, parentPath: workspace };
     }).catch(function (err) {
-      if (isConflictError(err)) return { title: title, path: path, parentPath: workspace, projectId: projectId, conflict: true };
+      if (isConflictError(err)) return { title: title, path: path, parentPath: workspace, conflict: true };
       throw err;
     });
   }
 
   function openNoteCapability(api, args) {
+    if (args && args.scope) {
+      return resolveDealWorkspace(api, args).then(function (workspaceRootPath) {
+        return openNoteCapability(api, Object.assign({}, args, { scope: undefined, workspaceRootPath: workspaceRootPath }));
+      });
+    }
     var path = cleanPath(args && args.path);
     if (!path) return Promise.reject(new Error('note path must not be empty'));
     var workspace = cleanPath((args && args.workspaceRootPath) || parentPath(parentPath(path)));

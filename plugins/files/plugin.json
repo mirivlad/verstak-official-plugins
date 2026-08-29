@@ -15,7 +15,8 @@
   "source": "official",
   "icon": "folder",
   "provides": [
-    "verstak/files/v1"
+    "verstak/files/v1",
+    "verstak/files/v2"
   ],
   "requires": [
     "verstak/core/files/v1",
@@ -63,18 +64,13 @@
       }
     ]
   },
-  "sync": {
-    "records": [
-      {
-        "id": "project-scopes",
-        "storage": "settings",
-        "key": "files:projectScopes",
-        "identity": "path"
-      }
-    ]
-  },
   "capabilityOperations": {
     "verstak/files/v1": {
+      "list": "verstak.files.list",
+      "create": "verstak.files.create",
+      "open": "verstak.files.open"
+    },
+    "verstak/files/v2": {
       "list": "verstak.files.list",
       "create": "verstak.files.create",
       "open": "verstak.files.open"
