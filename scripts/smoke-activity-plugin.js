@@ -200,6 +200,8 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   const globalKey = 'events:global';
 
   if (!manifest.permissions.includes('commands.register')) throw new Error('activity manifest must request commands.register');
+  if (!manifest.provides.includes('verstak/activity/v2')) throw new Error('activity manifest must provide the Deal-scoped v2 capability');
+  if (manifest.capabilityOperations['verstak/activity/v2']?.list !== 'verstak.activity.list') throw new Error('activity v2 list capability operation is missing');
   const worklogCommand = (manifest.contributes.commands || []).find((item) => item.id === WORKLOG_COMMAND_ID);
   if (!worklogCommand || worklogCommand.handler !== WORKLOG_COMMAND_ID) throw new Error('activity worklog suggestion command contribution is missing');
   const worklogProvider = (manifest.contributes.worklogProviders || []).find((item) => item.handler === WORKLOG_COMMAND_ID);
@@ -210,6 +212,7 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   if (api.commandHandlers.has(WORKLOG_COMMAND_ID)) throw new Error('mounting a view must not be what registers the worklog command');
   await activateWithApi(api);
   if (typeof api.commandHandlers.get(WORKLOG_COMMAND_ID) !== 'function') throw new Error('activation did not register the worklog suggestion command');
+  if (typeof api.commandHandlers.get('verstak.activity.list') !== 'function') throw new Error('activation did not register the Deal-scoped activity list command');
   const activityProvider = (manifest.contributes.activityProviders || []).find((item) => item.id === 'verstak.activity.log');
   if (!activityProvider || !activityProvider.events.includes('browser.capture.file')) throw new Error('activity provider must include browser.capture.file');
   if (!activityProvider || !activityProvider.events.includes('browser.capture.converted')) throw new Error('activity provider must include browser.capture.converted');
@@ -926,6 +929,22 @@ async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, w
   }
   if (headless.candidates[0].activityIds.join(',') !== 'headless-a,headless-b') {
     throw new Error('the unmounted handler returned the wrong activities');
+  }
+
+  const scopeApi = makeApi({}, {
+    'activity-events': [
+      { activityId: 'scope-project', type: 'note.saved', title: 'Project note', occurredAt: '2026-08-29T09:00:00Z', workspaceId: 'deal-project', workspaceRootPath: 'Project' },
+      { activityId: 'scope-client', type: 'note.saved', title: 'Client note', occurredAt: '2026-08-29T09:01:00Z', workspaceId: 'deal-client', workspaceRootPath: 'ClientA' },
+    ],
+  });
+  await activateWithApi(scopeApi);
+  const scopedEvents = await scopeApi.commandHandlers.get('verstak.activity.list')({ scope: { kind: 'deal', workspaceId: 'deal-project' } });
+  if (scopedEvents.length !== 1 || scopedEvents[0].activityId !== 'scope-project') {
+    throw new Error('Deal-scoped activity list did not filter by workspace UUID');
+  }
+  const scopedSearch = await scopeApi.commandHandlers.get('verstak.activity.search')({ query: 'note', scope: { kind: 'deal', workspaceId: 'deal-client' } });
+  if (scopedSearch.results.length !== 1 || scopedSearch.results[0].id !== 'scope-client') {
+    throw new Error('Deal-scoped activity search did not filter by workspace UUID');
   }
 
   console.log('activity plugin smoke passed');

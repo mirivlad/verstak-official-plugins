@@ -2,6 +2,7 @@
   "contributions.commands.verstak.activity.assignBrowserActivity.title": "Привязать активность браузера к Делу",
   "contributions.commands.verstak.activity.listBrowserActivity.title": "Показать активность браузера",
   "contributions.commands.verstak.activity.listBrowserActivityRules.title": "Показать правила активности браузера",
+  "contributions.commands.verstak.activity.list.title": "Показать активность",
   "contributions.commands.verstak.activity.provideOverview.title": "Данные для обзора",
   "contributions.commands.verstak.activity.removeBrowserActivityRule.title": "Убрать правило активности браузера",
   "contributions.commands.verstak.activity.search.title": "Искать в активности",
