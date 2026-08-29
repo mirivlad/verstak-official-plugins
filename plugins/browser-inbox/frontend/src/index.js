@@ -171,14 +171,16 @@
 
   function scopeFromProps(props) {
     var workspaceRoot = workspaceFromProps(props);
+    var workspaceId = text(props && (props.workspaceId || (props.workspaceNode && props.workspaceNode.workspaceId))).trim();
     if (!workspaceRoot) {
-      return { mode: 'global', key: GLOBAL_KEY, label: '', workspaceRoot: '' };
+      return { mode: 'global', key: GLOBAL_KEY, label: '', workspaceRoot: '', workspaceId: '' };
     }
     return {
       mode: 'workspace',
       key: WORKSPACE_PREFIX + encodeKey(workspaceRoot),
       label: workspaceRoot,
-      workspaceRoot: workspaceRoot
+      workspaceRoot: workspaceRoot,
+      workspaceId: workspaceId
     };
   }
 
@@ -856,7 +858,10 @@
 
     function loadBrowserActivity() {
       if (!api || !api.commands || typeof api.commands.executeFor !== 'function') return Promise.resolve();
-      return api.commands.executeFor(ACTIVITY_PLUGIN_ID, LIST_ACTIVITY_COMMAND, { includeNotWork: true }).then(function (response) {
+      var activityScope = scope.mode === 'workspace' && scope.workspaceId
+        ? { kind: 'deal', workspaceId: scope.workspaceId }
+        : undefined;
+      return api.commands.executeFor(ACTIVITY_PLUGIN_ID, LIST_ACTIVITY_COMMAND, { includeNotWork: true, scope: activityScope }).then(function (response) {
         var result = response && response.result;
         browserActivity = result && Array.isArray(result.activities) ? result.activities : [];
         return api.commands.executeFor(ACTIVITY_PLUGIN_ID, LIST_RULES_COMMAND, {});
@@ -878,16 +883,16 @@
     // tool.
     function visibleActivity() {
       return browserActivity.filter(function (item) {
-        var workspaceRoot = cleanWorkspace(item && item.workspaceRootPath);
+        var workspaceId = text(item && item.workspaceId).trim();
         // Not work is a state, not a deletion: a wrong answer has to be
         // findable, and time that vanished cannot be.
         if (item && item.notWork === true) return showNotWorkActivity;
         if (showNotWorkActivity) return false;
         if (scope.mode === 'workspace') {
-          if (workspaceRoot === scope.workspaceRoot) return true;
-          return showUnattachedActivity && !workspaceRoot;
+          if (workspaceId === scope.workspaceId) return true;
+          return showUnattachedActivity && !workspaceId;
         }
-        if (!showAttachedActivity) return !workspaceRoot;
+        if (!showAttachedActivity) return !workspaceId;
         return true;
       });
     }
@@ -909,17 +914,18 @@
     }
 
     function attachTarget() {
-      return scope.mode === 'workspace' ? scope.workspaceRoot : cleanWorkspace(activityTarget);
+      var workspaceRoot = scope.mode === 'workspace' ? scope.workspaceRoot : cleanWorkspace(activityTarget);
+      return { workspaceRootPath: workspaceRoot, workspaceId: scope.mode === 'workspace' ? scope.workspaceId : (workspaceIds[workspaceRoot] || '') };
     }
 
     // Only what is not already attached to the target: attaching a page to the
     // Deal it is already in changes nothing, and offering it says otherwise.
     function attachableActivityIds() {
-      var workspaceRoot = attachTarget();
+      var target = attachTarget();
       var chosen = {};
       selectedActivityIds().forEach(function (id) { chosen[id] = true; });
       return browserActivity.filter(function (item) {
-        return chosen[item.activityId] && cleanWorkspace(item.workspaceRootPath) !== workspaceRoot;
+        return chosen[item.activityId] && text(item.workspaceId).trim() !== target.workspaceId;
       }).map(function (item) { return item.activityId; });
     }
 
@@ -929,8 +935,8 @@
       if (!api || !api.commands || typeof api.commands.executeFor !== 'function') return Promise.resolve();
       return api.commands.executeFor(ACTIVITY_PLUGIN_ID, ASSIGN_ACTIVITY_COMMAND, {
         activityIds: ids,
+        scope: decision.workspaceId ? { kind: 'deal', workspaceId: decision.workspaceId } : undefined,
         workspaceRootPath: decision.workspaceRootPath || '',
-        workspaceId: decision.workspaceId || '',
         notWork: decision.notWork === true,
         assignedBy: 'user'
       }).then(function (response) {
@@ -955,13 +961,13 @@
 
     function attachSelectedActivity() {
       var ids = attachableActivityIds();
-      var workspaceRoot = attachTarget();
-      if (!ids.length || !workspaceRoot) return Promise.resolve();
+      var target = attachTarget();
+      if (!ids.length || !target.workspaceId) return Promise.resolve();
       activitySelection = {};
       ids.forEach(function (id) { activitySelection[id] = true; });
       return decideSelectedActivity({
-        workspaceRootPath: workspaceRoot,
-        workspaceId: workspaceIds[workspaceRoot] || '',
+        workspaceRootPath: target.workspaceRootPath,
+        workspaceId: target.workspaceId,
         notWork: false
       });
     }
@@ -1125,7 +1131,7 @@
         textContent: tr('ui.browserActivity.attach', null, 'Attach to Deal'),
         onClick: attachSelectedActivity
       });
-      attachBtn.disabled = attachableActivityIds().length === 0 || !attachTarget();
+      attachBtn.disabled = attachableActivityIds().length === 0 || !attachTarget().workspaceId;
       activityHeadEl.appendChild(attachBtn);
 
       // Every answer is reversible: put it back where nothing has been decided,

@@ -248,7 +248,8 @@ function makeApi(initialSettings = {}, locale = 'en', browserActivity = [], rule
       executeFor: async (pluginId, command, args) => {
         commandCalls.push({ pluginId, command, args });
         if (command === 'verstak.activity.listBrowserActivity') {
-          return { status: 'handled', result: { activities: activityRecords.map((item) => ({ ...item })) } };
+          const workspaceId = args?.scope?.kind === 'deal' ? args.scope.workspaceId : '';
+          return { status: 'handled', result: { activities: activityRecords.filter((item) => !workspaceId || item.workspaceId === workspaceId || !item.workspaceId).map((item) => ({ ...item })) } };
         }
         if (command === 'verstak.activity.listBrowserActivityRules') {
           return { status: 'handled', result: { rules: activityRules.map((rule) => ({ ...rule })) } };
@@ -267,6 +268,7 @@ function makeApi(initialSettings = {}, locale = 'en', browserActivity = [], rule
           activityRecords.forEach((item) => {
             if (!wanted.has(item.activityId)) return;
             item.workspaceRootPath = (args && args.workspaceRootPath) || '';
+            item.workspaceId = args?.scope?.kind === 'deal' ? args.scope.workspaceId : '';
             assigned += 1;
           });
           return { status: 'handled', result: { assigned } };
@@ -358,7 +360,7 @@ async function flush() {
   for (let i = 0; i < 16; i += 1) await Promise.resolve();
 }
 
-async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, workspaceRootPath: 'Project' }, document = makeDocument()) {
+async function mountWithApi(api, props = { workspaceId: 'deal-project', workspaceNode: { workspaceId: 'deal-project', name: 'Project' }, workspaceRootPath: 'Project' }, document = makeDocument()) {
   const component = loadComponent(document);
   const container = new FakeNode('div');
   component.mount(container, props, api);
@@ -488,7 +490,7 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
       url: 'https://client.example.com/',
       title: 'Client Page',
       domain: 'client.example.com',
-      workspaceRootPath: 'ClientA',
+      workspaceRootPath: 'ClientA', workspaceId: 'deal-client',
     },
   });
   await flush();
@@ -1104,6 +1106,7 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
       endedAt: '2026-07-21T09:00:00Z',
       durationSeconds: 600,
       workspaceRootPath: 'ClientA',
+      workspaceId: 'deal-client',
     },
   ]);
   const activityView = await mountWithApi(activityApi, {});
@@ -1164,8 +1167,8 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   // Everything else recorded in a Deal carries its id, and sessions are grouped
   // by it. Without the id, attached browser time formed a session beside the
   // work it belonged to instead of joining it.
-  if (assignCall.args.workspaceId !== 'deal-project') {
-    throw new Error(`attaching must carry the Deal's own id, got ${JSON.stringify(assignCall.args.workspaceId)}`);
+  if (assignCall.args.scope?.workspaceId !== 'deal-project') {
+    throw new Error(`attaching must carry the Deal's own id, got ${JSON.stringify(assignCall.args.scope)}`);
   }
   if (assignCall.args.activityIds.slice().sort().join(',') !== 'browser-domain:b1:0,browser-domain:b1:1') {
     throw new Error(`attaching sent the wrong pages: ${JSON.stringify(assignCall.args.activityIds)}`);
@@ -1218,8 +1221,8 @@ async function mountSettingsWithApi(api, document = makeDocument()) {
   // every Deal made all the tabs look the same and none of them about the Deal
   // being looked at.
   const scopedApi = makeApi({}, 'en', [
-    { activityId: 's-mine', url: 'https://mine.example.com/x', hostname: 'mine.example.com', endedAt: '2026-07-22T11:00:00Z', durationSeconds: 600, workspaceRootPath: 'Project' },
-    { activityId: 's-other', url: 'https://other.example.com/x', hostname: 'other.example.com', endedAt: '2026-07-22T11:10:00Z', durationSeconds: 600, workspaceRootPath: 'ClientA' },
+    { activityId: 's-mine', url: 'https://mine.example.com/x', hostname: 'mine.example.com', endedAt: '2026-07-22T11:00:00Z', durationSeconds: 600, workspaceRootPath: 'Project', workspaceId: 'deal-project' },
+    { activityId: 's-other', url: 'https://other.example.com/x', hostname: 'other.example.com', endedAt: '2026-07-22T11:10:00Z', durationSeconds: 600, workspaceRootPath: 'ClientA', workspaceId: 'deal-client' },
     { activityId: 's-loose', url: 'https://loose.example.com/x', hostname: 'loose.example.com', endedAt: '2026-07-22T11:20:00Z', durationSeconds: 600, workspaceRootPath: '' },
   ]);
   const scopedView = await mountWithApi(scopedApi);

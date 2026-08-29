@@ -134,12 +134,14 @@
 
   function scopeFromProps(props) {
     var workspaceRoot = workspaceFromProps(props || {});
-    if (!workspaceRoot) return { mode: 'global', key: '', label: 'All Deals', workspaceRoot: '' };
+    var workspaceId = text(props && (props.workspaceId || (props.workspaceNode && props.workspaceNode.workspaceId))).trim();
+    if (!workspaceRoot) return { mode: 'global', key: '', label: 'All Deals', workspaceRoot: '', workspaceId: '' };
     return {
       mode: 'workspace',
       key: WORKLOG_PREFIX + encodeKey(workspaceRoot),
       label: workspaceRoot,
-      workspaceRoot: workspaceRoot
+      workspaceRoot: workspaceRoot,
+      workspaceId: workspaceId
     };
   }
 
@@ -732,6 +734,7 @@
       sessionId: text(value.sessionId),
       handledThrough: text(value.handledThrough || value.endedAt),
       workspaceRootPath: workspace,
+      workspaceId: text(value.workspaceId).trim(),
       startedAt: text(value.startedAt),
       endedAt: text(value.endedAt),
       estimatedMinutes: Math.max(0, Number(value.estimatedMinutes || 0)),
@@ -765,10 +768,10 @@
   }
 
   // A proposal handed over by another tool arrives for the Deal being looked at.
-  function candidateFromRequest(request, workspaceRoot) {
+  function candidateFromRequest(request, workspaceId) {
     var value = request && request.type === 'work-session-candidate' ? request.candidate : null;
     var candidate = normalizeCandidate(value);
-    if (!candidate || candidate.workspaceRootPath !== cleanWorkspace(workspaceRoot)) return null;
+    if (!candidate || !workspaceId || candidate.workspaceId !== text(workspaceId).trim()) return null;
     return candidate;
   }
 
@@ -1138,7 +1141,7 @@
           return provider && provider.pluginId && provider.handler && provider.pluginId !== PLUGIN_ID;
         }).map(function (provider) {
           return api.commands.executeFor(provider.pluginId, provider.handler, {
-            workspaceRootPath: scope.mode === 'workspace' ? scope.workspaceRoot : ''
+            scope: scope.mode === 'workspace' && scope.workspaceId ? { kind: 'deal', workspaceId: scope.workspaceId } : undefined
           }).then(function (response) {
             var result = response && response.result;
             var list = result && Array.isArray(result.candidates) ? result.candidates : [];
@@ -1471,16 +1474,16 @@
       var ids = candidate.guessedActivityIds.length ? candidate.guessedActivityIds : candidate.activityIds;
       return api.commands.executeFor(ACTIVITY_PLUGIN_ID, ASSIGN_ACTIVITY_COMMAND, {
         activityIds: ids,
+        scope: decision.workspaceId ? { kind: 'deal', workspaceId: decision.workspaceId } : undefined,
         workspaceRootPath: decision.notWork ? '' : decision.workspaceRootPath,
-        workspaceId: decision.notWork ? '' : decision.workspaceId,
         notWork: decision.notWork === true,
         assignedBy: 'user'
       }).then(function () {
         return Promise.all(proposalAddresses(candidate).map(function (address) {
           return api.commands.executeFor(ACTIVITY_PLUGIN_ID, SET_RULE_COMMAND, {
             pattern: address,
+            scope: decision.workspaceId ? { kind: 'deal', workspaceId: decision.workspaceId } : undefined,
             workspaceRootPath: decision.notWork ? '' : decision.workspaceRootPath,
-            workspaceId: decision.notWork ? '' : decision.workspaceId,
             notWork: decision.notWork === true,
             createdBy: 'user'
           }).catch(function (err) {
@@ -1817,7 +1820,7 @@
       render();
       // A proposal handed over from another tool opens straight away; asking
       // every provider for its own list must not delay that.
-      var candidate = candidateFromRequest(props && props.toolRequest, scope.workspaceRoot);
+      var candidate = candidateFromRequest(props && props.toolRequest, scope.workspaceId);
       var completedTodo = completedTodoFromRequest(props && props.toolRequest, scope.workspaceRoot);
       if (candidate) showEntryModal(null, candidate);
       else if (completedTodo) showEntryModal(null, null, completedTodo);

@@ -15,11 +15,8 @@
   var MAX_RENDERED_EVENTS = 250;
   var RAW_DATA_NAME = 'activity-events';
   var MAX_CANDIDATES = 12;
-  var LEGACY_KEY = 'events';
-  var GLOBAL_KEY = 'events:global';
-  var WORKSPACE_PREFIX = 'events:workspace:';
-  var CANDIDATE_PREFIX = 'work-session-candidates:workspace:';
-  var DISMISSAL_PREFIX = 'work-session-dismissals:workspace:';
+  var CANDIDATE_PREFIX = 'work-session-candidates:deal:';
+  var DISMISSAL_PREFIX = 'work-session-dismissals:deal:';
   var SESSION_REGISTRY_KEY = 'activity-session-registry-v2';
   var SESSION_HANDLING_KEY = 'activity-session-handling-v2';
   var WORKLOG_COMMAND_ID = 'verstak.activity.suggestWorklog';
@@ -151,6 +148,11 @@
     return String(value == null ? '' : value);
   }
 
+  function workspaceUUID(value) {
+    var id = text(value).trim();
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) ? id : '';
+  }
+
   function encodeKey(value) {
     return encodeURIComponent(text(value).trim());
   }
@@ -175,14 +177,15 @@
 
   function scopeFromProps(props) {
     var workspaceRoot = workspaceFromProps(props);
-    var workspaceId = text(props && (props.workspaceId || (props.workspaceNode && props.workspaceNode.workspaceId))).trim();
-    if (!workspaceRoot) {
-      return { mode: 'global', key: GLOBAL_KEY, label: 'All Deals', workspaceRoot: '', workspaceId: '' };
+    var workspaceId = workspaceUUID(props && (props.workspaceId || (props.workspaceNode && props.workspaceNode.workspaceId)));
+    if (!workspaceId) {
+      return workspaceRoot
+        ? { mode: 'unresolved', label: workspaceRoot, workspaceRoot: workspaceRoot, workspaceId: '' }
+        : { mode: 'global', label: 'All Deals', workspaceRoot: '', workspaceId: '' };
     }
     return {
       mode: 'workspace',
-      key: WORKSPACE_PREFIX + encodeKey(workspaceRoot),
-      label: workspaceRoot,
+      label: workspaceRoot || text(props && props.workspaceName).trim() || 'Deal',
       workspaceRoot: workspaceRoot,
       workspaceId: workspaceId
     };
@@ -284,10 +287,8 @@
   }
 
   function candidateScope(activity) {
-    var workspaceId = text(activity && (activity.workspaceId || (activity.sessionScope && activity.sessionScope.workspaceId) || (activity.payload && activity.payload.workspaceId))).trim();
+    var workspaceId = workspaceUUID(activity && (activity.workspaceId || (activity.sessionScope && activity.sessionScope.workspaceId) || (activity.payload && activity.payload.workspaceId)));
     if (workspaceId) return 'workspace:' + workspaceId;
-    var workspaceRoot = candidateWorkspace(activity);
-    if (workspaceRoot) return 'legacy-workspace:' + workspaceRoot;
     return 'unassigned';
   }
 
@@ -553,7 +554,7 @@
     var first = activities[0];
     var last = activities[activities.length - 1];
     var duration = sessionDurationMinutes(session);
-    if (session.scope === 'unassigned' || !session.workspaceRootPath || !enoughToPropose(activities) || duration < MIN_SESSION_DURATION_MINUTES) return null;
+    if (session.scope === 'unassigned' || !session.workspaceId || !enoughToPropose(activities) || duration < MIN_SESSION_DURATION_MINUTES) return null;
     return {
       candidateId: 'work-session:' + encodeKey(session.sessionId) + ':' + encodeKey(last.activityId),
       sessionId: session.sessionId,
@@ -578,11 +579,11 @@
     };
   }
 
-  function buildWorkSessionCandidates(activityList, workspaceFilter, registry) {
-    var filter = cleanWorkspace(workspaceFilter);
+  function buildWorkSessionCandidates(activityList, workspaceIdFilter, registry) {
+    var filter = text(workspaceIdFilter).trim();
     registry = normalizeSessionRegistry(registry);
     return logicalSessions(activityList, registry).map(buildCandidate).filter(function (candidate) {
-      return candidate && (!filter || candidate.workspaceRootPath === filter);
+      return candidate && (!filter || candidate.workspaceId === filter);
     }).sort(function (a, b) {
       return b.endedAt.localeCompare(a.endedAt) || a.workspaceRootPath.localeCompare(b.workspaceRootPath);
     }).slice(0, MAX_CANDIDATES);
@@ -642,48 +643,8 @@
     return translate('ui.kind.activity', null, 'Activity');
   }
 
-  function globalEventKeys(settings) {
-    var keys = [LEGACY_KEY, GLOBAL_KEY];
-    Object.keys(settings || {}).forEach(function (key) {
-      if (key.indexOf(WORKSPACE_PREFIX) === 0 && keys.indexOf(key) === -1) keys.push(key);
-    });
-    return keys;
-  }
-
-  function eventsFromSettings(settings, workspaceRoot) {
-    settings = settings || {};
-    var workspace = cleanWorkspace(workspaceRoot);
-    if (!workspace) {
-      var all = [];
-      globalEventKeys(settings).forEach(function (key) {
-        all = all.concat(normalizeStoredEvents(settings[key], key));
-      });
-      return sortEvents(all);
-    }
-    var workspaceKey = WORKSPACE_PREFIX + encodeKey(workspace);
-    var scopedEvents = normalizeStoredEvents(settings[workspaceKey], workspaceKey);
-    var globalEvents = normalizeStoredEvents(settings[GLOBAL_KEY], GLOBAL_KEY).filter(function (item) {
-      return item.workspaceRootPath === workspace;
-    });
-    var legacyEvents = normalizeStoredEvents(settings[LEGACY_KEY], LEGACY_KEY).filter(function (item) {
-      return item.workspaceRootPath === workspace;
-    });
-    return sortEvents(scopedEvents.concat(globalEvents, legacyEvents));
-  }
-
-  function eventsFromRecords(records, workspaceRoot) {
-    var normalized = normalizeStoredEvents(records, RAW_DATA_NAME);
-    var workspace = cleanWorkspace(workspaceRoot);
-    if (!workspace) return sortEvents(normalized);
-    return sortEvents(normalized.filter(function (item) {
-      return item.workspaceRootPath === workspace;
-    }));
-  }
-
-  function eventsFromSettingsByWorkspaceID(settings, workspaceId) {
-    return sortEvents(eventsFromSettings(settings, '').filter(function (item) {
-      return text(item.workspaceId).trim() === workspaceId;
-    }));
+  function eventsFromRecords(records) {
+    return sortEvents(normalizeStoredEvents(records, RAW_DATA_NAME));
   }
 
   function eventsFromRecordsByWorkspaceID(records, workspaceId) {
@@ -694,39 +655,35 @@
 
   function dealWorkspaceId(args) {
     var scope = args && args.scope;
-    if (!scope || scope.kind !== 'deal' || !text(scope.workspaceId).trim()) {
+    var workspaceId = scope && scope.kind === 'deal' ? workspaceUUID(scope.workspaceId) : '';
+    if (!workspaceId) {
       return Promise.reject(new Error('DealScope.workspaceId is required'));
     }
-    return Promise.resolve(text(scope.workspaceId).trim());
+    return Promise.resolve(workspaceId);
   }
 
   function listActivityCapability(api, args) {
     return dealWorkspaceId(args).then(function (workspaceId) {
-      var settingsPromise = api && api.settings && typeof api.settings.read === 'function'
-        ? api.settings.read().catch(function () { return {}; })
-        : Promise.resolve({});
-      return Promise.all([settingsPromise, readRawRecords(api).catch(function () { return []; })]).then(function (values) {
-        var settings = values[0] || {};
-        var raw = Array.isArray(values[1]) ? values[1] : [];
-        return raw.length ? eventsFromRecordsByWorkspaceID(raw, workspaceId) : eventsFromSettingsByWorkspaceID(settings, workspaceId);
+      return readRawRecords(api).catch(function () { return []; }).then(function (raw) {
+        return eventsFromRecordsByWorkspaceID(raw, workspaceId);
       });
     });
   }
 
-  function candidateStorageKey(workspaceRoot) {
-    return CANDIDATE_PREFIX + encodeKey(workspaceRoot);
+  function candidateStorageKey(workspaceId) {
+    return CANDIDATE_PREFIX + encodeKey(workspaceId);
   }
 
-  function dismissalStorageKey(workspaceRoot) {
-    return DISMISSAL_PREFIX + encodeKey(workspaceRoot);
+  function dismissalStorageKey(workspaceId) {
+    return DISMISSAL_PREFIX + encodeKey(workspaceId);
   }
 
-  function decodeStoredWorkspace(key, prefix) {
+  function decodeStoredWorkspaceID(key, prefix) {
     if (key.indexOf(prefix) !== 0) return '';
     try {
-      return cleanWorkspace(decodeURIComponent(key.slice(prefix.length)));
+      return text(decodeURIComponent(key.slice(prefix.length))).trim();
     } catch (err) {
-      return cleanWorkspace(key.slice(prefix.length));
+      return text(key.slice(prefix.length)).trim();
     }
   }
 
@@ -734,17 +691,17 @@
     var dismissed = {};
     Object.keys(settings || {}).forEach(function (key) {
       if (key.indexOf(DISMISSAL_PREFIX) !== 0) return;
-      var workspace = decodeStoredWorkspace(key, DISMISSAL_PREFIX);
-      if (!workspace) return;
-      dismissed[workspace] = {};
+      var workspaceId = decodeStoredWorkspaceID(key, DISMISSAL_PREFIX);
+      if (!workspaceId) return;
+      dismissed[workspaceId] = {};
       if (Array.isArray(settings[key])) {
         settings[key].forEach(function (candidateId) {
           candidateId = text(candidateId).trim();
-          if (candidateId) dismissed[workspace][candidateId] = true;
+          if (candidateId) dismissed[workspaceId][candidateId] = true;
         });
         return;
       }
-      if (settings[key] && typeof settings[key] === 'object') dismissed[workspace] = settings[key];
+      if (settings[key] && typeof settings[key] === 'object') dismissed[workspaceId] = settings[key];
     });
     return dismissed;
   }
@@ -767,9 +724,9 @@
     });
   }
 
-  function visibleCandidates(activityList, workspaceFilter, sessionRegistry, dismissedByWorkspace, handledSessions) {
-    return buildWorkSessionCandidates(activityList, workspaceFilter, sessionRegistry).map(function (candidate) {
-      var dismissed = dismissedByWorkspace && dismissedByWorkspace[candidate.workspaceRootPath];
+  function visibleCandidates(activityList, workspaceIdFilter, sessionRegistry, dismissedByWorkspace, handledSessions) {
+    return buildWorkSessionCandidates(activityList, workspaceIdFilter, sessionRegistry).map(function (candidate) {
+      var dismissed = dismissedByWorkspace && dismissedByWorkspace[candidate.workspaceId];
       var watermark = handledSessions && handledSessions[candidate.sessionId];
       return candidateAfterWatermark(candidate, watermark || (dismissed && (dismissed[candidate.sessionId] || dismissed[candidate.candidateId])));
     }).filter(Boolean);
@@ -793,7 +750,7 @@
     return Promise.all([api.settings.read(), readRaw]).then(function (results) {
       var settings = results[0] || {};
       var rawRecords = Array.isArray(results[1]) ? results[1] : [];
-      var source = rawRecords.length ? eventsFromRecords(rawRecords, '') : eventsFromSettings(settings, '');
+      var source = eventsFromRecords(rawRecords);
       return {
         source: source,
         sessionRegistry: pruneSessionRegistry(normalizeSessionRegistry(settings[SESSION_REGISTRY_KEY]), source),
@@ -819,6 +776,7 @@
       occurredAt: text(record.occurredAt),
       durationSeconds: Math.max(0, Number(record.durationSeconds || payload.durationSeconds) || 0),
       workspaceRootPath: cleanWorkspace(record.workspaceRootPath),
+      workspaceId: workspaceUUID(record.workspaceId || (record.sessionScope && record.sessionScope.workspaceId) || payload.workspaceId),
       // Not work is a state, not a deletion: a wrong answer has to be findable
       // afterwards, and time that vanished cannot be.
       notWork: record.notWork === true,
@@ -873,8 +831,8 @@
       if (assignedByValue(record.assignedBy) === 'user') return record;
       var rule = matchingRule(rules, browserActivityRecord(record));
       if (!rule) return record;
-      var wantsWorkspace = rule.notWork ? '' : rule.workspaceRootPath;
-      if (cleanWorkspace(record.workspaceRootPath) === wantsWorkspace
+      var wantsWorkspaceId = rule.notWork ? '' : rule.workspaceId;
+      if (text(record.workspaceId).trim() === wantsWorkspaceId
         && (record.notWork === true) === rule.notWork
         && assignedByValue(record.assignedBy) === 'rule') {
         return record;
@@ -882,12 +840,12 @@
       changed += 1;
       var payload = record.payload && typeof record.payload === 'object' ? record.payload : {};
       return Object.assign({}, record, {
-        workspaceRootPath: wantsWorkspace,
+        workspaceRootPath: rule.notWork ? '' : rule.workspaceRootPath,
         workspaceId: rule.notWork ? '' : rule.workspaceId,
         notWork: rule.notWork,
         assignedBy: 'rule',
         sessionScope: !rule.notWork && rule.workspaceId ? { kind: 'workspace', workspaceId: rule.workspaceId } : {},
-        payload: Object.assign({}, payload, { workspaceRootPath: wantsWorkspace, workspaceId: rule.notWork ? '' : rule.workspaceId })
+        payload: Object.assign({}, payload, { workspaceRootPath: rule.notWork ? '' : rule.workspaceRootPath, workspaceId: wantsWorkspaceId })
       });
     });
     if (!changed) return Promise.resolve(records);
@@ -910,15 +868,15 @@
     for (var index = 0; index < records.length; index += 1) {
       var other = records[index];
       if (other === record || isBrowserActivity(other) || isServiceActivity(other)) continue;
-      var root = cleanWorkspace(other.workspaceRootPath);
-      if (!root) continue;
+      var workspaceId = text(other.workspaceId || (other.sessionScope && other.sessionScope.workspaceId) || (other.payload && other.payload.workspaceId)).trim();
+      if (!workspaceId) continue;
       var otherTime = eventTimeMs(other);
       if (!otherTime || Math.abs(otherTime - time) > window) continue;
-      if (found && found.workspaceRootPath !== root) return null;
+      if (found && found.workspaceId !== workspaceId) return null;
       if (!found) {
         found = {
-          workspaceRootPath: root,
-          workspaceId: text(other.workspaceId || (other.payload && other.payload.workspaceId))
+          workspaceRootPath: cleanWorkspace(other.workspaceRootPath),
+          workspaceId: workspaceId
         };
       }
     }
@@ -933,7 +891,7 @@
       if (decided === 'user' || decided === 'rule') return record;
       var guess = guessedWorkspace(records, record);
       if (!guess) return record;
-      if (cleanWorkspace(record.workspaceRootPath) === guess.workspaceRootPath && decided === 'guess') return record;
+      if (text(record.workspaceId).trim() === guess.workspaceId && decided === 'guess') return record;
       changed += 1;
       var payload = record.payload && typeof record.payload === 'object' ? record.payload : {};
       return Object.assign({}, record, {
@@ -961,14 +919,17 @@
 
   function listBrowserActivity(api, args) {
     args = args || {};
-    var workspace = cleanWorkspace(args.workspaceRootPath);
+    if ((args.scope && (args.scope.kind !== 'deal' || !workspaceUUID(args.scope.workspaceId))) || (!args.scope && (args.workspaceId || args.workspaceRootPath))) {
+      return Promise.resolve({ activities: [] });
+    }
+    var workspaceId = args.scope ? workspaceUUID(args.scope.workspaceId) : '';
     var onlyUnassigned = args.onlyUnassigned === true;
     return decidedRecords(api).then(function (records) {
       var activities = records.filter(isBrowserActivity).map(browserActivityRecord).filter(function (item) {
         if (!item.activityId) return false;
         if (item.notWork) return args.includeNotWork === true;
-        if (onlyUnassigned) return !item.workspaceRootPath;
-        if (workspace) return item.workspaceRootPath === workspace;
+        if (onlyUnassigned) return !item.workspaceId;
+        if (workspaceId) return item.workspaceId === workspaceId;
         return true;
       });
       activities.sort(function (a, b) {
@@ -987,7 +948,7 @@
   function assignBrowserActivity(api, args) {
     args = args || {};
     var workspace = cleanWorkspace(args.workspaceRootPath);
-    var workspaceId = text(args.workspaceId).trim();
+    var workspaceId = args.scope && args.scope.kind === 'deal' ? workspaceUUID(args.scope.workspaceId) : '';
     var notWork = args.notWork === true;
     var assignedBy = assignedByValue(args.assignedBy) || 'user';
     var wanted = {};
@@ -995,7 +956,7 @@
       var value = text(id).trim();
       if (value) wanted[value] = true;
     });
-    if (!Object.keys(wanted).length) return Promise.resolve({ assigned: 0 });
+    if (!Object.keys(wanted).length || (!notWork && !workspaceId)) return Promise.resolve({ assigned: 0 });
     if (!api || !api.storage || !api.storage.data || typeof api.storage.data.writeNDJSON !== 'function') {
       return Promise.resolve({ assigned: 0 });
     }
@@ -1013,7 +974,7 @@
           workspaceRootPath: notWork ? '' : workspace,
           workspaceId: notWork ? '' : workspaceId,
           notWork: notWork,
-          assignedBy: notWork || workspace ? assignedBy : '',
+          assignedBy: notWork || workspaceId ? assignedBy : '',
           sessionScope: !notWork && workspaceId ? { kind: 'workspace', workspaceId: workspaceId } : {},
           payload: Object.assign({}, payload, {
             workspaceRootPath: notWork ? '' : workspace,
@@ -1023,7 +984,7 @@
       });
       if (!assigned) return { assigned: 0 };
       return api.storage.data.writeNDJSON(RAW_DATA_NAME, updated).then(function () {
-        return { assigned: assigned, workspaceRootPath: notWork ? '' : workspace, notWork: notWork };
+        return { assigned: assigned, workspaceId: notWork ? '' : workspaceId, workspaceRootPath: notWork ? '' : workspace, notWork: notWork };
       });
     }).catch(function (err) {
       console.warn('[verstak.activity] assign browser activity:', err);
@@ -1041,11 +1002,12 @@
     if (!pattern) return null;
     var notWork = value.notWork === true;
     var workspace = cleanWorkspace(value.workspaceRootPath);
-    if (!notWork && !workspace) return null;
+    var workspaceId = text(value.workspaceId).trim();
+    if (!notWork && !workspaceId) return null;
     return {
       pattern: pattern,
       workspaceRootPath: notWork ? '' : workspace,
-      workspaceId: notWork ? '' : text(value.workspaceId).trim(),
+      workspaceId: notWork ? '' : workspaceId,
       notWork: notWork,
       createdBy: assignedByValue(value.createdBy) || 'user',
       createdAt: text(value.createdAt) || new Date().toISOString()
@@ -1091,8 +1053,11 @@
   }
 
   function setBrowserActivityRule(api, args) {
-    var rule = normalizeRule(args || {});
-    if (!rule) return Promise.resolve({ saved: false });
+    args = args || {};
+    var notWork = args.notWork === true;
+    var workspaceId = notWork ? '' : (args.scope && args.scope.kind === 'deal' ? workspaceUUID(args.scope.workspaceId) : '');
+    var rule = normalizeRule(Object.assign({}, args, { workspaceId: workspaceId }));
+    if (!rule || (!notWork && !workspaceId)) return Promise.resolve({ saved: false });
     return readRules(api).then(function (rules) {
       var next = rules.filter(function (item) { return item.pattern !== rule.pattern; });
       next.push(rule);
@@ -1119,12 +1084,16 @@
   }
 
   function listWorkSessionCandidates(api, args) {
-    var workspace = cleanWorkspace(args && args.workspaceRootPath);
+    args = args || {};
+    if ((args.scope && (args.scope.kind !== 'deal' || !workspaceUUID(args.scope.workspaceId))) || (!args.scope && (args.workspaceId || args.workspaceRootPath))) {
+      return Promise.resolve({ candidates: [] });
+    }
+    var workspaceId = args.scope ? workspaceUUID(args.scope.workspaceId) : '';
     if (!api || !api.settings || typeof api.settings.read !== 'function') {
       return Promise.resolve({ candidates: [] });
     }
     return readCandidateState(api).then(function (state) {
-      var candidates = visibleCandidates(state.source, workspace, state.sessionRegistry, state.dismissed, state.handled);
+      var candidates = visibleCandidates(state.source, workspaceId, state.sessionRegistry, state.dismissed, state.handled);
       // Session ids are learned while the candidates are built, and they are
       // what a proposal is identified by. Only the view used to save them, so
       // a Journal that never opened Activity saw a new id for the same session
@@ -1217,37 +1186,37 @@
     containerEl.appendChild(listEl);
     containerEl.appendChild(modalHost);
 
-    function candidatesForWorkspace(workspaceRoot) {
-      return visibleCandidates(candidateSourceEvents, workspaceRoot, sessionRegistry, dismissedByWorkspace, handledSessions);
+    function candidatesForWorkspace(workspaceId) {
+      return visibleCandidates(candidateSourceEvents, workspaceId, sessionRegistry, dismissedByWorkspace, handledSessions);
     }
 
     function updateCandidates() {
-      candidates = candidatesForWorkspace(scope.mode === 'workspace' ? scope.workspaceRoot : '');
+      candidates = candidatesForWorkspace(scope.mode === 'workspace' ? scope.workspaceId : (scope.mode === 'global' ? '' : '__unresolved__'));
     }
 
     function candidateWorkspaces() {
       var workspaces = {};
       candidateSourceEvents.forEach(function (activity) {
-        var workspace = candidateWorkspace(activity);
-        if (workspace) workspaces[workspace] = true;
+        var workspaceId = text(activity.workspaceId).trim();
+        if (workspaceId) workspaces[workspaceId] = true;
       });
-      if (scope.mode === 'workspace' && scope.workspaceRoot) workspaces[scope.workspaceRoot] = true;
+      if (scope.mode === 'workspace' && scope.workspaceId) workspaces[scope.workspaceId] = true;
       return Object.keys(workspaces);
     }
 
-    function persistCandidateCache(workspaceRoot) {
-      if (!workspaceRoot || !api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve();
-      return api.settings.write(candidateStorageKey(workspaceRoot), candidatesForWorkspace(workspaceRoot));
+    function persistCandidateCache(workspaceId) {
+      if (!workspaceId || !api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve();
+      return api.settings.write(candidateStorageKey(workspaceId), candidatesForWorkspace(workspaceId));
     }
 
     function persistCandidateCaches() {
       return Promise.all(candidateWorkspaces().map(persistCandidateCache));
     }
 
-    function persistDismissals(workspaceRoot) {
-      if (!workspaceRoot || !api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve();
-      var dismissed = dismissedByWorkspace[workspaceRoot] || {};
-      return api.settings.write(dismissalStorageKey(workspaceRoot), dismissed);
+    function persistDismissals(workspaceId) {
+      if (!workspaceId || !api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve();
+      var dismissed = dismissedByWorkspace[workspaceId] || {};
+      return api.settings.write(dismissalStorageKey(workspaceId), dismissed);
     }
 
     function persistSessionRegistry() {
@@ -1257,10 +1226,7 @@
 
     function persist() {
       if (!api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve();
-      var toStore = scope.mode === 'global'
-        ? events.filter(function (item) { return !item._storageKey || item._storageKey === GLOBAL_KEY; })
-        : events;
-      return api.settings.write(scope.key, storageEvents(toStore)).then(persistSessionRegistry).then(persistCandidateCaches).catch(function (err) {
+      return persistSessionRegistry().then(persistCandidateCaches).catch(function (err) {
         reportError('ui.saveError', 'Could not save activity. Please try again.', err);
       });
     }
@@ -1276,9 +1242,9 @@
       return clearRaw.then(function () {
         return api.settings.read();
       }).then(function (settings) {
-        var keys = globalEventKeys(settings || {}).concat(Object.keys(settings || {}).filter(function (key) {
+        var keys = Object.keys(settings || {}).filter(function (key) {
           return key.indexOf(CANDIDATE_PREFIX) === 0 || key.indexOf(DISMISSAL_PREFIX) === 0;
-        }));
+        });
         events = [];
         candidateSourceEvents = [];
         candidates = [];
@@ -1309,10 +1275,10 @@
       }
       events = [];
       candidateSourceEvents = candidateSourceEvents.filter(function (activity) {
-        return candidateWorkspace(activity) !== scope.workspaceRoot;
+        return text(activity.workspaceId).trim() !== scope.workspaceId;
       });
       updateCandidates();
-      return clearWorkspaceRaw(scope.workspaceRoot).then(persist).then(render);
+      return clearWorkspaceRaw(scope.workspaceId).then(persist).then(render);
     }
 
     function showClearConfirmation() {
@@ -1349,14 +1315,13 @@
       ]));
     }
 
-    function clearWorkspaceRaw(workspaceRoot) {
+    function clearWorkspaceRaw(workspaceId) {
       if (!api || !api.storage || !api.storage.data || typeof api.storage.data.readNDJSON !== 'function' || typeof api.storage.data.writeNDJSON !== 'function') {
         return Promise.resolve();
       }
       return api.storage.data.readNDJSON(RAW_DATA_NAME).then(function (records) {
-        var workspace = cleanWorkspace(workspaceRoot);
         var kept = (Array.isArray(records) ? records : []).filter(function (record) {
-          return cleanWorkspace(record && (record.workspaceRootPath || workspaceFromPayload(record.payload || {}))) !== workspace;
+          return text(record && (record.workspaceId || (record.sessionScope && record.sessionScope.workspaceId) || (record.payload && record.payload.workspaceId))).trim() !== workspaceId;
         });
         return api.storage.data.writeNDJSON(RAW_DATA_NAME, kept);
       });
@@ -1407,27 +1372,26 @@
     }
 
     function reviewCandidate(candidate) {
-      if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function' || typeof CustomEvent !== 'function') return;
-      window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', {
-        detail: {
-          workspaceItemId: 'verstak.journal.workspace',
-          toolRequest: { type: 'work-session-candidate', candidate: candidate }
-        }
-      }));
+      if (!candidate || !candidate.workspaceId || !api || !api.navigation || typeof api.navigation.openWorkspace !== 'function') return;
+      api.navigation.openWorkspace({
+        workspaceId: candidate.workspaceId,
+        workspaceItemId: 'verstak.journal.workspace',
+        toolRequest: { type: 'work-session-candidate', candidate: candidate }
+      });
     }
 
     function dismissCandidate(candidate) {
-      if (!candidate || !candidate.workspaceRootPath || !candidate.candidateId) return;
-      dismissedByWorkspace[candidate.workspaceRootPath] = dismissedByWorkspace[candidate.workspaceRootPath] || {};
-      dismissedByWorkspace[candidate.workspaceRootPath][candidate.sessionId || candidate.candidateId] = {
+      if (!candidate || !candidate.workspaceId || !candidate.candidateId) return;
+      dismissedByWorkspace[candidate.workspaceId] = dismissedByWorkspace[candidate.workspaceId] || {};
+      dismissedByWorkspace[candidate.workspaceId][candidate.sessionId || candidate.candidateId] = {
         handledThrough: candidate.handledThrough || candidate.endedAt,
         handledAt: new Date().toISOString(),
         status: 'dismissed'
       };
       updateCandidates();
       Promise.all([
-        persistDismissals(candidate.workspaceRootPath),
-        persistCandidateCache(candidate.workspaceRootPath)
+        persistDismissals(candidate.workspaceId),
+        persistCandidateCache(candidate.workspaceId)
       ]).then(function () {
         statusText = tr('ui.dismissed', null, 'Candidate dismissed');
         statusClass = '';
@@ -1506,11 +1470,11 @@
         handledSessions = settings[SESSION_HANDLING_KEY] && typeof settings[SESSION_HANDLING_KEY] === 'object'
           ? settings[SESSION_HANDLING_KEY]
           : {};
-        candidateSourceEvents = rawRecords.length ? eventsFromRecords(rawRecords, '') : eventsFromSettings(settings, '');
+        candidateSourceEvents = eventsFromRecords(rawRecords);
         sessionRegistry = pruneSessionRegistry(sessionRegistry, candidateSourceEvents);
-        events = rawRecords.length
-          ? eventsFromRecords(rawRecords, scope.mode === 'workspace' ? scope.workspaceRoot : '')
-          : eventsFromSettings(settings, scope.mode === 'workspace' ? scope.workspaceRoot : '');
+        events = scope.mode === 'workspace'
+          ? eventsFromRecordsByWorkspaceID(rawRecords, scope.workspaceId)
+          : (scope.mode === 'global' ? candidateSourceEvents : []);
         dismissedByWorkspace = dismissedCandidatesFromSettings(settings);
         updateCandidates();
         return persistSessionRegistry().then(persistCandidateCaches);
@@ -1523,8 +1487,8 @@
       if (!api || !api.events || typeof api.events.subscribe !== 'function') return Promise.resolve();
       return Promise.all(ACTIVITY_EVENTS.map(function (eventName) {
         return api.events.subscribe(eventName, function (event) {
-          var eventWorkspace = workspaceFromPayload(eventPayload(event));
-          if (scope.mode === 'workspace' && eventWorkspace && eventWorkspace !== scope.workspaceRoot) return Promise.resolve();
+          var eventWorkspaceId = text(eventPayload(event).workspaceId).trim();
+          if (scope.mode === 'workspace' && eventWorkspaceId && eventWorkspaceId !== scope.workspaceId) return Promise.resolve();
           return loadStored().then(render);
         }).then(function (unsubscribe) {
           if (typeof unsubscribe === 'function') unsubscribers.push(unsubscribe);
@@ -1580,17 +1544,14 @@
   }
 
   function provideOverview(api, args) {
-    var workspace = cleanWorkspace(args && args.workspaceRootPath);
-    if (!workspace || !api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve({});
-    var rawPromise = readRawRecords(api).catch(function () { return []; });
+    var workspaceId = args && args.scope && args.scope.kind === 'deal' ? text(args.scope.workspaceId).trim() : '';
+    if (!workspaceId) return Promise.resolve({});
     return Promise.all([
-      api.settings.read().catch(function () { return {}; }),
-      rawPromise,
-      listWorkSessionCandidates(api, { workspaceRootPath: workspace }).catch(function () { return { candidates: [] }; })
+      readRawRecords(api).catch(function () { return []; }),
+      listWorkSessionCandidates(api, { scope: { kind: 'deal', workspaceId: workspaceId } }).catch(function () { return { candidates: [] }; })
     ]).then(function (results) {
-      var settings = results[0] || {};
-      var raw = Array.isArray(results[1]) ? results[1] : [];
-      var events = (raw.length ? eventsFromRecords(raw, workspace) : eventsFromSettings(settings, workspace)).filter(function (event) {
+      var raw = Array.isArray(results[0]) ? results[0] : [];
+      var events = eventsFromRecordsByWorkspaceID(raw, workspaceId).filter(function (event) {
         return !isServiceActivity(event);
       });
       var meaningful = events.filter(isMeaningfulActivity);
@@ -1623,7 +1584,7 @@
         };
       });
       var fileRecent = recent.filter(function (item) { return item.categoryId === 'files'; }).length;
-      var candidates = (results[2] && Array.isArray(results[2].candidates)) ? results[2].candidates : [];
+      var candidates = (results[1] && Array.isArray(results[1].candidates)) ? results[1].candidates : [];
       var attention = candidates.map(function (candidate, index) {
         return {
           id: candidate.candidateId,
@@ -1692,19 +1653,11 @@
       });
     }
     var query = text(args.query).trim();
-    var workspace = cleanWorkspace(args.workspaceRootPath);
     var workspaceId = text(args._workspaceId).trim();
     var limit = Math.max(1, Number(args.limit) || 50);
     if (query.length < 2) return Promise.resolve({ results: [] });
-    var settingsPromise = api && api.settings && typeof api.settings.read === 'function'
-      ? api.settings.read().catch(function () { return {}; })
-      : Promise.resolve({});
-    return Promise.all([settingsPromise, readRawRecords(api).catch(function () { return []; })]).then(function (values) {
-      var settings = values[0] || {};
-      var raw = Array.isArray(values[1]) ? values[1] : [];
-      var events = workspaceId
-        ? (raw.length ? eventsFromRecordsByWorkspaceID(raw, workspaceId) : eventsFromSettingsByWorkspaceID(settings, workspaceId))
-        : (raw.length ? eventsFromRecords(raw, workspace) : eventsFromSettings(settings, workspace));
+    return readRawRecords(api).catch(function () { return []; }).then(function (raw) {
+      var events = workspaceId ? eventsFromRecordsByWorkspaceID(raw, workspaceId) : eventsFromRecords(raw);
       var translate = function (key, params, fallback) { return overviewTranslate(api, key, params, fallback); };
       var ranked = events.filter(function (event) { return !isServiceActivity(event); }).map(function (event) {
         var title = humanEventTitle(event, translate);
@@ -1725,9 +1678,9 @@
             categoryId: 'activity',
             categoryLabel: overviewTranslate(api, 'overview.summary', null, 'Activity'),
             score: row.score,
-            action: deal ? {
+            action: event.workspaceId ? {
               kind: 'workspace-item',
-              workspaceRootPath: deal,
+              workspaceId: event.workspaceId,
               workspaceItemId: 'verstak.activity.workspace'
             } : {
               kind: 'view',
