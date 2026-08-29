@@ -231,11 +231,11 @@ function makeApi(initialSettings = {}, locale = null, proposals = [], initialVau
         providerCalls.push({ pluginId, handler, args });
         if (handler === 'verstak.activity.assignBrowserActivity') return { status: 'handled', result: { assigned: (args.activityIds || []).length } };
         if (handler === 'verstak.activity.setBrowserActivityRule') return { status: 'handled', result: { saved: true } };
-        const workspace = String((args && args.workspaceRootPath) || '');
+        const workspaceId = args?.scope?.kind === 'deal' ? args.scope.workspaceId : '';
         return {
           status: 'handled',
           result: {
-            candidates: proposals.filter((item) => !workspace || item.workspaceRootPath === workspace),
+            candidates: proposals.filter((item) => !workspaceId || item.workspaceId === workspaceId),
           },
         };
       },
@@ -327,7 +327,7 @@ async function flush() {
   for (let i = 0; i < 400; i += 1) await Promise.resolve();
 }
 
-async function mountWithApi(api, props = { workspaceNode: { name: 'Project' }, workspaceRootPath: 'Project' }, document = makeDocument()) {
+async function mountWithApi(api, props = { workspaceId: 'deal-project', workspaceNode: { workspaceId: 'deal-project', name: 'Project' }, workspaceRootPath: 'Project' }, document = makeDocument()) {
   const component = loadComponent(document);
   const container = new FakeNode('div');
   component.mount(container, props, api);
@@ -414,6 +414,7 @@ function byData(container, attr, value) {
     sessionId: 'session-journal-1',
     handledThrough: '2026-06-27T11:03:00.000Z',
     workspaceRootPath: 'Project',
+    workspaceId: 'deal-project',
     startedAt: '2026-06-27T10:12:00.000Z',
     endedAt: '2026-06-27T11:03:00.000Z',
     estimatedMinutes: 51,
@@ -429,7 +430,7 @@ function byData(container, attr, value) {
     ],
   };
   const candidateView = await mountWithApi(api, {
-    workspaceNode: { name: 'Project' },
+    workspaceId: 'deal-project', workspaceNode: { workspaceId: 'deal-project', name: 'Project' },
     workspaceRootPath: 'Project',
     toolRequest: { type: 'work-session-candidate', candidate },
   });
@@ -461,7 +462,7 @@ function byData(container, attr, value) {
     ],
   });
   const pageView = await mountWithApi(makeApi(), {
-    workspaceNode: { name: 'Project' },
+    workspaceId: 'deal-project', workspaceNode: { workspaceId: 'deal-project', name: 'Project' },
     workspaceRootPath: 'Project',
     toolRequest: { type: 'work-session-candidate', candidate: pageCandidate },
   });
@@ -501,7 +502,7 @@ function byData(container, attr, value) {
   }
 
   const russianCandidateView = await mountWithApi(makeApi({}, russianLocale), {
-    workspaceNode: { name: 'Project' },
+    workspaceId: 'deal-project', workspaceNode: { workspaceId: 'deal-project', name: 'Project' },
     workspaceRootPath: 'Project',
     toolRequest: { type: 'work-session-candidate', candidate },
   });
@@ -685,6 +686,7 @@ function byData(container, attr, value) {
     sessionId: 'session-project-1',
     handledThrough: '2026-07-20T09:20:00.000Z',
     workspaceRootPath: 'Project',
+    workspaceId: 'deal-project',
     startedAt: '2026-07-20T09:00:00.000Z',
     endedAt: '2026-07-20T09:20:00.000Z',
     estimatedMinutes: 25,
@@ -703,6 +705,7 @@ function byData(container, attr, value) {
     candidateId: 'work-session:client:1',
     sessionId: 'session-client-1',
     workspaceRootPath: 'Client',
+    workspaceId: 'deal-client',
     estimatedMinutes: 40,
     activityIds: ['c-a', 'c-b'],
     activities: [

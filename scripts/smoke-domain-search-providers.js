@@ -111,7 +111,7 @@ function fallbackI18n() {
     i18n: fallbackI18n(),
     settings: { read: async () => ({ 'events:global': [{ activityId: 'stale', title: 'STALE activity' }] }) },
     storage: { data: { readNDJSON: async () => [
-      { activityId: 'deal-event', type: 'note.saved', title: 'Research note saved', summary: 'Canonical activity summary', occurredAt: '2026-08-16T10:00:00Z', workspaceRootPath: 'Project', sourcePluginId: 'verstak.notes', payload: {} },
+      { activityId: 'deal-event', type: 'note.saved', title: 'Research note saved', summary: 'Canonical activity summary', occurredAt: '2026-08-16T10:00:00Z', workspaceId: '33333333-3333-4333-8333-333333333333', workspaceRootPath: 'Project', sourcePluginId: 'verstak.notes', payload: { workspaceId: '33333333-3333-4333-8333-333333333333' } },
       { activityId: 'global-event', type: 'browser.capture.received', title: 'Research capture received', summary: 'Loose activity', occurredAt: '2026-08-16T09:00:00Z', sourcePluginId: 'verstak.browser-inbox', payload: {} },
     ] } },
   };
@@ -120,7 +120,7 @@ function fallbackI18n() {
   if (activitySearch.results.some((item) => item.id === 'stale')) throw new Error('Activity Search ignored canonical raw NDJSON');
   const dealEvent = activitySearch.results.find((item) => item.id === 'deal-event');
   const globalEvent = activitySearch.results.find((item) => item.id === 'global-event');
-  if (!dealEvent || dealEvent.action?.kind !== 'workspace-item' || dealEvent.action.workspaceItemId !== 'verstak.activity.workspace') throw new Error('Deal Activity result action is wrong');
+  if (!dealEvent || dealEvent.action?.kind !== 'workspace-item' || dealEvent.action.workspaceId !== '33333333-3333-4333-8333-333333333333' || dealEvent.action.workspaceItemId !== 'verstak.activity.workspace') throw new Error('Deal Activity result action is wrong');
   if (!globalEvent || globalEvent.action?.kind !== 'view' || globalEvent.action.viewId !== 'verstak.activity.view') throw new Error('Global Activity result action is wrong');
 
   console.log('domain search providers smoke passed');
