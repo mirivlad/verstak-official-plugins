@@ -24,6 +24,7 @@
   var SESSION_HANDLING_KEY = 'activity-session-handling-v2';
   var WORKLOG_COMMAND_ID = 'verstak.activity.suggestWorklog';
   var OVERVIEW_COMMAND_ID = 'verstak.activity.provideOverview';
+  var LIST_ACTIVITY_COMMAND_ID = 'verstak.activity.list';
   var SEARCH_COMMAND_ID = 'verstak.activity.search';
   var LIST_BROWSER_COMMAND_ID = 'verstak.activity.listBrowserActivity';
   var ASSIGN_BROWSER_COMMAND_ID = 'verstak.activity.assignBrowserActivity';
@@ -677,6 +678,39 @@
     return sortEvents(normalized.filter(function (item) {
       return item.workspaceRootPath === workspace;
     }));
+  }
+
+  function eventsFromSettingsByWorkspaceID(settings, workspaceId) {
+    return sortEvents(eventsFromSettings(settings, '').filter(function (item) {
+      return text(item.workspaceId).trim() === workspaceId;
+    }));
+  }
+
+  function eventsFromRecordsByWorkspaceID(records, workspaceId) {
+    return sortEvents(normalizeStoredEvents(records, RAW_DATA_NAME).filter(function (item) {
+      return text(item.workspaceId).trim() === workspaceId;
+    }));
+  }
+
+  function dealWorkspaceId(args) {
+    var scope = args && args.scope;
+    if (!scope || scope.kind !== 'deal' || !text(scope.workspaceId).trim()) {
+      return Promise.reject(new Error('DealScope.workspaceId is required'));
+    }
+    return Promise.resolve(text(scope.workspaceId).trim());
+  }
+
+  function listActivityCapability(api, args) {
+    return dealWorkspaceId(args).then(function (workspaceId) {
+      var settingsPromise = api && api.settings && typeof api.settings.read === 'function'
+        ? api.settings.read().catch(function () { return {}; })
+        : Promise.resolve({});
+      return Promise.all([settingsPromise, readRawRecords(api).catch(function () { return []; })]).then(function (values) {
+        var settings = values[0] || {};
+        var raw = Array.isArray(values[1]) ? values[1] : [];
+        return raw.length ? eventsFromRecordsByWorkspaceID(raw, workspaceId) : eventsFromSettingsByWorkspaceID(settings, workspaceId);
+      });
+    });
   }
 
   function candidateStorageKey(workspaceRoot) {
@@ -1652,8 +1686,14 @@
 
   function provideSearch(api, args) {
     args = args || {};
+    if (args.scope) {
+      return dealWorkspaceId(args).then(function (workspaceId) {
+        return provideSearch(api, Object.assign({}, args, { scope: undefined, _workspaceId: workspaceId }));
+      });
+    }
     var query = text(args.query).trim();
     var workspace = cleanWorkspace(args.workspaceRootPath);
+    var workspaceId = text(args._workspaceId).trim();
     var limit = Math.max(1, Number(args.limit) || 50);
     if (query.length < 2) return Promise.resolve({ results: [] });
     var settingsPromise = api && api.settings && typeof api.settings.read === 'function'
@@ -1662,7 +1702,9 @@
     return Promise.all([settingsPromise, readRawRecords(api).catch(function () { return []; })]).then(function (values) {
       var settings = values[0] || {};
       var raw = Array.isArray(values[1]) ? values[1] : [];
-      var events = raw.length ? eventsFromRecords(raw, workspace) : eventsFromSettings(settings, workspace);
+      var events = workspaceId
+        ? (raw.length ? eventsFromRecordsByWorkspaceID(raw, workspaceId) : eventsFromSettingsByWorkspaceID(settings, workspaceId))
+        : (raw.length ? eventsFromRecords(raw, workspace) : eventsFromSettings(settings, workspace));
       var translate = function (key, params, fallback) { return overviewTranslate(api, key, params, fallback); };
       var ranked = events.filter(function (event) { return !isServiceActivity(event); }).map(function (event) {
         var title = humanEventTitle(event, translate);
@@ -1721,6 +1763,9 @@
         }),
         api.commands.register(OVERVIEW_COMMAND_ID, function (args) {
           return provideOverview(api, args);
+        }),
+        api.commands.register(LIST_ACTIVITY_COMMAND_ID, function (args) {
+          return listActivityCapability(api, args);
         }),
         api.commands.register(SEARCH_COMMAND_ID, function (args) {
           return provideSearch(api, args);

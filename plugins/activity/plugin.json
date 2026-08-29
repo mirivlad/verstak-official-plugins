@@ -17,7 +17,8 @@
   "provides": [
     "activity.log",
     "activity.provider",
-    "activity.reconstruction"
+    "activity.reconstruction",
+    "verstak/activity/v2"
   ],
   "permissions": [
     "events.subscribe",
@@ -92,6 +93,11 @@
         "handler": "verstak.activity.provideOverview"
       },
       {
+        "id": "verstak.activity.list",
+        "title": "List Activity",
+        "handler": "verstak.activity.list"
+      },
+      {
         "id": "verstak.activity.search",
         "title": "Search Activity",
         "handler": "verstak.activity.search"
@@ -141,5 +147,11 @@
         "handler": "verstak.activity.search"
       }
     ]
+  },
+  "capabilityOperations": {
+    "verstak/activity/v2": {
+      "list": "verstak.activity.list",
+      "search": "verstak.activity.search"
+    }
   }
 }
