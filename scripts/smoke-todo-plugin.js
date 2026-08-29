@@ -13,6 +13,10 @@ const localeCatalogs = {
   ru: JSON.parse(fs.readFileSync(path.join(root, 'plugins', 'todo', 'locales', 'ru.json'), 'utf8')),
 };
 
+if (/\bprojectId\b/.test(source)) {
+  throw new Error('Todos must not retain Project-scoped runtime records');
+}
+
 class FakeNode {
   constructor(tagName) {
     this.tagName = String(tagName || '').toUpperCase();
@@ -147,11 +151,13 @@ function loadComponent(document, emittedEvents) {
 function makeApi(initialSettings = {}, initialLocale = 'en') {
   const settings = { ...initialSettings };
   const notificationCalls = [];
+  const navigationCalls = [];
   let locale = initialLocale;
   const localeListeners = [];
   return {
     settings,
     notificationCalls,
+    navigationCalls,
     settingsApi: {
       read: async (key) => (key ? settings[key] : { ...settings }),
       write: async (key, value) => {
@@ -188,6 +194,11 @@ function makeApi(initialSettings = {}, initialLocale = 'en') {
         files: this.files,
         workspaces: this.workspaces,
         notifications: this.notifications,
+        navigation: {
+          openWorkspace: async (request) => {
+            navigationCalls.push({ ...request });
+          },
+        },
         i18n: {
           getLocale: () => locale,
           t: (key, params, fallback) => {
@@ -227,11 +238,13 @@ async function mountWithApi(apiState, props, emittedEvents = [], document = make
   if (!manifest.permissions.includes('files.read')) throw new Error('todo manifest must request files.read');
   if (!manifest.permissions.includes('notifications.schedule')) throw new Error('todo manifest must request notifications.schedule');
   if (!manifest.requires.includes('verstak/core/notifications/v1')) throw new Error('todo manifest must require native notifications');
+  if (!manifest.provides.includes('verstak/todo/v2')) throw new Error('todo manifest must provide the Deal-scoped v2 capability');
+  if (manifest.capabilityOperations['verstak/todo/v2']?.list !== 'verstak.todo.list') throw new Error('todo v2 list capability operation is missing');
   if (!(manifest.contributes.views || []).length) throw new Error('todo manifest must contribute a global view');
   if (!(manifest.contributes.workspaceItems || []).length) throw new Error('todo manifest must contribute a workspace item');
 
   const apiState = makeApi();
-  const workspaceView = await mountWithApi(apiState, { workspaceRootPath: 'Project', workspaceNode: { name: 'Project' } });
+  const workspaceView = await mountWithApi(apiState, { workspaceId: 'workspace-project', workspaceName: 'Project', workspaceNode: { id: 'workspace-project', name: 'Project' } });
   const { container } = workspaceView;
   if (!container.textContent.includes('Todos · Project')) throw new Error('workspace Todo title was not rendered');
   if (!byData(container, 'data-todo-action', 'add')) throw new Error('workspace add action was not rendered');
@@ -253,7 +266,7 @@ async function mountWithApi(apiState, props, emittedEvents = [], document = make
   const storedAfterCreate = apiState.settings['todos:global'] || [];
   if (storedAfterCreate.length !== 1) throw new Error(`expected one stored todo, got ${storedAfterCreate.length}`);
   const createdTodo = storedAfterCreate[0];
-  if (createdTodo.workspaceRootPath !== 'Project') throw new Error('workspace Todo did not keep the Project root path');
+  if (createdTodo.workspaceId !== 'workspace-project' || createdTodo.workspaceName !== 'Project') throw new Error('workspace Todo did not keep the Deal UUID and name');
   if (createdTodo.status !== 'open' || createdTodo.priority !== 'high') throw new Error('Todo status or priority was not stored');
   if (createdTodo.dueAt !== '2000-01-02' || createdTodo.reminderDate !== '2000-01-02' || createdTodo.reminderAt !== '2000-01-02T09:30') throw new Error('Todo due/reminder metadata was not stored');
   if (!container.textContent.includes('Overdue') || !container.textContent.includes('Reminder due')) throw new Error('due/reminder indicators were not rendered');
@@ -320,7 +333,8 @@ async function mountWithApi(apiState, props, emittedEvents = [], document = make
   if (journalRequest.todo.id !== createdTodo.id
     || journalRequest.todo.title !== 'Prepare project review updated'
     || journalRequest.todo.description !== 'Collect factual review notes.'
-    || journalRequest.todo.workspaceRootPath !== 'Project'
+    || journalRequest.todo.workspaceId !== 'workspace-project'
+    || journalRequest.todo.workspaceName !== 'Project'
     || !journalRequest.todo.completedAt) {
     throw new Error('Todo Journal conversion did not preserve factual completed Todo fields');
   }
@@ -328,7 +342,8 @@ async function mountWithApi(apiState, props, emittedEvents = [], document = make
   apiState.settings['todos:global'].push({
     id: 'todo-client',
     title: 'Client follow-up',
-    workspaceRootPath: 'ClientA',
+    workspaceId: 'workspace-client',
+    workspaceName: 'ClientA',
     status: 'open',
     priority: 'normal',
     createdAt: '2026-06-30T08:00:00.000Z',
@@ -343,13 +358,13 @@ async function mountWithApi(apiState, props, emittedEvents = [], document = make
   }
   const workspaceFilter = byData(globalView.container, 'data-todo-filter', 'workspace');
   const workspaceFilterValues = workspaceFilter.children.map((option) => option.value);
-  if (!workspaceFilterValues.includes('Clients/Acme')) {
+  if (!workspaceFilterValues.includes('workspace-nested')) {
     throw new Error('global Todo selector omitted a nested semantic Deal');
   }
   if (workspaceFilterValues.includes('OrdinaryFolder') || workspaceFilterValues.includes('DealWithoutTodo')) {
     throw new Error('global Todo selector included a folder or a Deal without Todo');
   }
-  workspaceFilter.value = 'ClientA';
+  workspaceFilter.value = 'workspace-client';
   workspaceFilter.dispatchEvent('change');
   await flush();
   if (!globalView.container.textContent.includes('Client follow-up') || globalView.container.textContent.includes('Prepare project review updated')) {
@@ -365,7 +380,7 @@ async function mountWithApi(apiState, props, emittedEvents = [], document = make
     throw new Error('global Todo status filter was not applied');
   }
 
-  const clientView = await mountWithApi(apiState, { workspaceRootPath: 'ClientA', workspaceNode: { name: 'ClientA' } });
+  const clientView = await mountWithApi(apiState, { workspaceId: 'workspace-client', workspaceName: 'ClientA', workspaceNode: { id: 'workspace-client', name: 'ClientA' } });
   if (!clientView.container.textContent.includes('Client follow-up') || clientView.container.textContent.includes('Prepare project review updated')) {
     throw new Error('workspace Todo view leaked another workspace todo');
   }
