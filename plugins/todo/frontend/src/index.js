@@ -73,17 +73,22 @@
     return text(value).trim().replace(/^\/+|\/+$/g, '');
   }
 
-  function workspaceFromProps(props) {
+  function workspaceIdFromProps(props) {
     var node = props && props.workspaceNode;
-    return cleanWorkspace((props && (props.workspaceRootPath || props.workspaceName || props.workspaceNodeId))
-      || (node && (node.rootPath || node.name || node.id)));
+    return text((props && (props.workspaceId || props.workspaceNodeId)) || (node && (node.workspaceId || node.id))).trim();
+  }
+
+  function workspaceNameFromProps(props) {
+    var node = props && props.workspaceNode;
+    return cleanWorkspace((props && props.workspaceName) || (node && node.name));
   }
 
   function scopeFromProps(props) {
-    var workspaceRoot = workspaceFromProps(props || {});
-    return workspaceRoot
-      ? { mode: 'workspace', workspaceRoot: workspaceRoot, label: workspaceRoot }
-      : { mode: 'global', workspaceRoot: '', label: 'All Deals' };
+    var workspaceId = workspaceIdFromProps(props || {});
+    var workspaceName = workspaceNameFromProps(props || {});
+    return workspaceId
+      ? { mode: 'workspace', workspaceId: workspaceId, label: workspaceName || workspaceId }
+      : { mode: 'global', workspaceId: '', label: 'All Deals' };
   }
 
   function now() {
@@ -153,8 +158,8 @@
     return cleanDateTime(date + 'T' + time);
   }
 
-  function todoId(workspaceRoot, title) {
-    return 'todo:' + (cleanWorkspace(workspaceRoot) || 'global') + ':' + Date.now() + ':' + Math.random().toString(36).slice(2, 8) + ':' + text(title).trim().slice(0, 20).replace(/\s+/g, '-');
+  function todoId(workspaceId, title) {
+    return 'todo:' + (text(workspaceId).trim() || 'global') + ':' + Date.now() + ':' + Math.random().toString(36).slice(2, 8) + ':' + text(title).trim().slice(0, 20).replace(/\s+/g, '-');
   }
 
   function normalizeTodo(value) {
@@ -165,12 +170,11 @@
     var createdAt = text(value.createdAt).trim() || now();
     var completedAt = status === 'done' ? (text(value.completedAt).trim() || createdAt) : '';
     return {
-      id: text(value.id || todoId(value.workspaceRootPath, value.title)).trim(),
+      id: text(value.id || todoId(value.workspaceId, value.title)).trim(),
       title: text(value.title).trim(),
       description: text(value.description || value.body),
-      workspaceRootPath: cleanWorkspace(value.workspaceRootPath || value.workspaceName),
-      workspaceName: cleanWorkspace(value.workspaceName || value.workspaceRootPath),
-      projectId: text(value.projectId).trim(),
+      workspaceId: text(value.workspaceId).trim(),
+      workspaceName: cleanWorkspace(value.workspaceName),
       status: status,
       priority: cleanPriority(value.priority),
       dueAt: cleanDate(value.dueAt || value.dueDate),
@@ -199,9 +203,8 @@
         id: todo.id,
         title: todo.title,
         description: todo.description,
-        workspaceRootPath: todo.workspaceRootPath,
-        workspaceName: todo.workspaceName || todo.workspaceRootPath || '',
-        projectId: todo.projectId || '',
+        workspaceId: todo.workspaceId,
+        workspaceName: todo.workspaceName || '',
         status: todo.status,
         priority: todo.priority,
         dueAt: todo.dueAt,
@@ -354,10 +357,17 @@
       return value === 'all' || STATUS_VALUES.indexOf(value) !== -1 ? value : 'all';
     }
 
-    function workspaceRoots() {
-      var roots = workspaceOptions.slice();
-      if (scope.workspaceRoot && roots.indexOf(scope.workspaceRoot) === -1) roots.push(scope.workspaceRoot);
-      return roots.sort(function (a, b) { return a.localeCompare(b, undefined, { sensitivity: 'base' }); });
+    function workspaceDeals() {
+      var deals = workspaceOptions.slice();
+      if (scope.workspaceId && !deals.some(function (deal) { return deal.id === scope.workspaceId; })) {
+        deals.push({ id: scope.workspaceId, name: scope.label });
+      }
+      return deals.sort(function (a, b) { return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }); });
+    }
+
+    function workspaceName(workspaceId) {
+      var deal = workspaceOptions.find(function (item) { return item.id === workspaceId; });
+      return (deal && deal.name) || '';
     }
 
     function renderWorkspaceFilterOptions() {
@@ -365,21 +375,21 @@
       workspaceFilterEl.innerHTML = '';
       workspaceFilterEl.appendChild(option('', tr('ui.allWorkspaces', null, 'All Deals')));
       workspaceFilterEl.appendChild(option('__unassigned__', tr('ui.unassigned', null, 'Unassigned')));
-      workspaceRoots().forEach(function (workspace) {
-        workspaceFilterEl.appendChild(option(workspace, workspace));
+      workspaceDeals().forEach(function (deal) {
+        workspaceFilterEl.appendChild(option(deal.id, deal.name));
       });
       workspaceFilterEl.value = workspaceFilter;
     }
 
     function visibleTodos() {
       var filtered = todos.filter(function (todo) {
-        var workspace = cleanWorkspace(todo.workspaceRootPath);
-        if (scope.mode === 'workspace' && workspace !== scope.workspaceRoot) return false;
-        if (scope.mode === 'global' && workspaceFilter === '__unassigned__' && workspace) return false;
-        if (scope.mode === 'global' && workspaceFilter && workspaceFilter !== '__unassigned__' && workspace !== workspaceFilter) return false;
+        var workspaceId = text(todo.workspaceId).trim();
+        if (scope.mode === 'workspace' && workspaceId !== scope.workspaceId) return false;
+        if (scope.mode === 'global' && workspaceFilter === '__unassigned__' && workspaceId) return false;
+        if (scope.mode === 'global' && workspaceFilter && workspaceFilter !== '__unassigned__' && workspaceId !== workspaceFilter) return false;
         if (statusFilter !== 'all' && todo.status !== statusFilter) return false;
         if (!searchQuery) return true;
-        return [todo.title, todo.description, todo.workspaceRootPath].join('\n').toLowerCase().indexOf(searchQuery) !== -1;
+        return [todo.title, todo.description, todo.workspaceName].join('\n').toLowerCase().indexOf(searchQuery) !== -1;
       });
       return filtered.sort(function (a, b) {
         if (sortMode === 'updated') return text(b.updatedAt).localeCompare(text(a.updatedAt));
@@ -443,9 +453,9 @@
       if (!api || !api.workspaces || typeof api.workspaces.list !== 'function') return Promise.resolve();
       return api.workspaces.list().then(function (workspaces) {
         workspaceOptions = (Array.isArray(workspaces) ? workspaces : []).map(function (workspace) {
-          return cleanWorkspace(workspace && workspace.rootPath);
+          return { id: text(workspace && workspace.id).trim(), name: cleanWorkspace(workspace && (workspace.name || workspace.rootPath)) };
         }).filter(function (workspace, index, items) {
-          return workspace && items.indexOf(workspace) === index;
+          return workspace.id && !items.slice(0, index).some(function (item) { return item.id === workspace.id; });
         });
       }).catch(function () {
         workspaceOptions = [];
@@ -469,14 +479,14 @@
       var reminderDateInput = el('input', { className: 'todo-input', type: 'date', value: editing ? existingTodo.reminderDate || reminder.date : '', 'data-todo-input': 'reminderDate' });
       var reminderTimeInput = el('input', { className: 'todo-input todo-time-input', type: 'text', inputmode: 'numeric', maxlength: '5', placeholder: tr('ui.reminderTimePlaceholder', null, '14:30'), value: reminder.time, 'data-todo-input': 'reminderTime', 'aria-label': tr('ui.field.reminderTime', null, 'Reminder time') });
       var workspaceInput = null;
-      var workspace = editing ? existingTodo.workspaceRootPath : scope.workspaceRoot;
+      var workspaceId = editing ? existingTodo.workspaceId : scope.workspaceId;
       if (scope.mode === 'global') {
-        workspaceInput = el('select', { className: 'todo-select', 'data-todo-input': 'workspaceRootPath' });
+        workspaceInput = el('select', { className: 'todo-select', 'data-todo-input': 'workspaceId' });
         workspaceInput.appendChild(option('', tr('ui.unassigned', null, 'Unassigned')));
-        workspaceRoots().forEach(function (workspaceRoot) {
-          workspaceInput.appendChild(option(workspaceRoot, workspaceRoot));
+        workspaceDeals().forEach(function (deal) {
+          workspaceInput.appendChild(option(deal.id, deal.name));
         });
-        workspaceInput.value = workspace || '';
+        workspaceInput.value = workspaceId || '';
       }
 
       function saveTodo() {
@@ -487,7 +497,8 @@
           render();
           return;
         }
-        var workspaceRoot = scope.mode === 'workspace' ? scope.workspaceRoot : cleanWorkspace(workspaceInput && workspaceInput.value);
+        var selectedWorkspaceId = scope.mode === 'workspace' ? scope.workspaceId : text(workspaceInput && workspaceInput.value).trim();
+        var selectedWorkspaceName = scope.mode === 'workspace' ? scope.label : workspaceName(selectedWorkspaceId);
         var reminderDate = cleanDate(reminderDateInput.value);
         var reminderTime = cleanReminderTime(reminderTimeInput.value);
         if (text(reminderTimeInput.value).trim() && !reminderTime) {
@@ -504,11 +515,11 @@
         }
         var timestamp = now();
         var next = normalizeTodo({
-          id: editing ? existingTodo.id : todoId(workspaceRoot, title),
+          id: editing ? existingTodo.id : todoId(selectedWorkspaceId, title),
           title: title,
           description: descriptionInput.value,
-          workspaceRootPath: workspaceRoot,
-          workspaceName: workspaceRoot,
+          workspaceId: selectedWorkspaceId,
+          workspaceName: selectedWorkspaceName,
           status: editing ? existingTodo.status : 'open',
           priority: priorityInput.value,
           dueAt: dueInput.value,
@@ -526,7 +537,9 @@
           todos = [next].concat(todos);
         }
         todos = sortTodos(todos);
-        if (workspaceRoot && workspaceOptions.indexOf(workspaceRoot) === -1) workspaceOptions.push(workspaceRoot);
+        if (selectedWorkspaceId && !workspaceOptions.some(function (deal) { return deal.id === selectedWorkspaceId; })) {
+          workspaceOptions.push({ id: selectedWorkspaceId, name: selectedWorkspaceName || selectedWorkspaceId });
+        }
         closeTodoModal();
         statusText = editing ? tr('ui.updated', null, 'Todo updated') : tr('ui.added', null, 'Todo added');
         statusClass = '';
@@ -542,7 +555,7 @@
         el('label', { className: 'todo-field' }, [tr('ui.field.reminderTime', null, 'Reminder time'), reminderTimeInput])
       ];
       if (workspaceInput) fields.push(el('label', { className: 'todo-field' }, [tr('ui.field.workspace', null, 'Deal'), workspaceInput]));
-      else fields.push(el('div', { className: 'todo-field', textContent: tr('ui.workspaceValue', { workspace: scope.workspaceRoot }, 'Deal: ' + scope.workspaceRoot) }));
+      else fields.push(el('div', { className: 'todo-field', textContent: tr('ui.workspaceValue', { workspace: scope.label }, 'Deal: ' + scope.label) }));
 
       modalHost.innerHTML = '';
       if (typeof modalHost.removeAttribute === 'function') modalHost.removeAttribute('hidden');
@@ -584,10 +597,9 @@
     }
 
     function openWorkspace(todo) {
-      var workspaceRoot = cleanWorkspace(todo && todo.workspaceRootPath);
-      if (!workspaceRoot || typeof window === 'undefined' || typeof window.dispatchEvent !== 'function' || typeof CustomEvent === 'undefined') return;
-      window.dispatchEvent(new CustomEvent('verstak:workspace-selected', { detail: { workspaceName: workspaceRoot } }));
-      window.dispatchEvent(new CustomEvent('verstak:workspace-open-tool', { detail: { workspaceItemId: 'verstak.todo.workspace' } }));
+      var workspaceId = text(todo && todo.workspaceId).trim();
+      if (!workspaceId || !api || !api.navigation || typeof api.navigation.openWorkspace !== 'function') return;
+      api.navigation.openWorkspace({ workspaceId: workspaceId, workspaceItemId: 'verstak.todo.workspace' });
     }
 
     function createJournalEntry(todo) {
@@ -602,7 +614,8 @@
               id: todo.id,
               title: todo.title,
               description: todo.description,
-              workspaceRootPath: scope.workspaceRoot,
+              workspaceId: scope.workspaceId,
+              workspaceName: scope.label,
               completedAt: todo.completedAt
             }
           }
@@ -612,7 +625,7 @@
 
     function renderTodoMeta(todo) {
       var meta = [];
-      var workspace = cleanWorkspace(todo.workspaceRootPath);
+      var workspace = cleanWorkspace(todo.workspaceName);
       var due = dueState(todo);
       var reminderDue = reminderIsDue(todo);
       if (scope.mode === 'global') meta.push(el('span', { className: 'todo-badge', textContent: workspace || tr('ui.unassigned', null, 'Unassigned') }));
@@ -636,7 +649,7 @@
       }
       visible.forEach(function (todo) {
         var actionButtons = [];
-        if (scope.mode === 'global' && todo.workspaceRootPath) {
+        if (scope.mode === 'global' && todo.workspaceId) {
           actionButtons.push(el('button', { className: 'todo-btn', type: 'button', 'data-todo-action': 'open-workspace', textContent: tr('ui.openWorkspace', null, 'Open Deal'), onClick: function () { openWorkspace(todo); } }));
         }
         if (todo.status === 'open') {
@@ -742,18 +755,35 @@
     }).then(function () { return records; });
   }
 
+  function dealWorkspaceId(args) {
+    var scope = args && args.scope;
+    if (scope) {
+      if (scope.kind !== 'deal' || !text(scope.workspaceId).trim()) {
+        return Promise.reject(new Error('DealScope.workspaceId is required'));
+      }
+      return Promise.resolve(text(scope.workspaceId).trim());
+    }
+    return Promise.resolve(text(args && args.workspaceId).trim());
+  }
+
+  function dealWorkspaceName(api, workspaceId) {
+    if (!workspaceId || !api || !api.workspaces || typeof api.workspaces.list !== 'function') return Promise.resolve('');
+    return api.workspaces.list().then(function (workspaces) {
+      var workspace = (workspaces || []).find(function (item) { return item && item.id === workspaceId; });
+      return cleanWorkspace(workspace && (workspace.name || workspace.rootPath));
+    });
+  }
+
   function listTodosCapability(api, args) {
     args = args || {};
-    var workspace = cleanWorkspace(args.workspaceRootPath);
     var requestedStatus = text(args.status).trim().toLowerCase();
-    var hasProjectFilter = Object.prototype.hasOwnProperty.call(args, 'projectId');
-    var projectId = text(args.projectId).trim();
-    return loadTodoRecords(api).then(function (todos) {
-      return todos.filter(function (todo) {
-        if (workspace && cleanWorkspace(todo.workspaceRootPath) !== workspace) return false;
-        if (hasProjectFilter && text(todo.projectId).trim() !== projectId) return false;
-        if (requestedStatus && requestedStatus !== 'all' && todo.status !== requestedStatus) return false;
-        return true;
+    return dealWorkspaceId(args).then(function (workspaceId) {
+      return loadTodoRecords(api).then(function (todos) {
+        return todos.filter(function (todo) {
+          if (workspaceId && todo.workspaceId !== workspaceId) return false;
+          if (requestedStatus && requestedStatus !== 'all' && todo.status !== requestedStatus) return false;
+          return true;
+        });
       });
     });
   }
@@ -762,27 +792,29 @@
     args = args || {};
     var title = text(args.title).trim();
     if (!title) return Promise.reject(new Error('todo title must not be empty'));
-    var workspace = cleanWorkspace(args.workspaceRootPath);
-    var timestamp = now();
-    var todo = normalizeTodo({
-      id: todoId(workspace, title),
-      title: title,
-      description: args.description,
-      workspaceRootPath: workspace,
-      workspaceName: workspace,
-      projectId: text(args.projectId).trim(),
-      status: 'open',
-      priority: args.priority,
-      dueAt: args.dueAt,
-      reminderDate: args.reminderDate,
-      reminderAt: args.reminderAt,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-      sourceUrl: args.sourceUrl
+    return dealWorkspaceId(args).then(function (workspaceId) {
+      return dealWorkspaceName(api, workspaceId).then(function (workspaceName) {
+        var timestamp = now();
+        var todo = normalizeTodo({
+          id: todoId(workspaceId, title),
+          title: title,
+          description: args.description,
+          workspaceId: workspaceId,
+          workspaceName: workspaceName,
+          status: 'open',
+          priority: args.priority,
+          dueAt: args.dueAt,
+          reminderDate: args.reminderDate,
+          reminderAt: args.reminderAt,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          sourceUrl: args.sourceUrl
+        });
+        return loadTodoRecords(api).then(function (todos) {
+          return persistTodoRecords(api, [todo].concat(todos));
+        }).then(function () { return todo; });
+      });
     });
-    return loadTodoRecords(api).then(function (todos) {
-      return persistTodoRecords(api, [todo].concat(todos));
-    }).then(function () { return todo; });
   }
 
   function setTodoStatusCapability(api, args) {
@@ -811,31 +843,32 @@
   }
 
   function provideOverview(api, args) {
-    var workspace = cleanWorkspace(args && args.workspaceRootPath);
-    if (!workspace || !api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve({});
-    return api.settings.read().then(function (settings) {
-      var todos = sortTodos(normalizeTodos((settings || {})[GLOBAL_KEY])).filter(function (todo) {
-        return cleanWorkspace(todo.workspaceRootPath) === workspace && !!todoOverviewState(api, todo);
-      }).sort(function (a, b) {
-        var av = dateTimeValue(a.reminderAt, false) || dateTimeValue(a.dueAt, true) || Number.MAX_SAFE_INTEGER;
-        var bv = dateTimeValue(b.reminderAt, false) || dateTimeValue(b.dueAt, true) || Number.MAX_SAFE_INTEGER;
-        return av - bv || text(b.updatedAt).localeCompare(text(a.updatedAt));
+    return dealWorkspaceId(args).then(function (workspaceId) {
+      if (!workspaceId || !api || !api.settings || typeof api.settings.read !== 'function') return {};
+      return api.settings.read().then(function (settings) {
+        var todos = sortTodos(normalizeTodos((settings || {})[GLOBAL_KEY])).filter(function (todo) {
+          return todo.workspaceId === workspaceId && !!todoOverviewState(api, todo);
+        }).sort(function (a, b) {
+          var av = dateTimeValue(a.reminderAt, false) || dateTimeValue(a.dueAt, true) || Number.MAX_SAFE_INTEGER;
+          var bv = dateTimeValue(b.reminderAt, false) || dateTimeValue(b.dueAt, true) || Number.MAX_SAFE_INTEGER;
+          return av - bv || text(b.updatedAt).localeCompare(text(a.updatedAt));
+        });
+        return {
+          attention: todos.map(function (todo, index) {
+            var state = todoOverviewState(api, todo);
+            var due = todo.dueAt ? overviewText(api, 'overview.due', { date: todo.dueAt }, 'Due ' + todo.dueAt) : '';
+            return {
+              id: todo.id,
+              title: todo.title || 'Untitled',
+              meta: due ? state + ' · ' + due : state,
+              occurredAt: todo.reminderAt || todo.dueAt || todo.updatedAt || todo.createdAt || '',
+              order: 10 + index,
+              action: { workspaceItemId: 'verstak.todo.workspace' }
+            };
+          }),
+          lastActiveAt: todos.length ? (todos[0].updatedAt || todos[0].dueAt || '') : ''
+        };
       });
-      return {
-        attention: todos.map(function (todo, index) {
-          var state = todoOverviewState(api, todo);
-          var due = todo.dueAt ? overviewText(api, 'overview.due', { date: todo.dueAt }, 'Due ' + todo.dueAt) : '';
-          return {
-            id: todo.id,
-            title: todo.title || 'Untitled',
-            meta: due ? state + ' · ' + due : state,
-            occurredAt: todo.reminderAt || todo.dueAt || todo.updatedAt || todo.createdAt || '',
-            order: 10 + index,
-            action: { workspaceItemId: 'verstak.todo.workspace' }
-          };
-        }),
-        lastActiveAt: todos.length ? (todos[0].updatedAt || todos[0].dueAt || '') : ''
-      };
     }).catch(function (err) {
       console.warn('[verstak.todo] overview provider:', err);
       return {};

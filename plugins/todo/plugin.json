@@ -16,7 +16,9 @@
   "icon": "list-todo",
   "provides": [
     "todo.list",
-    "todo.workspace"
+    "todo.workspace",
+    "verstak/todo/v1",
+    "verstak/todo/v2"
   ],
   "requires": [
     "verstak/core/notifications/v1"
@@ -100,7 +102,12 @@
     ]
   },
   "capabilityOperations": {
-    "todo.workspace": {
+    "verstak/todo/v1": {
+      "list": "verstak.todo.list",
+      "create": "verstak.todo.create",
+      "setStatus": "verstak.todo.setStatus"
+    },
+    "verstak/todo/v2": {
       "list": "verstak.todo.list",
       "create": "verstak.todo.create",
       "setStatus": "verstak.todo.setStatus"
