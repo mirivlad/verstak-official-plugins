@@ -15,7 +15,8 @@
   "source": "official",
   "icon": "edit",
   "provides": [
-    "verstak/notes/v1"
+    "verstak/notes/v1",
+    "verstak/notes/v2"
   ],
   "requires": [
     "verstak/core/files/v1",
@@ -79,16 +80,11 @@
       "list": "verstak.notes.list",
       "create": "verstak.notes.create",
       "open": "verstak.notes.open"
+    },
+    "verstak/notes/v2": {
+      "list": "verstak.notes.list",
+      "create": "verstak.notes.create",
+      "open": "verstak.notes.open"
     }
-  },
-  "sync": {
-    "records": [
-      {
-        "id": "project-scopes",
-        "storage": "settings",
-        "key": "notes:projectScopes",
-        "identity": "path"
-      }
-    ]
   }
 }

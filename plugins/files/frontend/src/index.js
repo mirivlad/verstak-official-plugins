@@ -7,7 +7,6 @@
   'use strict';
 
   var PLUGIN_ID = 'verstak.files';
-  var PROJECT_SCOPE_KEY = 'files:projectScopes';
   var LIST_COMMAND_ID = 'verstak.files.list';
   var CREATE_COMMAND_ID = 'verstak.files.create';
   var OPEN_COMMAND_ID = 'verstak.files.open';
@@ -189,77 +188,6 @@
   function isConflictError(err) {
     var msg = (err && err.message) ? err.message : String(err || '');
     return /conflict|already exists|exists/i.test(msg);
-  }
-
-  function normalizeProjectScopes(value) {
-    if (!Array.isArray(value)) return [];
-    var seen = {};
-    return value.map(function (item) {
-      return { path: cleanPath(item && item.path), projectId: String(item && item.projectId || '').trim() };
-    }).filter(function (item) {
-      if (!item.path || !item.projectId || seen[item.path]) return false;
-      seen[item.path] = true;
-      return true;
-    });
-  }
-
-  function loadProjectScopes(api) {
-    if (!api || !api.settings || typeof api.settings.read !== 'function') return Promise.resolve([]);
-    return api.settings.read(PROJECT_SCOPE_KEY).then(normalizeProjectScopes);
-  }
-
-  function saveProjectScopes(api, scopes) {
-    scopes = normalizeProjectScopes(scopes);
-    return api.settings.write(PROJECT_SCOPE_KEY, scopes).then(function () { return scopes; });
-  }
-
-  function scopeForPath(scopes, path) {
-    path = cleanPath(path);
-    var row = (scopes || []).find(function (item) { return item.path === path; });
-    return row ? row.projectId : '';
-  }
-
-  function assignProjectScope(api, path, projectId) {
-    path = cleanPath(path); projectId = String(projectId || '').trim();
-    if (!path) return Promise.resolve([]);
-    return loadProjectScopes(api).then(function (scopes) {
-      var next = scopes.filter(function (item) { return item.path !== path; });
-      if (projectId) next.push({ path: path, projectId: projectId });
-      return saveProjectScopes(api, next);
-    });
-  }
-
-  function moveProjectScope(api, from, to) {
-    from = cleanPath(from); to = cleanPath(to);
-    return loadProjectScopes(api).then(function (scopes) {
-      var changed = false;
-      var next = scopes.map(function (item) {
-        if (item.path === from || item.path.indexOf(from + '/') === 0) {
-          changed = true;
-          return { path: to + item.path.slice(from.length), projectId: item.projectId };
-        }
-        return item;
-      });
-      return changed ? saveProjectScopes(api, next) : scopes;
-    });
-  }
-
-  function removeProjectScope(api, path) {
-    path = cleanPath(path);
-    return loadProjectScopes(api).then(function (scopes) {
-      var next = scopes.filter(function (item) { return item.path !== path && item.path.indexOf(path + '/') !== 0; });
-      return next.length === scopes.length ? scopes : saveProjectScopes(api, next);
-    });
-  }
-
-  function copyProjectScope(api, from, to) {
-    from = cleanPath(from); to = cleanPath(to);
-    return loadProjectScopes(api).then(function (scopes) {
-      var additions = scopes.filter(function (item) { return item.path === from || item.path.indexOf(from + '/') === 0; }).map(function (item) {
-        return { path: to + item.path.slice(from.length), projectId: item.projectId };
-      });
-      return additions.length ? saveProjectScopes(api, scopes.concat(additions)) : scopes;
-    });
   }
 
   var FILE_ICONS = {
@@ -1197,8 +1125,6 @@
           return;
         }
         api.files.move(from, to, { overwrite: false }).then(function () {
-          return moveProjectScope(api, from, to);
-        }).then(function () {
           cancelRename();
           loadEntries();
         }).catch(function (err) {
@@ -1220,8 +1146,6 @@
           }).then(function (ok) {
             if (!ok) return;
             api.files.trash(entry.relativePath).then(function () {
-              return removeProjectScope(api, entry.relativePath);
-            }).then(function () {
               loadEntries();
             }).catch(function (err) {
               showNotice(reportError('ui.trashError', 'Could not move this item to trash. Please try again.', err));
@@ -1236,7 +1160,7 @@
             if (!ok) return;
             var paths = Object.keys(selectedPaths);
             Promise.allSettled(paths.map(function (p) {
-              return api.files.trash(p).then(function () { return removeProjectScope(api, p); });
+              return api.files.trash(p);
             })).then(function () {
               loadEntries();
             });
@@ -1391,9 +1315,7 @@
           function tryName(n) {
             var newName = n === 1 ? base + ' (copy)' + ext : base + ' (copy ' + n + ')' + ext;
             var to = scopedPath(currentPath ? currentPath + '/' + newName : newName);
-            return api.files.writeText(to, content, { createIfMissing: true, overwrite: false }).then(function () {
-              return copyProjectScope(api, from, to);
-            }).catch(function (err) {
+            return api.files.writeText(to, content, { createIfMissing: true, overwrite: false }).catch(function (err) {
               if (!isConflictError(err)) throw err;
               if (n >= maxAttempts) {
                 console.error('[files] Duplicate failed: all ' + maxAttempts + ' name variations are taken');
@@ -1488,9 +1410,7 @@
             var successful = (outcome && Array.isArray(outcome.results))
               ? outcome.results.filter(function (result) { return !result.error && !result.skipped; })
               : transfers;
-            return Promise.all(successful.map(function (result) {
-              return cutting ? moveProjectScope(api, result.from, result.to) : copyProjectScope(api, result.from, result.to);
-            })).then(function () { return outcome; });
+            return Promise.resolve(outcome);
           });
         }).then(function (outcome) {
           if (outcome && cutting && !outcome.cancelled && outcome.failed === 0) {
@@ -1558,7 +1478,7 @@
         var promises = sourcePaths.filter(function (p) { return parentPath(p) !== targetDirPath; }).map(function (p) {
           var name = baseName(p);
           var to = targetDirPath ? targetDirPath + '/' + name : name;
-          return api.files.move(p, to, { overwrite: false }).then(function () { return moveProjectScope(api, p, to); });
+          return api.files.move(p, to, { overwrite: false });
         });
         if (promises.length === 0) return Promise.resolve();
         return Promise.allSettled(promises).then(function () { loadEntries(); });
@@ -1912,41 +1832,54 @@
     }
   };
 
-  function projectFilesFolderPath(workspace) {
+  function dealFilesFolderPath(workspace) {
     workspace = cleanPath(workspace);
     return workspace ? workspace + '/Files' : 'Files';
   }
 
-  function normalizeProjectFileName(value) {
+  function normalizeDealFileName(value) {
     var name = String(value || '').trim().replace(/[\\/:*?"<>|\x00-\x1f]/g, '');
     if (!name || name === '.' || name === '..') throw new Error('file name must not be empty');
     if (!/\.[^/.]+$/.test(name)) name += '.md';
     return name;
   }
 
+  function resolveDealWorkspace(api, args) {
+    var scope = args && args.scope;
+    var workspaceId = String(scope && scope.workspaceId || '').trim();
+    if (!scope || scope.kind !== 'deal' || !workspaceId) return Promise.reject(new Error('DealScope.workspaceId is required'));
+    return api.workspaces.list().then(function (workspaces) {
+      var workspace = (workspaces || []).find(function (item) { return item && item.id === workspaceId; });
+      if (!workspace || !workspace.rootPath) throw new Error('Deal scope is not available to Files');
+      return cleanPath(workspace.rootPath);
+    });
+  }
+
   function listFilesCapability(api, args) {
     args = args || {};
-    var workspace = cleanPath(args.workspaceRootPath);
-    var projectId = String(args.projectId || '').trim();
-    return loadProjectScopes(api).then(function (scopes) {
-      var prefix = workspace ? workspace + '/' : '';
-      var matching = scopes.filter(function (item) {
-        if (prefix && item.path.indexOf(prefix) !== 0) return false;
-        return !projectId || item.projectId === projectId;
+    if (args.scope) {
+      return resolveDealWorkspace(api, args).then(function (workspaceRootPath) {
+        return listFilesCapability(api, { workspaceRootPath: workspaceRootPath });
       });
-      return Promise.all(matching.map(function (item) {
-        return api.files.metadata(item.path).then(function (meta) {
+    }
+    var workspace = cleanPath(args.workspaceRootPath);
+    var folder = dealFilesFolderPath(workspace);
+    return api.files.list(folder).catch(function (err) {
+      if (isNotFoundError(err)) return [];
+      throw err;
+    }).then(function (entries) {
+      return (entries || []).map(function (entry) {
+        return api.files.metadata(entry.relativePath).then(function (meta) {
           return {
-            path: item.path,
-            name: baseName(item.path),
+            path: entry.relativePath,
+            name: baseName(entry.relativePath),
             type: meta && meta.type || 'file',
             size: meta && meta.size || 0,
             modifiedAt: meta && meta.modifiedAt || '',
-            extension: meta && meta.extension || extension(item.path),
-            projectId: item.projectId
+            extension: meta && meta.extension || extension(entry.relativePath)
           };
         }).catch(function () { return null; });
-      })).then(function (items) {
+      }).then(function (items) {
         return items.filter(Boolean).sort(function (a, b) { return a.name.localeCompare(b.name); });
       });
     });
@@ -1954,12 +1887,15 @@
 
   function createFileCapability(api, args) {
     args = args || {};
+    if (args.scope) {
+      return resolveDealWorkspace(api, args).then(function (workspaceRootPath) {
+        return createFileCapability(api, Object.assign({}, args, { scope: undefined, workspaceRootPath: workspaceRootPath }));
+      });
+    }
     var workspace = cleanPath(args.workspaceRootPath);
-    var projectId = String(args.projectId || '').trim();
     if (!workspace) return Promise.reject(new Error('workspaceRootPath is required'));
-    if (!projectId) return Promise.reject(new Error('projectId is required'));
-    var name = normalizeProjectFileName(args.name || args.title);
-    var folder = projectFilesFolderPath(workspace);
+    var name = normalizeDealFileName(args.name || args.title);
+    var folder = dealFilesFolderPath(workspace);
     var path = folder + '/' + name;
     var content = String(args.content == null ? '' : args.content);
     if (!content && /\.(md|markdown)$/i.test(name)) content = '# ' + name.replace(/\.(md|markdown)$/i, '') + '\n';
@@ -1968,23 +1904,26 @@
     }).then(function () {
       return api.files.writeText(path, content, { createIfMissing: true, overwrite: false });
     }).then(function () {
-      return assignProjectScope(api, path, projectId);
-    }).then(function () {
-      return { path: path, name: name, projectId: projectId };
+      return { path: path, name: name };
     }).catch(function (err) {
-      if (isConflictError(err)) return { path: path, name: name, projectId: projectId, conflict: true };
+      if (isConflictError(err)) return { path: path, name: name, conflict: true };
       throw err;
     });
   }
 
   function openFileCapability(api, args) {
     args = args || {};
+    if (args.scope) {
+      return resolveDealWorkspace(api, args).then(function (workspaceRootPath) {
+        return openFileCapability(api, Object.assign({}, args, { scope: undefined, workspaceRootPath: workspaceRootPath }));
+      });
+    }
     var path = cleanPath(args.path);
     if (!path) return Promise.reject(new Error('file path must not be empty'));
     var ext = extension(path);
     return api.workbench.openResource({
       kind: 'vault-file', path: path, mode: args.mode === 'edit' ? 'edit' : 'view',
-      extension: ext ? '.' + ext : '', context: { sourcePluginId: PLUGIN_ID, sourceView: 'files', projectId: String(args.projectId || '') }
+      extension: ext ? '.' + ext : '', context: { sourcePluginId: PLUGIN_ID, sourceView: 'files' }
     });
   }
 
