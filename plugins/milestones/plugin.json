@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "verstak.milestones",
   "name": "Milestones",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "apiVersion": "0.1.0",
-  "description": "Independent Deal-scoped milestones.",
+  "description": "Checkpoints and deadlines inside a Deal.",
   "localization": {
     "defaultLocale": "en",
     "locales": {
