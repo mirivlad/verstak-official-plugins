@@ -13,7 +13,15 @@ if (!fs.existsSync(sourcePath)) throw new Error('journal frontend entry missing'
 
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 const source = fs.readFileSync(sourcePath, 'utf8');
+const journal = source;
 const russianLocale = JSON.parse(fs.readFileSync(russianLocalePath, 'utf8'));
+
+function assertIncludes(value, expected, message) {
+  if (!value.includes(expected)) throw new Error(message);
+}
+
+assertIncludes(journal, 'journal-candidate-group', 'Journal renders grouped candidate activity');
+assertIncludes(journal, 'max-width: min(900px, 96vw)', 'Journal review modal is desktop-width responsive');
 
 class FakeNode {
   constructor(tagName) {

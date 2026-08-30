@@ -15,7 +15,7 @@
     '.git-field{display:grid;gap:.34rem;font-size:.74rem;color:var(--vt-color-text-muted,#7f8aa3)}.git-input,.git-select{box-sizing:border-box;width:100%;min-height:2.15rem;padding:.42rem .58rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-input,#0f1424);color:var(--vt-color-text-primary,#f4f7fb);font:inherit;font-size:.82rem;outline:none;color-scheme:dark}.git-input:focus,.git-select:focus{border-color:var(--vt-color-accent,#4ecca3);box-shadow:var(--vt-focus-ring,0 0 0 2px rgba(78,204,163,.34))}',
     '.git-select{appearance:none;-webkit-appearance:none;padding-right:2rem;background-image:linear-gradient(45deg,transparent 50%,var(--vt-color-text-muted,#7f8aa3) 50%),linear-gradient(135deg,var(--vt-color-text-muted,#7f8aa3) 50%,transparent 50%);background-position:calc(100% - 13px) 50%,calc(100% - 8px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat}.git-select option{background:var(--vt-color-surface,#15152c);color:var(--vt-color-text-primary,#f4f7fb)}',
     '.git-card{display:grid;gap:.8rem;padding:1rem;margin-bottom:.75rem;border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface,#15152c)}.git-card:hover{border-color:var(--vt-color-border-strong,#2c456a)}.git-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem}.git-card-title{font-size:.96rem;font-weight:700}.git-meta{font-size:.75rem;color:var(--vt-color-text-muted,#7f8aa3);line-height:1.45;overflow-wrap:anywhere}.git-path{display:inline-flex;align-items:center;min-height:1.45rem;padding:0 .42rem;margin-top:.35rem;border-radius:999px;background:var(--vt-color-surface-muted,#111629);color:var(--vt-color-text-secondary,#b7c0d4);font-size:.69rem}',
-    '.git-actions{display:flex;gap:.42rem;align-items:center;flex-wrap:wrap}.git-remove{color:var(--vt-color-danger,#ff8e9b)!important}.git-error{margin-bottom:.75rem;color:var(--vt-color-danger,#ff8e9b);font-size:.78rem}.git-empty{padding:3rem 1rem;border:1px dashed var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-lg,8px);color:var(--vt-color-text-muted,#7f8aa3);text-align:center}',
+    '.git-actions{display:flex;gap:.42rem;align-items:center;flex-wrap:wrap}.git-remove{color:var(--vt-color-danger,#ff8e9b)!important}.git-error{margin-bottom:.75rem;color:var(--vt-color-danger,#ff8e9b);font-size:.78rem}.git-operation{display:flex;align-items:center;gap:.4rem;font-size:.76rem;color:var(--vt-color-text-secondary,#c9d2e3)}.git-operation.success{color:var(--vt-color-success,#72d6a0)}.git-operation.error{color:var(--vt-color-danger,#ff8e9b)}.git-operation-spinner{width:.75rem;height:.75rem;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:git-operation-spin .8s linear infinite}@keyframes git-operation-spin{to{transform:rotate(360deg)}}.git-empty{padding:3rem 1rem;border:1px dashed var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-lg,8px);color:var(--vt-color-text-muted,#7f8aa3);text-align:center}',
     '.git-status{display:flex;gap:.55rem;flex-wrap:wrap;align-items:center;font-size:.76rem;color:var(--vt-color-text-muted,#7f8aa3)}.git-badge{display:inline-flex;align-items:center;min-height:1.45rem;padding:0 .45rem;border-radius:999px;background:var(--vt-color-surface-hover,#1b2440);color:var(--vt-color-text-secondary,#c9d2e3)}.git-badge.good{color:var(--vt-color-success,#72d6a0)}.git-badge.warn{color:var(--vt-color-warning,#f6c56d)}',
     '.git-files{padding:.55rem .65rem;border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-surface-muted,#111629);font-size:.74rem;color:var(--vt-color-text-muted,#7f8aa3);word-break:break-word}.git-commits{display:grid;gap:.1rem;padding:.55rem .65rem;border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-surface-muted,#111629);font-size:.75rem;color:var(--vt-color-text-muted,#7f8aa3)}.git-commit{display:grid;grid-template-columns:5.5rem minmax(0,1fr);gap:.5rem;padding:.18rem 0}.git-commit code{color:var(--vt-color-text-secondary,#c9d2e3)}',
     '@media(max-width:720px){.git-form{grid-template-columns:1fr}.git-form-wide,.git-form-title,.git-form-actions{grid-column:1}.git-card-head{display:grid}.git-header{align-items:flex-start;flex-direction:column}}@media(max-width:560px){.git-shell{padding:1rem}}'
@@ -194,6 +194,8 @@
       var rows = [];
       var statuses = {};
       var busy = {};
+      var operations = {};
+      var outcomes = {};
       var error = '';
       var editing = null;
 
@@ -214,12 +216,29 @@
           return Promise.all(rows.map(refreshStatus)).then(render);
         });
       }
-      function operation(row, name, request) {
+      function operationLabel(operation) {
+        var labels = {
+          clone: ['ui.clone', 'Clone'],
+          registerExisting: ['ui.useExisting', 'Use existing checkout'],
+          fetch: ['ui.fetch', 'Fetch'],
+          pull: ['ui.pull', 'Pull'],
+          push: ['ui.push', 'Push'],
+          openDirectory: ['ui.openDirectory', 'Open folder']
+        };
+        var label = labels[operation.kind] || ['ui.operation', 'Git operation'];
+        return tr(api, label[0], label[1]);
+      }
+      function operation(row, nextOperation, request) {
+        var activeOperation = { repoId: row.id, kind: nextOperation.kind, startedAt: now() };
         busy[row.id] = true;
+        operations[row.id] = activeOperation;
+        delete outcomes[row.id];
         error = '';
         render();
-        return api.git[name](request || gitRequest(row)).then(function (result) {
+        return api.git[activeOperation.kind](request || gitRequest(row)).then(function (result) {
           busy[row.id] = false;
+          delete operations[row.id];
+          outcomes[row.id] = { kind: activeOperation.kind, state: 'success' };
           if (result && Object.prototype.hasOwnProperty.call(result, 'checkoutPath') && !result.checkoutPath) {
             render();
             return;
@@ -227,7 +246,8 @@
           return refreshStatus(row).then(render);
         }).catch(function () {
           busy[row.id] = false;
-          error = tr(api, 'ui.operationError', 'Git operation failed.');
+          delete operations[row.id];
+          outcomes[row.id] = { kind: activeOperation.kind, state: 'error' };
           render();
         });
       }
@@ -321,6 +341,8 @@
       }
       function renderCard(shell, row) {
         var status = statuses[row.id];
+        var activeOperation = operations[row.id];
+        var outcome = outcomes[row.id];
         var card = el('div', { className: 'git-card', 'data-git-repository': row.id });
         var head = el('div', { className: 'git-card-head' });
         var identity = el('div', {});
@@ -335,18 +357,27 @@
         } }));
         head.appendChild(descriptorActions);
         card.appendChild(head);
+        if (activeOperation) {
+          card.appendChild(el('div', { className: 'git-operation', 'data-git-operation': activeOperation.kind }, [
+            el('span', { className: 'git-operation-spinner', 'aria-hidden': 'true' }),
+            el('span', { textContent: operationLabel(activeOperation) + '…' })
+          ]));
+        } else if (outcome) {
+          card.appendChild(el('div', { className: 'git-operation ' + outcome.state, 'data-git-operation-result': outcome.state, textContent: operationLabel(outcome) + (outcome.state === 'success' ? ' ' + tr(api, 'ui.operationComplete', 'completed.') : ' ' + tr(api, 'ui.operationError', 'failed.')) }));
+        }
         renderStatus(card, row);
         var actions = el('div', { className: 'git-actions' });
         if (status && status.state === 'not-cloned') {
           actions.appendChild(el('button', { className: 'vt-button primary compact', type: 'button', textContent: tr(api, 'ui.clone', 'Clone'), disabled: busy[row.id], 'data-git-action': 'clone', onClick: function () {
-            var request = gitRequest(row); request.branch = row.defaultBranch; operation(row, 'clone', request);
+            var request = gitRequest(row); request.branch = row.defaultBranch; operation(row, { kind: 'clone' }, request);
           } }));
-          actions.appendChild(el('button', { className: 'vt-button secondary compact', type: 'button', textContent: tr(api, 'ui.useExisting', 'Use existing checkout'), disabled: busy[row.id], 'data-git-action': 'register-existing', onClick: function () { operation(row, 'registerExisting'); } }));
+          actions.appendChild(el('button', { className: 'vt-button secondary compact', type: 'button', textContent: tr(api, 'ui.useExisting', 'Use existing checkout'), disabled: busy[row.id], 'data-git-action': 'register-existing', onClick: function () { operation(row, { kind: 'registerExisting' }); } }));
         } else if (status && status.state === 'cloned') {
-          ['fetch', 'pull', 'push'].forEach(function (name) {
-            actions.appendChild(el('button', { className: 'vt-button secondary compact', type: 'button', textContent: tr(api, 'ui.' + name, name.charAt(0).toUpperCase() + name.slice(1)), disabled: busy[row.id], 'data-git-action': name, onClick: function () { operation(row, name); } }));
+          [{ kind: 'fetch' }, { kind: 'pull' }, { kind: 'push' }].forEach(function (nextOperation) {
+            var name = nextOperation.kind;
+            actions.appendChild(el('button', { className: 'vt-button secondary compact', type: 'button', textContent: tr(api, 'ui.' + name, name.charAt(0).toUpperCase() + name.slice(1)), disabled: busy[row.id], 'data-git-action': name, onClick: function () { operation(row, nextOperation); } }));
           });
-          actions.appendChild(el('button', { className: 'vt-button secondary compact', type: 'button', textContent: tr(api, 'ui.openDirectory', 'Open folder'), disabled: busy[row.id], 'data-git-action': 'open-directory', onClick: function () { operation(row, 'openDirectory'); } }));
+          actions.appendChild(el('button', { className: 'vt-button secondary compact', type: 'button', textContent: tr(api, 'ui.openDirectory', 'Open folder'), disabled: busy[row.id], 'data-git-action': 'open-directory', onClick: function () { operation(row, { kind: 'openDirectory' }); } }));
         }
         actions.appendChild(el('button', { className: 'vt-button ghost compact', type: 'button', textContent: tr(api, 'ui.refresh', 'Refresh'), disabled: busy[row.id], 'data-git-action': 'refresh', onClick: function () { busy[row.id] = true; render(); refreshStatus(row).then(function () { busy[row.id] = false; render(); }); } }));
         card.appendChild(actions);
