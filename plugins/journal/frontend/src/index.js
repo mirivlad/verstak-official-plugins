@@ -1193,11 +1193,12 @@
       }) : [];
       var activityGroups = {};
       activityInputs.forEach(function (item) {
-        var resource = text(item.activity.url || item.activity.hostname || item.activity.title).trim();
         var action = activityLabel(item.activity);
-        var label = resource && resource !== action ? action + ' · ' + resource : action;
-        var key = item.activity.type + '\u0000' + resource;
-        if (!activityGroups[key]) activityGroups[key] = { label: label, items: [] };
+        // A batch of file changes is useful evidence, but thirty identical
+        // headings make review harder. Group by the action itself; each item
+        // below still identifies the affected file or page.
+        var key = item.activity.type;
+        if (!activityGroups[key]) activityGroups[key] = { label: action, items: [] };
         activityGroups[key].items.push(item);
       });
 
@@ -1241,14 +1242,16 @@
         groupBody.appendChild(groupActions);
         group.items.forEach(function (item) {
           var minutes = Math.round(Math.max(0, Number(item.activity.durationSeconds) || 0) / 60);
+          var resource = text(item.activity.url || item.activity.hostname || item.activity.title).trim();
+          var action = activityLabel(item.activity);
           var detail = [
             item.activity.occurredAt ? candidateTime(item.activity.occurredAt) : '',
-            activityLabel(item.activity),
+            resource && resource !== action ? resource : action,
             minutes > 0 ? tr('ui.minutesValue', { minutes: minutes }, minutes + ' min') : ''
           ].filter(Boolean).join(' · ');
           groupBody.appendChild(el('label', { className: 'journal-candidate-activity' }, [item.input, detail]));
         });
-        return el('details', { className: 'journal-candidate-group', open: 'open' }, [
+        return el('details', { className: 'journal-candidate-group' }, [
           el('summary', { textContent: group.label + ' (' + group.items.length + ')' }),
           groupBody
         ]);

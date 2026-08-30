@@ -22,6 +22,10 @@ function assertIncludes(value, expected, message) {
 
 assertIncludes(journal, 'journal-candidate-group', 'Journal renders grouped candidate activity');
 assertIncludes(journal, 'max-width: min(900px, 96vw)', 'Journal review modal is desktop-width responsive');
+assertIncludes(journal, "var key = item.activity.type;", 'Repeated activity actions share one review group');
+if (journal.includes("className: 'journal-candidate-group', open: 'open'")) {
+  throw new Error('Activity review groups must start collapsed');
+}
 
 class FakeNode {
   constructor(tagName) {
