@@ -325,6 +325,8 @@ if command -v node &>/dev/null; then
   report "projects frontend behavior" $?
   node "$ROOT/scripts/smoke-milestones-plugin.js"
   report "milestones frontend behavior" $?
+  node "$ROOT/scripts/smoke-templates-plugin.js"
+  report "templates frontend behavior" $?
   node "$ROOT/scripts/smoke-search-plugin.js"
   report "search frontend behavior" $?
   node "$ROOT/scripts/smoke-domain-search-providers.js"
