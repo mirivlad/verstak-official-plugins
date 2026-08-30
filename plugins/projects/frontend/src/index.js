@@ -101,12 +101,6 @@
       container.innerHTML = '';
       fields = {};
       var shell = el('div', { className: 'project-meta-shell' });
-      var heading = el('div', { className: 'project-meta-heading' });
-      heading.appendChild(el('div', {}, [
-        el('h1', { className: 'project-meta-title', textContent: translate(api, 'ui.title', 'Project') }),
-        el('div', { className: 'project-meta-subtitle', textContent: translate(api, 'ui.projectHint', 'Project status, schedule and labels.') })
-      ]));
-      shell.appendChild(heading);
 
       var form = el('div', { className: 'project-meta-form' });
       var main = el('section', { className: 'project-meta-panel' });

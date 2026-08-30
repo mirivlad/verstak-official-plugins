@@ -10,7 +10,7 @@
   var CSS = [
     '.git-root{width:100%;height:100%;min-height:0;overflow:auto;background:var(--vt-color-background,#101020);color:var(--vt-color-text-primary,#f4f7fb);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}',
     '.git-shell{box-sizing:border-box;width:100%;max-width:72rem;margin:0 auto;padding:1.4rem 1.5rem 2rem}',
-    '.git-header{display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;margin-bottom:1rem}.git-heading{min-width:0}.git-title{font-size:1.28rem;font-weight:700;line-height:1.2;margin:0}.git-subtitle{font-size:.8rem;color:var(--vt-color-text-muted,#7f8aa3);margin-top:.3rem}',
+    '.git-header{display:flex;justify-content:flex-end;align-items:center;gap:1rem;margin-bottom:1rem}',
     '.git-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem;padding:1rem;margin-bottom:1rem;border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface,#15152c)}.git-form-title{grid-column:1/-1;font-size:.9rem;font-weight:700;margin-bottom:.05rem}.git-form-wide{grid-column:1/-1}.git-form-actions{grid-column:1/-1;display:flex;justify-content:flex-end;gap:.45rem;padding-top:.1rem}',
     '.git-field{display:grid;gap:.34rem;font-size:.74rem;color:var(--vt-color-text-muted,#7f8aa3)}.git-input,.git-select{box-sizing:border-box;width:100%;min-height:2.15rem;padding:.42rem .58rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-input,#0f1424);color:var(--vt-color-text-primary,#f4f7fb);font:inherit;font-size:.82rem;outline:none;color-scheme:dark}.git-input:focus,.git-select:focus{border-color:var(--vt-color-accent,#4ecca3);box-shadow:var(--vt-focus-ring,0 0 0 2px rgba(78,204,163,.34))}',
     '.git-select{appearance:none;-webkit-appearance:none;padding-right:2rem;background-image:linear-gradient(45deg,transparent 50%,var(--vt-color-text-muted,#7f8aa3) 50%),linear-gradient(135deg,var(--vt-color-text-muted,#7f8aa3) 50%,transparent 50%);background-position:calc(100% - 13px) 50%,calc(100% - 8px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat}.git-select option{background:var(--vt-color-surface,#15152c);color:var(--vt-color-text-primary,#f4f7fb)}',
@@ -388,12 +388,8 @@
         container.innerHTML = '';
         var shell = el('div', { className: 'git-shell', 'data-git-root': '' });
         var header = el('div', { className: 'git-header' });
-        header.appendChild(el('div', { className: 'git-heading' }, [
-          el('h1', { className: 'git-title', textContent: tr(api, 'ui.title', 'Git repositories') }),
-          el('div', { className: 'git-subtitle', textContent: tr(api, 'ui.hint', 'Repositories connected to this Deal. Working copies stay on this device.') })
-        ]));
         if (deal && !editing) header.appendChild(el('button', { className: 'vt-button primary', type: 'button', textContent: tr(api, 'ui.add', 'Add repository'), 'data-git-action': 'add', onClick: function () { editing = { record: null }; render(); } }));
-        shell.appendChild(header);
+        if (deal && !editing) shell.appendChild(header);
         if (!deal) {
           shell.appendChild(el('div', { className: 'git-empty', textContent: tr(api, 'ui.missingDeal', 'Select a Deal to manage its repositories.') }));
           container.appendChild(shell);

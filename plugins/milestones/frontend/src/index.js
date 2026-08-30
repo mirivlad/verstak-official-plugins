@@ -9,7 +9,7 @@
   var STYLES = [
     '.milestones-root{width:100%;height:100%;min-height:0;overflow:auto;background:var(--vt-color-background,#101020);color:var(--vt-color-text-primary,#f4f7fb);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}',
     '.milestones-shell{box-sizing:border-box;width:100%;max-width:72rem;margin:0 auto;padding:1.4rem 1.5rem 2rem}',
-    '.milestones-header{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1rem}.milestones-heading{min-width:0}.milestones-title{font-size:1.28rem;font-weight:700;line-height:1.2;margin:0}.milestones-subtitle{font-size:.8rem;color:var(--vt-color-text-muted,#7f8aa3);margin-top:.3rem}.milestones-context{display:inline-flex;align-items:center;min-height:1.45rem;padding:0 .45rem;border:1px solid var(--vt-color-border,#202b46);border-radius:999px;color:var(--vt-color-text-secondary,#b7c0d4);font-size:.7rem;margin-left:.45rem}',
+    '.milestones-header{display:flex;align-items:center;justify-content:flex-end;gap:1rem;margin-bottom:1rem}',
     '.milestones-editor{display:grid;grid-template-columns:minmax(0,1fr) 12rem auto;gap:.75rem;align-items:end;margin-bottom:1rem;padding:1rem;border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface,#15152c)}.milestones-field{display:grid;gap:.34rem}.milestones-label{font-size:.74rem;color:var(--vt-color-text-muted,#7f8aa3)}',
     '.milestones-input,.milestones-select{box-sizing:border-box;width:100%;min-height:2.15rem;padding:.42rem .58rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-input,#0f1424);color:var(--vt-color-text-primary,#f4f7fb);font:inherit;font-size:.82rem;outline:none;color-scheme:dark}.milestones-input:focus,.milestones-select:focus{border-color:var(--vt-color-accent,#4ecca3);box-shadow:var(--vt-focus-ring,0 0 0 2px rgba(78,204,163,.34))}',
     '.milestones-select{appearance:none;-webkit-appearance:none;padding-right:2rem;background-image:linear-gradient(45deg,transparent 50%,var(--vt-color-text-muted,#7f8aa3) 50%),linear-gradient(135deg,var(--vt-color-text-muted,#7f8aa3) 50%,transparent 50%);background-position:calc(100% - 13px) 50%,calc(100% - 8px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat}.milestones-select option{background:var(--vt-color-surface,#15152c);color:var(--vt-color-text-primary,#f4f7fb)}',
@@ -126,15 +126,8 @@
       container.innerHTML = '';
       var shell = el('div', { className: 'milestones-shell' });
       var header = el('div', { className: 'milestones-header' });
-      var heading = el('div', { className: 'milestones-heading' });
-      heading.appendChild(el('h1', { className: 'milestones-title', textContent: translate(api, 'ui.title', 'Milestones') }));
-      heading.appendChild(el('div', { className: 'milestones-subtitle' }, [
-        document.createTextNode(scope ? translate(api, 'ui.dealHint', 'Key checkpoints and deadlines') : translate(api, 'ui.globalHint', 'Milestones from all Deals')),
-        scope ? el('span', { className: 'milestones-context', textContent: scope.name || scope.workspaceId }) : null
-      ]));
-      header.appendChild(heading);
       if (scope && !editing) header.appendChild(el('button', { className: 'vt-button primary', type: 'button', 'data-milestone-action': 'add', textContent: translate(api, 'ui.add', 'Add milestone'), onClick: function () { editing = true; error = ''; render(); } }));
-      shell.appendChild(header);
+      if (scope && !editing) shell.appendChild(header);
 
       if (!scope) {
         shell.appendChild(el('div', { className: 'milestones-empty' }, [
