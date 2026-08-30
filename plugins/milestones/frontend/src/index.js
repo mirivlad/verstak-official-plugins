@@ -7,13 +7,16 @@
   var STATUS_VALUES = ['open', 'done', 'cancelled'];
   var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   var STYLES = [
-    '.milestones-root{height:100%;min-height:0;overflow:auto;background:var(--vt-color-background,#101020);color:var(--vt-color-text-primary,#f4f7fb);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}',
-    '.milestones-shell{max-width:52rem;margin:0 auto;padding:1.15rem}.milestones-title{font-size:1.15rem;font-weight:700;margin:0 0 .3rem}.milestones-subtitle{font-size:.8rem;color:var(--vt-color-text-muted,#7f8aa3);margin-bottom:1rem}',
-    '.milestones-toolbar,.milestones-row{display:flex;align-items:center;gap:.65rem;padding:.75rem .85rem;border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface,#15152c)}.milestones-toolbar{margin-bottom:.7rem;flex-wrap:wrap}',
-    '.milestones-list{display:grid;gap:.55rem}.milestones-row{justify-content:space-between}.milestones-main{display:grid;gap:.25rem;min-width:0}.milestones-name{font-size:.88rem;font-weight:600;overflow-wrap:anywhere}.milestones-meta{font-size:.73rem;color:var(--vt-color-text-muted,#7f8aa3)}.milestones-actions{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap}',
-    '.milestones-input,.milestones-select{box-sizing:border-box;min-height:2rem;padding:.34rem .48rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-surface-input,#0f1424);color:var(--vt-color-text-primary,#f4f7fb);font:inherit;font-size:.78rem;color-scheme:dark}.milestones-input{flex:1;min-width:10rem}.milestones-select{min-width:6.5rem}.milestones-select option{background:var(--vt-color-surface,#15152c);color:var(--vt-color-text-primary,#f4f7fb)}',
-    '.milestones-btn{min-height:2rem;padding:.34rem .58rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-md,6px);background:var(--vt-color-surface-hover,#1b2440);color:var(--vt-color-text-secondary,#b7c0d4);font:inherit;font-size:.76rem;cursor:pointer}.milestones-btn.primary{background:var(--vt-color-accent,#4ecca3);border-color:var(--vt-color-accent,#4ecca3);color:#101827}.milestones-btn.danger{color:#ffb1bb;border-color:rgba(233,69,96,.5)}.milestones-btn:hover{border-color:var(--vt-color-accent,#4ecca3)}',
-    '.milestones-empty,.milestones-error{padding:1rem;color:var(--vt-color-text-muted,#7f8aa3);text-align:center}.milestones-error{color:#ffc6ce}@media(max-width:640px){.milestones-shell{padding:.8rem}.milestones-row{align-items:flex-start;flex-direction:column}.milestones-actions{width:100%}.milestones-input{width:100%}}'
+    '.milestones-root{width:100%;height:100%;min-height:0;overflow:auto;background:var(--vt-color-background,#101020);color:var(--vt-color-text-primary,#f4f7fb);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}',
+    '.milestones-shell{box-sizing:border-box;width:100%;max-width:72rem;margin:0 auto;padding:1.4rem 1.5rem 2rem}',
+    '.milestones-header{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1rem}.milestones-heading{min-width:0}.milestones-title{font-size:1.28rem;font-weight:700;line-height:1.2;margin:0}.milestones-subtitle{font-size:.8rem;color:var(--vt-color-text-muted,#7f8aa3);margin-top:.3rem}.milestones-context{display:inline-flex;align-items:center;min-height:1.45rem;padding:0 .45rem;border:1px solid var(--vt-color-border,#202b46);border-radius:999px;color:var(--vt-color-text-secondary,#b7c0d4);font-size:.7rem;margin-left:.45rem}',
+    '.milestones-editor{display:grid;grid-template-columns:minmax(0,1fr) 12rem auto;gap:.75rem;align-items:end;margin-bottom:1rem;padding:1rem;border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface,#15152c)}.milestones-field{display:grid;gap:.34rem}.milestones-label{font-size:.74rem;color:var(--vt-color-text-muted,#7f8aa3)}',
+    '.milestones-input,.milestones-select{box-sizing:border-box;width:100%;min-height:2.15rem;padding:.42rem .58rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-input,#0f1424);color:var(--vt-color-text-primary,#f4f7fb);font:inherit;font-size:.82rem;outline:none;color-scheme:dark}.milestones-input:focus,.milestones-select:focus{border-color:var(--vt-color-accent,#4ecca3);box-shadow:var(--vt-focus-ring,0 0 0 2px rgba(78,204,163,.34))}',
+    '.milestones-select{appearance:none;-webkit-appearance:none;padding-right:2rem;background-image:linear-gradient(45deg,transparent 50%,var(--vt-color-text-muted,#7f8aa3) 50%),linear-gradient(135deg,var(--vt-color-text-muted,#7f8aa3) 50%,transparent 50%);background-position:calc(100% - 13px) 50%,calc(100% - 8px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat}.milestones-select option{background:var(--vt-color-surface,#15152c);color:var(--vt-color-text-primary,#f4f7fb)}',
+    '.milestones-editor-actions,.milestones-actions{display:flex;align-items:center;gap:.45rem;flex-wrap:wrap}.milestones-list{display:grid;gap:.65rem}.milestones-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:1rem;align-items:center;padding:.9rem 1rem;border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface,#15152c)}.milestones-row:hover{border-color:var(--vt-color-border-strong,#2c456a)}',
+    '.milestones-main{display:grid;gap:.3rem;min-width:0}.milestones-name{font-size:.9rem;font-weight:650;overflow-wrap:anywhere}.milestones-meta{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;font-size:.73rem;color:var(--vt-color-text-muted,#7f8aa3)}.milestones-due{display:inline-flex;align-items:center;min-height:1.4rem;padding:0 .4rem;border-radius:999px;background:var(--vt-color-surface-muted,#111629);color:var(--vt-color-text-secondary,#b7c0d4)}',
+    '.milestones-empty{padding:3rem 1rem;border:1px dashed var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-lg,8px);color:var(--vt-color-text-muted,#7f8aa3);text-align:center}.milestones-empty-title{color:var(--vt-color-text-secondary,#b7c0d4);font-weight:650;margin-bottom:.3rem}.milestones-error{margin-bottom:.75rem;color:var(--vt-color-danger,#ff8e9b);font-size:.78rem}',
+    '@media(max-width:760px){.milestones-editor{grid-template-columns:1fr}.milestones-row{grid-template-columns:1fr}.milestones-actions{justify-content:flex-start}}@media(max-width:560px){.milestones-shell{padding:1rem}.milestones-header{align-items:flex-start;flex-direction:column}}'
   ].join('\n');
 
   function text(value) { return value == null ? '' : String(value); }
@@ -111,34 +114,62 @@
     var workspaceId = text((props && props.workspaceId) || node.workspaceId || node.id).trim();
     return validWorkspaceID(workspaceId) ? { workspaceId: workspaceId, name: text((props && props.workspaceName) || node.name).trim() } : null;
   }
+
   function MilestonesView() {}
   MilestonesView.mount = function (container, props, api) {
     injectStyles();
+    if (container.classList) container.classList.add('milestones-root');
     var scope = scopeFromProps(props || {}); var disposed = false; var records = []; var editing = false; var error = '';
+
     function render() {
       if (disposed) return;
       container.innerHTML = '';
       var shell = el('div', { className: 'milestones-shell' });
-      shell.appendChild(el('h1', { className: 'milestones-title', textContent: scope ? translate(api, 'ui.dealTitle', 'Milestones · ' + (scope.name || scope.workspaceId), { workspace: scope.name || scope.workspaceId }) : translate(api, 'ui.title', 'Milestones') }));
-      shell.appendChild(el('div', { className: 'milestones-subtitle', textContent: scope ? (scope.name || scope.workspaceId) : translate(api, 'ui.globalHint', 'Milestones from all Deals') }));
-      if (!scope) { shell.appendChild(el('div', { className: 'milestones-empty', textContent: translate(api, 'ui.noDeal', 'Select a Deal to create milestones.') })); container.appendChild(shell); return; }
-      var toolbar = el('div', { className: 'milestones-toolbar' });
+      var header = el('div', { className: 'milestones-header' });
+      var heading = el('div', { className: 'milestones-heading' });
+      heading.appendChild(el('h1', { className: 'milestones-title', textContent: translate(api, 'ui.title', 'Milestones') }));
+      heading.appendChild(el('div', { className: 'milestones-subtitle' }, [
+        document.createTextNode(scope ? translate(api, 'ui.dealHint', 'Key checkpoints and deadlines') : translate(api, 'ui.globalHint', 'Milestones from all Deals')),
+        scope ? el('span', { className: 'milestones-context', textContent: scope.name || scope.workspaceId }) : null
+      ]));
+      header.appendChild(heading);
+      if (scope && !editing) header.appendChild(el('button', { className: 'vt-button primary', type: 'button', 'data-milestone-action': 'add', textContent: translate(api, 'ui.add', 'Add milestone'), onClick: function () { editing = true; error = ''; render(); } }));
+      shell.appendChild(header);
+
+      if (!scope) {
+        shell.appendChild(el('div', { className: 'milestones-empty' }, [
+          el('div', { className: 'milestones-empty-title', textContent: translate(api, 'ui.noDealTitle', 'Choose a Deal') }),
+          el('div', { textContent: translate(api, 'ui.noDeal', 'Select a Deal to create milestones.') })
+        ]));
+        container.appendChild(shell); return;
+      }
+
       if (editing) {
-        var title = el('input', { className: 'milestones-input', 'data-milestone-input': 'title', placeholder: translate(api, 'ui.titleLabel', 'Title') });
-        var due = el('input', { className: 'milestones-input', type: 'date', 'data-milestone-input': 'dueAt' });
-        toolbar.appendChild(title); toolbar.appendChild(due);
-        toolbar.appendChild(el('button', { className: 'milestones-btn primary', type: 'button', 'data-milestone-action': 'save', textContent: translate(api, 'ui.save', 'Save'), onClick: function () { createMilestone(api, { scope: { kind: 'deal', workspaceId: scope.workspaceId }, title: title.value, dueAt: due.value }).then(function () { editing = false; return refresh(); }).catch(function () { error = translate(api, 'ui.saveError', 'Could not save milestone.'); render(); }); } }));
-        toolbar.appendChild(el('button', { className: 'milestones-btn', type: 'button', 'data-milestone-action': 'cancel', textContent: translate(api, 'ui.cancel', 'Cancel'), onClick: function () { editing = false; render(); } }));
-      } else toolbar.appendChild(el('button', { className: 'milestones-btn primary', type: 'button', 'data-milestone-action': 'add', textContent: translate(api, 'ui.add', 'Add milestone'), onClick: function () { editing = true; error = ''; render(); } }));
-      shell.appendChild(toolbar);
+        var title = el('input', { className: 'milestones-input vt-input', 'data-milestone-input': 'title', placeholder: translate(api, 'ui.titlePlaceholder', 'For example: v1.0 release') });
+        var due = el('input', { className: 'milestones-input vt-input', type: 'date', 'data-milestone-input': 'dueAt' });
+        var editorActions = el('div', { className: 'milestones-editor-actions' });
+        editorActions.appendChild(el('button', { className: 'vt-button primary', type: 'button', 'data-milestone-action': 'save', textContent: translate(api, 'ui.save', 'Save'), onClick: function () { createMilestone(api, { scope: { kind: 'deal', workspaceId: scope.workspaceId }, title: title.value, dueAt: due.value }).then(function () { editing = false; return refresh(); }).catch(function () { error = translate(api, 'ui.saveError', 'Could not save milestone.'); render(); }); } }));
+        editorActions.appendChild(el('button', { className: 'vt-button secondary', type: 'button', 'data-milestone-action': 'cancel', textContent: translate(api, 'ui.cancel', 'Cancel'), onClick: function () { editing = false; render(); } }));
+        shell.appendChild(el('div', { className: 'milestones-editor' }, [
+          el('label', { className: 'milestones-field' }, [el('span', { className: 'milestones-label', textContent: translate(api, 'ui.titleLabel', 'Title') }), title]),
+          el('label', { className: 'milestones-field' }, [el('span', { className: 'milestones-label', textContent: translate(api, 'ui.dueDate', 'Due') }), due]),
+          editorActions
+        ]));
+      }
+
       if (error) shell.appendChild(el('div', { className: 'milestones-error', textContent: error }));
       var list = el('div', { className: 'milestones-list' });
-      if (!records.length) list.appendChild(el('div', { className: 'milestones-empty', textContent: translate(api, 'ui.empty', 'No milestones yet.') }));
+      if (!records.length) list.appendChild(el('div', { className: 'milestones-empty' }, [
+        el('div', { className: 'milestones-empty-title', textContent: translate(api, 'ui.emptyTitle', 'No milestones yet') }),
+        el('div', { textContent: translate(api, 'ui.emptyHint', 'Add the first checkpoint when the project has something worth tracking.') })
+      ]));
       records.forEach(function (record) {
-        var status = el('select', { className: 'milestones-select', 'data-milestone-status': record.id, value: record.status, onChange: function (event) { updateMilestone(api, { scope: { kind: 'deal', workspaceId: scope.workspaceId }, id: record.id, status: event.target.value }).then(refresh).catch(function () { error = translate(api, 'ui.saveError', 'Could not save milestone.'); render(); }); } });
+        var status = el('select', { className: 'milestones-select vt-select', 'data-milestone-status': record.id, value: record.status, onChange: function (event) { updateMilestone(api, { scope: { kind: 'deal', workspaceId: scope.workspaceId }, id: record.id, status: event.target.value }).then(refresh).catch(function () { error = translate(api, 'ui.saveError', 'Could not save milestone.'); render(); }); } });
         STATUS_VALUES.forEach(function (value) { status.appendChild(el('option', { value: value, textContent: translate(api, 'status.' + value, value) })); }); status.value = record.status;
-        var actions = el('div', { className: 'milestones-actions' }, [status, el('button', { className: 'milestones-btn danger', type: 'button', 'data-milestone-action': 'delete', 'data-milestone-id': record.id, textContent: translate(api, 'ui.delete', 'Delete'), onClick: function () { deleteMilestone(api, { scope: { kind: 'deal', workspaceId: scope.workspaceId }, id: record.id }).then(refresh).catch(function () { error = translate(api, 'ui.saveError', 'Could not save milestone.'); render(); }); } })]);
-        list.appendChild(el('div', { className: 'milestones-row', 'data-milestone-id': record.id }, [el('div', { className: 'milestones-main' }, [el('div', { className: 'milestones-name', textContent: record.title }), el('div', { className: 'milestones-meta', textContent: record.dueAt || '' })]), actions]));
+        var actions = el('div', { className: 'milestones-actions' }, [status, el('button', { className: 'vt-button ghost', type: 'button', 'data-milestone-action': 'delete', 'data-milestone-id': record.id, textContent: translate(api, 'ui.delete', 'Delete'), onClick: function () { deleteMilestone(api, { scope: { kind: 'deal', workspaceId: scope.workspaceId }, id: record.id }).then(refresh).catch(function () { error = translate(api, 'ui.saveError', 'Could not save milestone.'); render(); }); } })]);
+        var meta = el('div', { className: 'milestones-meta' });
+        if (record.dueAt) meta.appendChild(el('span', { className: 'milestones-due', textContent: translate(api, 'ui.duePrefix', 'Due') + ': ' + record.dueAt }));
+        list.appendChild(el('div', { className: 'milestones-row', 'data-milestone-id': record.id }, [el('div', { className: 'milestones-main' }, [el('div', { className: 'milestones-name', textContent: record.title }), meta]), actions]));
       });
       shell.appendChild(list); container.appendChild(shell);
     }
@@ -146,7 +177,7 @@
     refresh().catch(function () { error = translate(api, 'ui.saveError', 'Could not save milestone.'); render(); });
     container.__milestonesCleanup = function () { disposed = true; };
   };
-  MilestonesView.unmount = function (container) { if (container && container.__milestonesCleanup) container.__milestonesCleanup(); if (container) { container.__milestonesCleanup = null; container.innerHTML = ''; } };
+  MilestonesView.unmount = function (container) { if (container && container.__milestonesCleanup) container.__milestonesCleanup(); if (container) { container.__milestonesCleanup = null; if (container.classList) container.classList.remove('milestones-root'); container.innerHTML = ''; } };
   window.VerstakPluginRegister(PLUGIN_ID, { components: { MilestonesView: MilestonesView }, activate: function (api) {
     if (!api || !api.commands || typeof api.commands.register !== 'function') return Promise.resolve();
     return Promise.all([

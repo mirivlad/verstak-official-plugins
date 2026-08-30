@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "verstak.git",
   "name": "Git",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "apiVersion": "0.1.0",
-  "description": "Multiple Git repository descriptors per Deal.",
+  "description": "Git repositories connected to a Deal. Working copies stay local to the device.",
   "localization": {
     "defaultLocale": "en",
     "locales": {

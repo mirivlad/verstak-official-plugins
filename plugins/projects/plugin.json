@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "id": "verstak.projects",
-  "name": "Project Meta",
-  "version": "0.3.0",
+  "name": "Projects",
+  "version": "0.3.1",
   "apiVersion": "0.1.0",
-  "description": "Deal-owned project metadata and a global portfolio view.",
+  "description": "Project role for a Deal: description, status, dates, priority and tags.",
   "localization": {
     "defaultLocale": "en",
     "locales": {
@@ -29,7 +29,7 @@
     "views": [
       {
         "id": "verstak.projects.view",
-        "title": "Project portfolio",
+        "title": "Projects",
         "icon": "folder",
         "component": "ProjectMetaView"
       }
@@ -37,7 +37,7 @@
     "sidebarItems": [
       {
         "id": "verstak.projects.sidebar",
-        "title": "Project portfolio",
+        "title": "Projects",
         "icon": "folder",
         "view": "verstak.projects.view",
         "position": 34
@@ -46,7 +46,7 @@
     "workspaceItems": [
       {
         "id": "verstak.projects.workspace",
-        "title": "Project Meta",
+        "title": "Project",
         "icon": "folder",
         "order": 5,
         "component": "ProjectMetaView"
