@@ -43,6 +43,7 @@ function loadBundle(document) {
   const api = {
     i18n: { t: (_key, _params, fallback = '') => fallback, onDidChangeLocale: () => () => {} },
     workspaces: {
+      list: async () => [{ id: dealOne, name: 'First Deal', rootPath: 'Deals/First' }],
       tree: async () => ({ roots: [{ kind: 'folder', name: 'Root', children: [{ kind: 'workspace', workspaceId: dealOne, name: 'First Deal', rootPath: 'Deals/First' }, { kind: 'workspace', workspaceId: dealTwo, name: 'Second Deal', rootPath: 'Deals/Second' }] }] }),
       readToolConfig: async (workspaceId) => clone(configs[workspaceId] || {}),
       writeToolConfig: async (workspaceId, config) => { configs[workspaceId] = clone(config); }
@@ -74,6 +75,7 @@ function loadBundle(document) {
   if (!byAttr(portfolio, 'data-project-meta-portfolio', '')) throw new Error('global Project Meta view did not render a portfolio');
   const firstDeal = byAttr(portfolio, 'data-project-meta-deal', dealOne);
   if (!firstDeal || !firstDeal.textContent.includes('Launch plan')) throw new Error('portfolio did not read Deal-owned Project Meta');
+  if (byAttr(portfolio, 'data-project-meta-deal', dealTwo)) throw new Error('portfolio included Deal without Project Meta capability');
   firstDeal.click();
   if (JSON.stringify(navigation[0]) !== JSON.stringify({ workspaceId: dealOne, workspaceItemId: 'verstak.projects.workspace' })) throw new Error(`portfolio navigation did not preserve Deal UUID: ${JSON.stringify(navigation[0])}`);
   bundle.components.ProjectMetaView.unmount(portfolio);

@@ -71,13 +71,6 @@
     return { id: text((props && props.workspaceId) || node.workspaceId || node.id), name: text((props && props.workspaceName) || node.name), path: cleanPath(node.rootPath || node.path) };
   }
   function translate(api, key, fallback) { return api && api.i18n && typeof api.i18n.t === 'function' ? api.i18n.t(key, null, fallback) : fallback; }
-  function flatWorkspaces(nodes, output) {
-    (Array.isArray(nodes) ? nodes : []).forEach(function (node) {
-      if (node && node.kind === 'workspace') output.push({ id: text(node.workspaceId || node.id), name: text(node.name), path: cleanPath(node.rootPath || node.path) });
-      flatWorkspaces(node && node.children, output);
-    });
-    return output;
-  }
   function statusTitle(value) { return value ? value.charAt(0).toUpperCase() + value.slice(1) : ''; }
 
   function mountDealMeta(container, scope, api) {
@@ -164,8 +157,10 @@
       }
       container.appendChild(shell);
     }
-    Promise.resolve(api.workspaces.tree()).then(function (tree) {
-      var workspaces = flatWorkspaces(tree && tree.roots, []).filter(function (workspace) { return workspace.id; });
+    Promise.resolve(api.workspaces.list()).then(function (items) {
+      var workspaces = (Array.isArray(items) ? items : []).map(function (workspace) {
+        return { id: text(workspace && workspace.id), name: text(workspace && workspace.name), path: cleanPath(workspace && workspace.rootPath) };
+      }).filter(function (workspace) { return workspace.id; });
       return Promise.all(workspaces.map(function (workspace) { return Promise.resolve(api.workspaces.readToolConfig(workspace.id)).then(function (raw) { return { workspace: workspace, meta: normalizeMeta(raw) }; }); }));
     }).then(render).catch(function (error) { render([]); });
     container.__projectMetaCleanup = function () { disposed = true; };

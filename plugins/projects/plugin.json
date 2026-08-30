@@ -19,6 +19,7 @@
   ],
   "permissions": [
     "storage.namespace",
+    "files.read",
     "ui.register"
   ],
   "frontend": {
