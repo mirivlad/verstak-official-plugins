@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "verstak.templates",
+  "name": "Templates",
+  "version": "0.1.0",
+  "apiVersion": "0.1.0",
+  "description": "Persisted Deal creation recipes.",
+  "localization": {"defaultLocale": "en", "locales": {"en": "locales/en.json", "ru": "locales/ru.json"}},
+  "source": "official",
+  "icon": "layout-template",
+  "provides": ["verstak/templates/v1"],
+  "permissions": ["storage.namespace", "ui.register", "commands.register", "workspaces.create"],
+  "sync": {"records": [{"id": "templates", "storage": "data", "name": "templates", "identity": "id"}]},
+  "frontend": {"entry": "frontend/src/index.js"},
+  "contributes": {
+    "views": [{"id": "verstak.templates.view", "title": "Templates", "icon": "layout-template", "component": "TemplatesView"}],
+    "sidebarItems": [{"id": "verstak.templates.sidebar", "title": "Templates", "icon": "layout-template", "view": "verstak.templates.view", "position": 18}],
+    "commands": [
+      {"id": "verstak.templates.list", "title": "List Templates", "handler": "verstak.templates.list"},
+      {"id": "verstak.templates.create", "title": "Create Template", "handler": "verstak.templates.create"},
+      {"id": "verstak.templates.update", "title": "Update Template", "handler": "verstak.templates.update"},
+      {"id": "verstak.templates.delete", "title": "Delete Template", "handler": "verstak.templates.delete"},
+      {"id": "verstak.templates.createDeal", "title": "Create Deal from Template", "handler": "verstak.templates.createDeal"}
+    ]
+  }
+}
