@@ -55,6 +55,7 @@ function loadBundle(document) {
   const dealView = new FakeNode('div');
   bundle.components.ProjectMetaView.mount(dealView, { workspaceNode: { workspaceId: dealOne, name: 'First Deal', rootPath: 'Deals/First' } }, api);
   await flush(3);
+  if (walk(dealView, (node) => node.tagName === 'H1')) throw new Error('Project workspace view must not repeat its tab title as a heading');
   byAttr(dealView, 'data-project-meta-field', 'name').value = 'Launch plan';
   byAttr(dealView, 'data-project-meta-field', 'description').value = 'Prepare launch';
   byAttr(dealView, 'data-project-meta-field', 'status').value = 'active';

@@ -6,6 +6,7 @@ const git = fs.readFileSync(path.join(__dirname, '..', 'plugins', 'git', 'fronte
 function assertIncludes(value, expected, message) { if (!value.includes(expected)) throw new Error(message); }
 assertIncludes(git, 'operationLabel', 'Git cards announce the active operation');
 assertIncludes(git, "kind: 'push'", 'Git preserves the operation name while push is pending');
+if (git.includes("el('h1', { className: 'git-title'")) throw new Error('Git workspace view must not repeat its tab title as a heading');
 new Function(git)();
 if (!bundle || bundle.id !== 'verstak.git') throw new Error('Git plugin did not register');
 let records = [], local = [], commands = {};

@@ -114,7 +114,8 @@ function loadBundle(document) {
   const container = new FakeNode('div');
   bundle.components.MilestonesView.mount(container, { workspaceId: dealOne, workspaceName: 'Standalone Deal' }, api);
   await flush();
-  if (!container.textContent.includes('Standalone Deal') || !byData(container, 'data-milestone-action', 'add')) throw new Error('Milestones Deal view did not render independently of Project Meta');
+  if (walk(container, (node) => node.tagName === 'H1')) throw new Error('Milestones workspace view must not repeat its tab title as a heading');
+  if (!byData(container, 'data-milestone-action', 'add')) throw new Error('Milestones Deal view did not render independently of Project Meta');
   byData(container, 'data-milestone-action', 'add').click();
   byData(container, 'data-milestone-input', 'title').value = 'UI milestone';
   byData(container, 'data-milestone-action', 'save').click();
