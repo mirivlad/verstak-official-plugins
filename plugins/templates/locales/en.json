@@ -6,12 +6,14 @@
   "contributions.commands.verstak.templates.list.title": "List Templates",
   "contributions.commands.verstak.templates.create.title": "Create Template",
   "contributions.commands.verstak.templates.update.title": "Update Template",
+  "contributions.commands.verstak.templates.duplicate.title": "Duplicate Template",
   "contributions.commands.verstak.templates.delete.title": "Delete Template",
   "contributions.commands.verstak.templates.createDeal.title": "Create Deal from Template",
   "ui.title": "Deal templates",
   "ui.empty": "No templates yet.",
   "ui.new": "New template",
   "ui.save": "Save template",
+  "ui.duplicate": "Duplicate",
   "ui.delete": "Delete",
   "ui.create": "Create Deal",
   "ui.name": "Template name",
@@ -21,6 +23,7 @@
   "ui.folders": "Initial folders (one per line)",
   "ui.missing": "Install or enable these plugins before creating this Deal:",
   "ui.saved": "Template saved.",
+  "ui.duplicated": "Template duplicated.",
   "ui.created": "Deal created.",
   "ui.error": "Could not complete that action."
 }

@@ -6,12 +6,14 @@
   "contributions.commands.verstak.templates.list.title": "Список шаблонов",
   "contributions.commands.verstak.templates.create.title": "Создать шаблон",
   "contributions.commands.verstak.templates.update.title": "Изменить шаблон",
+  "contributions.commands.verstak.templates.duplicate.title": "Дублировать шаблон",
   "contributions.commands.verstak.templates.delete.title": "Удалить шаблон",
   "contributions.commands.verstak.templates.createDeal.title": "Создать Дело из шаблона",
   "ui.title": "Шаблоны Дел",
   "ui.empty": "Шаблонов пока нет.",
   "ui.new": "Новый шаблон",
   "ui.save": "Сохранить шаблон",
+  "ui.duplicate": "Дублировать",
   "ui.delete": "Удалить",
   "ui.create": "Создать Дело",
   "ui.name": "Название шаблона",
@@ -21,6 +23,7 @@
   "ui.folders": "Начальные папки (по одной в строке)",
   "ui.missing": "Установите или включите эти плагины перед созданием Дела:",
   "ui.saved": "Шаблон сохранён.",
+  "ui.duplicated": "Шаблон продублирован.",
   "ui.created": "Дело создано.",
   "ui.error": "Не удалось выполнить действие."
 }
