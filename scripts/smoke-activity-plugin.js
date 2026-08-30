@@ -124,6 +124,9 @@ function dealScope(workspaceId) {
   if (!manifest.permissions.includes('commands.register')) throw new Error('Activity must register its Deal-scoped commands');
   if (!manifest.provides.includes('verstak/activity/v2')) throw new Error('Activity must provide the Deal-scoped v2 capability');
   if (manifest.capabilityOperations['verstak/activity/v2']?.list !== 'verstak.activity.list') throw new Error('Activity v2 list capability is missing');
+  for (const userSurface of ['views', 'sidebarItems', 'workspaceItems', 'overviewProviders', 'searchProviders', 'commands']) {
+    if (manifest.contributes[userSurface]) throw new Error(`Activity must not expose the ${userSurface} user surface`);
+  }
 
   const api = makeApi({
     // A pre-migration value remains untouched and is never consulted at runtime.

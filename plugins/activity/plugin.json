@@ -30,79 +30,6 @@
     "entry": "frontend/src/index.js"
   },
   "contributes": {
-    "views": [
-      {
-        "id": "verstak.activity.view",
-        "title": "Activity",
-        "icon": "activity",
-        "component": "ActivityView"
-      }
-    ],
-    "sidebarItems": [
-      {
-        "id": "verstak.activity.sidebar",
-        "title": "Activity",
-        "icon": "activity",
-        "view": "verstak.activity.view",
-        "position": 20
-      }
-    ],
-    "workspaceItems": [
-      {
-        "id": "verstak.activity.workspace",
-        "title": "Activity",
-        "icon": "activity",
-        "order": 40,
-        "component": "ActivityView"
-      }
-    ],
-    "commands": [
-      {
-        "id": "verstak.activity.suggestWorklog",
-        "title": "List Possible Journal Entries",
-        "handler": "verstak.activity.suggestWorklog"
-      },
-      {
-        "id": "verstak.activity.listBrowserActivity",
-        "title": "List Browser Activity",
-        "handler": "verstak.activity.listBrowserActivity"
-      },
-      {
-        "id": "verstak.activity.assignBrowserActivity",
-        "title": "Attach Browser Activity to a Deal",
-        "handler": "verstak.activity.assignBrowserActivity"
-      },
-      {
-        "id": "verstak.activity.listBrowserActivityRules",
-        "title": "List Browser Activity Rules",
-        "handler": "verstak.activity.listBrowserActivityRules"
-      },
-      {
-        "id": "verstak.activity.setBrowserActivityRule",
-        "title": "Save a Browser Activity Rule",
-        "handler": "verstak.activity.setBrowserActivityRule"
-      },
-      {
-        "id": "verstak.activity.removeBrowserActivityRule",
-        "title": "Remove a Browser Activity Rule",
-        "handler": "verstak.activity.removeBrowserActivityRule"
-      },
-      {
-        "id": "verstak.activity.provideOverview",
-        "title": "Provide Overview Signals",
-        "handler": "verstak.activity.provideOverview"
-      },
-      {
-        "id": "verstak.activity.list",
-        "title": "List Activity",
-        "handler": "verstak.activity.list"
-      },
-      {
-        "id": "verstak.activity.search",
-        "title": "Search Activity",
-        "handler": "verstak.activity.search"
-      }
-    ],
     "worklogProviders": [
       {
         "id": "verstak.activity.worklog",
@@ -131,20 +58,6 @@
           "browser.capture.converted"
         ],
         "handler": "recordActivityEvent"
-      }
-    ],
-    "overviewProviders": [
-      {
-        "id": "verstak.activity.overview",
-        "label": "Activity",
-        "handler": "verstak.activity.provideOverview"
-      }
-    ],
-    "searchProviders": [
-      {
-        "id": "verstak.activity.search-provider",
-        "label": "Activity",
-        "handler": "verstak.activity.search"
       }
     ]
   },

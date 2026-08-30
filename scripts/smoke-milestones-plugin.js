@@ -74,6 +74,7 @@ function loadBundle(document) {
   if (!manifest.permissions.includes('storage.namespace') || !manifest.permissions.includes('commands.register')) throw new Error('Milestones must own storage and commands');
   if (manifest.capabilityOperations['verstak/milestones/v1']?.create !== 'verstak.milestones.create') throw new Error('Milestone create operation is missing');
   if (!manifest.sync?.records?.some((record) => record.id === 'milestones' && record.storage === 'data' && record.name === 'milestones' && record.identity === 'id')) throw new Error('Milestones must sync its owned records only');
+  if (manifest.contributes.sidebarItems) throw new Error('Milestones must not be a global sidebar destination');
 
   const document = {
     head: new FakeNode('head'),
