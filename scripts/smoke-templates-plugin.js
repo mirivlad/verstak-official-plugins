@@ -3,7 +3,26 @@
 
 const fs = require('fs');
 const path = require('path');
+const manifest = require(path.join(__dirname, '..', 'plugins', 'templates', 'plugin.json'));
 const source = fs.readFileSync(path.join(__dirname, '..', 'plugins', 'templates', 'frontend', 'src', 'index.js'), 'utf8');
+
+function assertIncludes(value, expected, message) {
+  if (!value.includes(expected)) throw new Error(message + ': missing ' + expected);
+}
+
+function assertExcludes(value, expected, message) {
+  if (value.includes(expected)) throw new Error(message + ': found ' + expected);
+}
+
+if (!(manifest.contributes.settingsPanels || []).some((panel) => panel.id === 'verstak.templates.settings')) {
+  throw new Error('Templates settings panel was not declared');
+}
+if (manifest.contributes.sidebarItems !== undefined) {
+  throw new Error('Templates must not contribute a sidebar item');
+}
+assertIncludes(source, 'data-template-tool', 'Template editor exposes a selectable tool catalog');
+assertExcludes(source, 'Workspace plugin IDs (one per line)', 'Template editor must not ask for raw plugin IDs');
+
 let bundle;
 global.window = { VerstakPluginRegister(id, definition) { bundle = { id, definition }; } };
 new Function(source)();
