@@ -357,13 +357,26 @@
     }));
   }
 
+  async function providerRootPath(api, args) {
+    var scope = args && args.scope;
+    if (!scope) return cleanPath(args && args.workspaceRootPath || '');
+    var workspaceId = String(scope.workspaceId || '').trim();
+    if (scope.kind !== 'deal' || !workspaceId || !api || !api.workspaces || typeof api.workspaces.list !== 'function') return null;
+    var workspaces = await api.workspaces.list();
+    var workspace = (Array.isArray(workspaces) ? workspaces : []).find(function (item) {
+      return item && String(item.id || item.workspaceId || '').trim() === workspaceId;
+    });
+    return workspace ? cleanPath(workspace.rootPath || workspace.path || workspace.name || '') : null;
+  }
+
   async function provideSearch(api, args) {
     args = args || {};
     var query = String(args.query || '').trim();
-    var rootPath = cleanPath(args.workspaceRootPath || '');
+    var rootPath = await providerRootPath(api, args);
     var limit = Number(args.limit) || MAX_RESULTS;
     if (limit <= 0) limit = MAX_RESULTS;
     if (query.length < 2) return { results: [] };
+    if (rootPath == null) return { results: [] };
 
     var readyIndex = normalizeIndex(providerIndexes[rootPath], rootPath);
     if (readyIndex) {

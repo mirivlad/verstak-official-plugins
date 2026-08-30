@@ -145,6 +145,7 @@ async function wait(ms) {
   const fileContents = {
     'Project/Docs/case.md': '# Case\nTarget phrase is here.\n',
     'Project/Docs/notes.txt': 'No match here.\n',
+    'Other/Docs/case.md': '# Other case\nTarget phrase is here too.\n',
   };
   const pluginData = {};
   const commandHandlers = new Map();
@@ -210,6 +211,7 @@ async function wait(ms) {
         if (relativeDir === '') {
           return [
             { name: 'Project', relativePath: 'Project', type: 'folder' },
+            { name: 'Other', relativePath: 'Other', type: 'folder' },
           ];
         }
         if (relativeDir === 'Project') {
@@ -225,12 +227,24 @@ async function wait(ms) {
             { name: 'notes.txt', relativePath: 'Project/Docs/notes.txt', type: 'file', extension: 'txt' },
           ];
         }
+        if (relativeDir === 'Other') {
+          return [{ name: 'Docs', relativePath: 'Other/Docs', type: 'folder' }];
+        }
+        if (relativeDir === 'Other/Docs') {
+          return [{ name: 'case.md', relativePath: 'Other/Docs/case.md', type: 'file', extension: 'md' }];
+        }
         return [];
       },
       readText: async (relativePath) => {
         if (Object.prototype.hasOwnProperty.call(fileContents, relativePath)) return fileContents[relativePath];
         throw new Error('unexpected readText path ' + relativePath);
       },
+    },
+    workspaces: {
+      list: async () => [
+        { id: '11111111-1111-4111-8111-111111111111', rootPath: 'Project', name: 'Project' },
+        { id: '22222222-2222-4222-8222-222222222222', rootPath: 'Other', name: 'Other' },
+      ],
     },
     workbench: {
       openResource: async (request) => {
@@ -256,6 +270,14 @@ async function wait(ms) {
   if (!scopedResponse.results.some((item) => item.subtitle === 'Project/Docs/case.md')) {
     throw new Error('background provider must support Deal-scoped search');
   }
+  const scopedByIdResponse = await backgroundSearch({
+    query: 'target phrase',
+    scope: { kind: 'deal', workspaceId: '11111111-1111-4111-8111-111111111111' },
+    limit: 10,
+  });
+  if (!scopedByIdResponse.results.some((item) => item.subtitle === 'Project/Docs/case.md') || scopedByIdResponse.results.some((item) => item.subtitle === 'Other/Docs/case.md')) {
+    throw new Error('background provider must resolve a Deal UUID and exclude other Deals');
+  }
 
   const container = new FakeNode('div');
   component.mount(container, { workspaceRootPath: 'Project' }, api);
@@ -268,6 +290,7 @@ async function wait(ms) {
   if (!manifest.permissions.includes('storage.namespace')) throw new Error('search manifest must request storage.namespace');
   if (!manifest.permissions.includes('events.subscribe')) throw new Error('search manifest must request events.subscribe');
   if (!manifest.permissions.includes('commands.register')) throw new Error('search manifest must request commands.register');
+  if (manifest.contributes.workspaceItems) throw new Error('Search must not expose a separate Deal workspace tab');
   const command = (manifest.contributes.commands || []).find((item) => item.id === 'verstak.search.searchVaultText');
   if (!command || command.handler !== 'verstak.search.searchVaultText') throw new Error('search command contribution is missing');
   const provider = (manifest.contributes.searchProviders || []).find((item) => item.id === 'verstak.search.vault-text');

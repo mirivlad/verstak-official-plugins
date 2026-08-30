@@ -44,15 +44,6 @@
         "component": "MilestonesView"
       }
     ],
-    "sidebarItems": [
-      {
-        "id": "verstak.milestones.sidebar",
-        "title": "Milestones",
-        "icon": "flag",
-        "view": "verstak.milestones.view",
-        "position": 36
-      }
-    ],
     "workspaceItems": [
       {
         "id": "verstak.milestones.workspace",
