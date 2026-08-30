@@ -77,7 +77,7 @@ function fallbackI18n() {
     },
   };
   const journal = await activate('journal', journalApi);
-  const overview = await journal.handlers.get('verstak.journal.provideOverview')({ workspaceRootPath: 'Project' });
+  const overview = await journal.handlers.get('verstak.journal.provideOverview')({ scope: { kind: 'deal', workspaceId: 'deal-project' } });
   if (!overview.resume || !overview.resume.some((item) => String(item.title).includes('Canonical journal entry'))) {
     throw new Error(`Journal Overview did not read canonical Markdown: ${JSON.stringify(overview)}`);
   }
