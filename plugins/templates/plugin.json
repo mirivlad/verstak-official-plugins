@@ -19,6 +19,7 @@
       {"id": "verstak.templates.list", "title": "List Templates", "handler": "verstak.templates.list"},
       {"id": "verstak.templates.create", "title": "Create Template", "handler": "verstak.templates.create"},
       {"id": "verstak.templates.update", "title": "Update Template", "handler": "verstak.templates.update"},
+      {"id": "verstak.templates.duplicate", "title": "Duplicate Template", "handler": "verstak.templates.duplicate"},
       {"id": "verstak.templates.delete", "title": "Delete Template", "handler": "verstak.templates.delete"},
       {"id": "verstak.templates.createDeal", "title": "Create Deal from Template", "handler": "verstak.templates.createDeal"}
     ]
