@@ -7,7 +7,6 @@
   'use strict';
 
   var PLUGIN_ID = 'verstak.journal';
-  var WORKLOG_PREFIX = 'worklog:workspace:';
   var ACTIVITY_PLUGIN_ID = 'verstak.activity';
   var ASSIGN_ACTIVITY_COMMAND = 'verstak.activity.assignBrowserActivity';
   var SET_RULE_COMMAND = 'verstak.activity.setBrowserActivityRule';
@@ -138,7 +137,7 @@
     if (!workspaceRoot) return { mode: 'global', key: '', label: 'All Deals', workspaceRoot: '', workspaceId: '' };
     return {
       mode: 'workspace',
-      key: WORKLOG_PREFIX + encodeKey(workspaceRoot),
+      key: '',
       label: workspaceRoot,
       workspaceRoot: workspaceRoot,
       workspaceId: workspaceId
@@ -161,7 +160,7 @@
     value = value || {};
     return {
       entryId: text(value.entryId || ('entry:' + Date.now())),
-      workspaceRootPath: cleanWorkspace(value.workspaceRootPath || decodeWorkspaceKey(storageKey)),
+      workspaceRootPath: cleanWorkspace(value.workspaceRootPath),
       date: text(value.date || today()).slice(0, 10),
       title: text(value.title || 'Worklog entry'),
       summary: text(value.summary),
@@ -173,15 +172,6 @@
         ? value.activityIds.map(text)
         : (Array.isArray(value.eventIds) ? value.eventIds.map(text) : [])
     };
-  }
-
-  function decodeWorkspaceKey(key) {
-    if (!key || key.indexOf(WORKLOG_PREFIX) !== 0) return '';
-    try {
-      return decodeURIComponent(key.slice(WORKLOG_PREFIX.length));
-    } catch (err) {
-      return key.slice(WORKLOG_PREFIX.length);
-    }
   }
 
   function normalizeEntries(value, storageKey) {
@@ -200,12 +190,6 @@
       return true;
     }).slice().sort(function (a, b) {
       return text(b.date).localeCompare(text(a.date)) || text(b.entryId).localeCompare(text(a.entryId));
-    });
-  }
-
-  function worklogKeys(settings) {
-    return Object.keys(settings || {}).filter(function (key) {
-      return key.indexOf(WORKLOG_PREFIX) === 0;
     });
   }
 
@@ -426,7 +410,6 @@
   var JOURNAL_FOLDER = 'Журнал';
   var ENTRY_MARK = '<!-- verstak-entry ';
   var ENTRY_MARK_END = ' -->';
-  var MIGRATION_KEY = 'worklogVaultMigration';
   var MONTH_FILE = /^(\d{4}-\d{2})\.md$/;
   // "45 мин · к оплате" and its English twin, and nothing looser: a body whose
   // first line merely mentions minutes must stay a body.
@@ -644,7 +627,7 @@
     });
   }
 
-  function journalDealRoots(api, settings, workspaceRoot) {
+  function journalDealRoots(api, workspaceRoot) {
     var scoped = cleanWorkspace(workspaceRoot);
     if (scoped) return Promise.resolve([scoped]);
     var seen = {};
@@ -655,7 +638,6 @@
       seen[root] = true;
       roots.push(root);
     }
-    worklogKeys(settings || {}).map(decodeWorkspaceKey).forEach(add);
     if (!api || !api.workspaces || typeof api.workspaces.list !== 'function') return Promise.resolve(roots);
     return api.workspaces.list().then(function (entries) {
       (Array.isArray(entries) ? entries : []).forEach(function (entry) { add(entry && entry.rootPath); });
@@ -663,31 +645,15 @@
     }).catch(function () { return roots; });
   }
 
-  function legacyJournalDealEntries(settings, dealRoot) {
-    var deal = cleanWorkspace(dealRoot);
-    var key = WORKLOG_PREFIX + encodeKey(deal);
-    return normalizeEntries((settings || {})[key], key).map(function (entry) {
-      entry.workspaceRootPath = deal;
-      return entry;
-    });
-  }
-
   function readJournalEntries(api, workspaceRoot) {
-    var readSettings = api && api.settings && typeof api.settings.read === 'function'
-      ? api.settings.read().catch(function () { return {}; })
-      : Promise.resolve({});
-    return readSettings.then(function (settings) {
-      settings = settings || {};
-      return journalDealRoots(api, settings, workspaceRoot).then(function (deals) {
-        return deals.reduce(function (chain, deal) {
-          return chain.then(function (all) {
-            return readJournalDealEntries(api, deal).then(function (canonical) {
-              // canonical is first so sortEntries' de-duplication preserves it.
-              return all.concat(canonical, legacyJournalDealEntries(settings, deal));
-            });
+    return journalDealRoots(api, workspaceRoot).then(function (deals) {
+      return deals.reduce(function (chain, deal) {
+        return chain.then(function (all) {
+          return readJournalDealEntries(api, deal).then(function (canonical) {
+            return all.concat(canonical);
           });
-        }, Promise.resolve([]));
-      });
+        });
+      }, Promise.resolve([]));
     }).then(sortEntries);
   }
 
@@ -965,8 +931,6 @@
     }
 
     var journalFolderReady = {};
-    var migration = { version: 1, deals: {} };
-
     function ensureFolder(folder) {
       if (!folder || journalFolderReady[folder]) return Promise.resolve();
       if (!api || !api.files || typeof api.files.createFolder !== 'function') return Promise.resolve();
@@ -1012,61 +976,13 @@
       });
     }
 
-    function normalizeMigration(value) {
-      var stored = value && typeof value === 'object' && value.deals && typeof value.deals === 'object' ? value.deals : {};
-      var deals = {};
-      Object.keys(stored).forEach(function (key) { deals[key] = text(stored[key]); });
-      return { version: 1, deals: deals };
-    }
-
-    function rememberMigration(dealRoot) {
-      migration.deals[cleanWorkspace(dealRoot)] = new Date().toISOString();
-      if (!api || !api.settings || typeof api.settings.write !== 'function') return Promise.resolve();
-      return api.settings.write(MIGRATION_KEY, migration).catch(function (err) {
-        console.warn('[verstak.journal] record worklog migration:', err);
-      });
-    }
-
-    // Worklogs written before this version are in plugin settings. They are
-    // copied into the Deal once; the settings copy is left exactly where it is,
-    // because deleting the only other copy to make a migration look tidy is how
-    // people lose a year of billing.
-    function migrateDeal(dealRoot, settings, vaultEntries) {
-      var deal = cleanWorkspace(dealRoot);
-      if (!deal || migration.deals[deal]) return Promise.resolve(vaultEntries);
-      var key = WORKLOG_PREFIX + encodeKey(deal);
-      var stored = normalizeEntries(settings[key], key).map(function (entry) {
-        entry.workspaceRootPath = deal;
-        return entry;
-      });
-      if (!stored.length) return rememberMigration(deal).then(function () { return vaultEntries; });
-      var known = {};
-      vaultEntries.forEach(function (entry) { known[entry.entryId] = true; });
-      var missing = stored.filter(function (entry) { return !known[entry.entryId]; });
-      var merged = sortEntries(vaultEntries.concat(missing));
-      if (!missing.length) return rememberMigration(deal).then(function () { return merged; });
-      var months = {};
-      merged.forEach(function (entry) { months[monthOf(entry.date)] = true; });
-      return writeMonths(deal, Object.keys(months), merged).then(function () {
-        return rememberMigration(deal);
-      }).then(function () {
-        return merged;
-      }).catch(function (err) {
-        // The old copy is still there and the entries are on screen. Saying
-        // nothing louder than a warning keeps a failed copy from reading like
-        // lost work.
-        console.warn('[verstak.journal] move worklog of ' + deal + ' into the Deal:', err);
-        return merged;
-      });
-    }
-
     // Every Deal this Journal has to speak for: the ones that exist, plus any
     // named by a worklog written before the move into the vault.
-    function dealsInScope(settings) {
+    function dealsInScope() {
       if (scope.mode === 'workspace') return scope.workspaceRoot ? [scope.workspaceRoot] : [];
       var seen = {};
       var deals = [];
-      workspaceOptions.concat(worklogKeys(settings).map(decodeWorkspaceKey)).forEach(function (deal) {
+      workspaceOptions.forEach(function (deal) {
         var target = cleanWorkspace(deal);
         if (!target || seen[target]) return;
         seen[target] = true;
@@ -1103,30 +1019,20 @@
     }
 
     function loadStored() {
-      var readSettings = api && api.settings && typeof api.settings.read === 'function'
-        ? api.settings.read()
-        : Promise.resolve({});
-      return readSettings.then(function (stored) {
-        var settings = stored || {};
-        migration = normalizeMigration(settings[MIGRATION_KEY]);
-        var deals = dealsInScope(settings);
-        // One Deal at a time: a migration writes files, and a dozen Deals
-        // migrating at once is a dozen interleaved writes into the same vault.
-        return deals.reduce(function (chain, deal) {
-          return chain.then(function (collected) {
-            return readDealEntries(deal).then(function (found) {
-              return migrateDeal(deal, settings, found);
-            }).then(function (dealEntries) {
-              return collected.concat(dealEntries);
-            });
+      var deals = dealsInScope();
+      return deals.reduce(function (chain, deal) {
+        return chain.then(function (collected) {
+          return readDealEntries(deal).then(function (found) {
+            return collected.concat(found);
           });
-        }, Promise.resolve([]));
-      }).then(function (all) {
+        });
+      }, Promise.resolve([])).then(function (all) {
         entries = sortEntries(all);
         statusText = scope.mode === 'global'
           ? tr('ui.aggregating', null, 'Aggregating worklogs')
           : tr('ui.ready', null, 'Ready');
         statusClass = '';
+      }).then(function (all) {
       }).catch(function (err) {
         reportError('ui.loadError', 'Could not load journal. Please try again.', err);
       });

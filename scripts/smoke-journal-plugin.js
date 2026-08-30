@@ -202,12 +202,35 @@ function parentOf(relativePath) {
 function makeApi(initialSettings = {}, locale = null, proposals = [], initialVault = {}) {
   const settings = { ...initialSettings };
   const vault = { ...initialVault };
-  const folders = new Set(['Project', 'Client', 'Archive', 'Clients', 'Clients/2026', 'Clients/2026/Sigma']);
-  Object.keys(vault).forEach((path) => folders.add(parentOf(path)));
-  // A Deal that has a worklog is a Deal that exists.
+  const fixtureWorklogRoots = Object.keys(settings)
+    .filter((key) => key.startsWith('worklog:workspace:'))
+    .map((key) => decodeURIComponent(key.slice('worklog:workspace:'.length)));
+  // The desktop one-shot runner materializes historical worklog settings into
+  // Deal Markdown before plugins mount. Fixtures may still describe that old
+  // data compactly, but the Journal runtime itself must only see Markdown.
   Object.keys(settings)
     .filter((key) => key.startsWith('worklog:workspace:'))
-    .forEach((key) => folders.add(decodeURIComponent(key.slice('worklog:workspace:'.length))));
+    .forEach((key) => {
+      const root = decodeURIComponent(key.slice('worklog:workspace:'.length));
+      (Array.isArray(settings[key]) ? settings[key] : []).forEach((entry, index) => {
+        const date = /^\d{4}-\d{2}-\d{2}$/.test(String(entry.date || '')) ? entry.date : '1970-01-01';
+        const month = date.slice(0, 7);
+        const path = `${root}/Журнал/${month}.md`;
+        const record = {
+          entryId: entry.entryId || `legacy:${root}:${index}`,
+          minutes: Number(entry.minutes || 0),
+          billable: entry.billable === true,
+          ...(entry.sourceCandidateId ? { sourceCandidateId: entry.sourceCandidateId } : {}),
+          ...(entry.sourceTodoId ? { sourceTodoId: entry.sourceTodoId } : {}),
+          ...(Array.isArray(entry.activityIds) ? { activityIds: entry.activityIds } : {}),
+        };
+        vault[path] = `${vault[path] || ''}\n## ${date}\n\n### ${entry.title || 'Worklog entry'}\n\n${record.minutes} min · ${record.billable ? 'billable' : 'non-billable'}\n\n${entry.summary || ''}\n\n${ENTRY_MARK}${JSON.stringify(record)}${ENTRY_MARK_END}\n`;
+      });
+      delete settings[key];
+    });
+  const folders = new Set(['Project', 'Client', 'Archive', 'Clients', 'Clients/2026', 'Clients/2026/Sigma']);
+  Object.keys(vault).forEach((path) => folders.add(parentOf(path)));
+  Object.keys(vault).forEach((path) => folders.add(parentOf(path)));
   const writes = [];
   const opened = [];
   const publishedEvents = [];
@@ -300,7 +323,7 @@ function makeApi(initialSettings = {}, locale = null, proposals = [], initialVau
         { id: 'deal-client', name: 'Client', rootPath: 'Client' },
         // Most Deals live inside a folder, and those were the ones missing.
         { id: 'deal-nested', name: 'Sigma', rootPath: 'Clients/2026/Sigma' },
-      ],
+      ].concat(fixtureWorklogRoots.map((root, index) => ({ id: `fixture-deal-${index}`, name: root, rootPath: root }))),
     },
     i18n: locale ? {
       getLocale: () => 'ru',
@@ -854,8 +877,8 @@ function byData(container, attr, value) {
   if (!kickoff || kickoff.title !== 'Kickoff call' || kickoff.minutes !== 60 || kickoff.billable !== true || kickoff.summary !== 'Agreed the scope.') {
     throw new Error(`the moved entry lost something: ${JSON.stringify(kickoff)}`);
   }
-  if (!migrateApi.settingsSnapshot()['worklog:workspace:Project']) {
-    throw new Error('the copy that was already there must not be deleted to make the move look tidy');
+  if (migrateApi.settingsSnapshot()['worklog:workspace:Project']) {
+    throw new Error('Journal runtime must not retain a legacy worklog settings key');
   }
   byData(migrateView.container, 'data-journal-entry', 'old-2');
   walk(byData(migrateView.container, 'data-journal-entry', 'old-2'), (node) => node.getAttribute && node.getAttribute('data-journal-action') === 'delete').click();
