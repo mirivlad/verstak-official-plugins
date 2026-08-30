@@ -1,0 +1,6 @@
+{
+  "manifest.name":"Git", "manifest.description":"Multiple Git repository descriptors per Deal.",
+  "contributions.views.verstak.git.view.title":"Git", "contributions.sidebarItems.verstak.git.sidebar.title":"Git", "contributions.workspaceItems.verstak.git.workspace.title":"Git",
+  "contributions.commands.verstak.git.list.title":"List Git Repositories", "contributions.commands.verstak.git.add.title":"Add Git Repository", "contributions.commands.verstak.git.update.title":"Update Git Repository", "contributions.commands.verstak.git.remove.title":"Remove Git Repository",
+  "ui.title":"Git repositories", "ui.empty":"No Git repositories for this Deal.", "ui.add":"Add repository", "ui.save":"Save", "ui.remove":"Remove", "ui.name":"Name", "ui.remote":"Remote URL", "ui.branch":"Default branch", "ui.credential":"Credential secret", "ui.none":"No credential reference", "ui.local":"This device only", "ui.error":"Could not save the repository.", "ui.missingDeal":"Select a Deal to manage its repositories."
+}
