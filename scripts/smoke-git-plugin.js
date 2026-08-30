@@ -2,7 +2,11 @@
 'use strict';
 const fs = require('fs'); const path = require('path');
 let bundle; global.window = { VerstakPluginRegister(id, definition) { bundle = { id, definition }; } };
-new Function(fs.readFileSync(path.join(__dirname, '..', 'plugins', 'git', 'frontend', 'src', 'index.js'), 'utf8'))();
+const git = fs.readFileSync(path.join(__dirname, '..', 'plugins', 'git', 'frontend', 'src', 'index.js'), 'utf8');
+function assertIncludes(value, expected, message) { if (!value.includes(expected)) throw new Error(message); }
+assertIncludes(git, 'operationLabel', 'Git cards announce the active operation');
+assertIncludes(git, "kind: 'push'", 'Git preserves the operation name while push is pending');
+new Function(git)();
 if (!bundle || bundle.id !== 'verstak.git') throw new Error('Git plugin did not register');
 let records = [], local = [], commands = {};
 const api = { commands: { register(id, handler) { commands[id] = handler; return Promise.resolve(); } }, storage: { data: { readNDJSON(name) { return Promise.resolve(name === 'checkouts' ? local : records); }, writeNDJSON(name, rows) { if (name === 'checkouts') local = rows; else records = rows; return Promise.resolve(); } } } };

@@ -76,15 +76,16 @@
     '.journal-icon-btn svg{width:14px;height:14px;display:block;fill:currentColor}',
     '.journal-modal-host[hidden]{display:none}',
     '.journal-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.58);z-index:10000;display:flex;align-items:center;justify-content:center;padding:1rem}',
-    '.journal-modal{width:520px;max-width:96vw;display:grid;gap:.75rem;padding:1rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface,#15152c);box-shadow:0 18px 44px rgba(0,0,0,.38)}',
+    '.journal-modal{width:min(900px,96vw);max-width: min(900px, 96vw);max-height:calc(100vh - 2rem);display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:.75rem;padding:1rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface,#15152c);box-shadow:0 18px 44px rgba(0,0,0,.38)}',
     '.journal-modal-title{font-size:.95rem;font-weight:650;color:var(--vt-color-text-primary,#f4f7fb)}',
     '.journal-modal-grid{display:grid;grid-template-columns:1fr 8rem;gap:.6rem}',
     '.journal-field{display:grid;gap:.3rem;font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3)}',
     '.journal-field.wide{grid-column:1/-1}',
     '.journal-candidate-context{display:grid;gap:.22rem;padding:.65rem .7rem;border:1px solid rgba(78,204,163,.34);border-radius:var(--vt-radius-md,6px);background:var(--vt-color-surface-muted,#111629);font-size:.76rem;color:var(--vt-color-text-secondary,#b7c0d4)}',
     '.journal-candidate-context strong{color:var(--vt-color-text-primary,#f4f7fb)}',
-    '.journal-candidate-activities{display:grid;gap:.35rem;margin:0;padding:.65rem .7rem;border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-md,6px);font-size:.74rem;color:var(--vt-color-text-secondary,#b7c0d4)}',
+    '.journal-modal-body{display:grid;gap:.75rem;min-height:0;overflow-y:auto;padding-right:.15rem}.journal-candidate-activities{display:grid;gap:.35rem;margin:0;padding:.65rem .7rem;border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-md,6px);font-size:.74rem;color:var(--vt-color-text-secondary,#b7c0d4)}',
     '.journal-candidate-activities legend{padding:0 .2rem;color:var(--vt-color-text-muted,#7f8aa3)}',
+    '.journal-candidate-group{border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-surface-muted,#111629)}.journal-candidate-group summary{cursor:pointer;padding:.5rem .6rem;font-weight:600;color:var(--vt-color-text-primary,#f4f7fb)}.journal-candidate-group-body{display:grid;gap:.35rem;padding:0 .6rem .6rem}.journal-candidate-group-actions{display:flex;gap:.35rem;justify-content:flex-end}.journal-candidate-group-actions .journal-btn{padding:.2rem .45rem;font-size:.7rem}',
     '.journal-candidate-activity{display:flex;align-items:flex-start;gap:.45rem;line-height:1.35;overflow-wrap:anywhere}',
     '.journal-modal-actions{display:flex;justify-content:flex-end;gap:.5rem}',
     '.journal-btn.primary{background:var(--vt-color-accent,#4ecca3);border-color:var(--vt-color-accent,#4ecca3);color:#101827}',
@@ -1190,6 +1191,15 @@
         input.checked = true;
         return { input: input, activity: activity };
       }) : [];
+      var activityGroups = {};
+      activityInputs.forEach(function (item) {
+        var resource = text(item.activity.url || item.activity.hostname || item.activity.title).trim();
+        var action = activityLabel(item.activity);
+        var label = resource && resource !== action ? action + ' · ' + resource : action;
+        var key = item.activity.type + '\u0000' + resource;
+        if (!activityGroups[key]) activityGroups[key] = { label: label, items: [] };
+        activityGroups[key].items.push(item);
+      });
 
       function saveEntry() {
         addOrUpdateEntry(existingEntry, {
@@ -1218,16 +1228,30 @@
       ]) : null;
       var candidateActivities = reviewingCandidate ? el('fieldset', { className: 'journal-candidate-activities' }, [
         el('legend', { textContent: tr('ui.candidate.linkedActivities', null, 'Linked activities') })
-      ].concat(activityInputs.map(function (item) {
-        // Time, what it was, and how long it took. A row that says only the
-        // time leaves the user ticking boxes with no idea what is in them.
-        var minutes = Math.round(Math.max(0, Number(item.activity.durationSeconds) || 0) / 60);
-        var detail = [
-          item.activity.occurredAt ? candidateTime(item.activity.occurredAt) : '',
-          activityLabel(item.activity),
-          minutes > 0 ? tr('ui.minutesValue', { minutes: minutes }, minutes + ' min') : ''
-        ].filter(Boolean).join(' · ');
-        return el('label', { className: 'journal-candidate-activity' }, [item.input, detail]);
+      ].concat(Object.keys(activityGroups).map(function (key) {
+        var group = activityGroups[key];
+        var groupBody = el('div', { className: 'journal-candidate-group-body' });
+        var groupActions = el('div', { className: 'journal-candidate-group-actions' });
+        groupActions.appendChild(el('button', { className: 'journal-btn ghost', type: 'button', textContent: tr('ui.selectAll', null, 'Select all'), onClick: function () {
+          group.items.forEach(function (item) { item.input.checked = true; });
+        } }));
+        groupActions.appendChild(el('button', { className: 'journal-btn ghost', type: 'button', textContent: tr('ui.selectNone', null, 'Select none'), onClick: function () {
+          group.items.forEach(function (item) { item.input.checked = false; });
+        } }));
+        groupBody.appendChild(groupActions);
+        group.items.forEach(function (item) {
+          var minutes = Math.round(Math.max(0, Number(item.activity.durationSeconds) || 0) / 60);
+          var detail = [
+            item.activity.occurredAt ? candidateTime(item.activity.occurredAt) : '',
+            activityLabel(item.activity),
+            minutes > 0 ? tr('ui.minutesValue', { minutes: minutes }, minutes + ' min') : ''
+          ].filter(Boolean).join(' · ');
+          groupBody.appendChild(el('label', { className: 'journal-candidate-activity' }, [item.input, detail]));
+        });
+        return el('details', { className: 'journal-candidate-group', open: 'open' }, [
+          el('summary', { textContent: group.label + ' (' + group.items.length + ')' }),
+          groupBody
+        ]);
       }))) : null;
       var todoContext = reviewingTodo ? el('div', { className: 'journal-candidate-context', 'data-journal-todo': completedTodo.id }, [
         el('strong', { textContent: tr('ui.todo.title', null, 'Completed todo') }),
@@ -1243,17 +1267,19 @@
       } }, [
         el('div', { className: 'journal-modal' }, [
           el('div', { className: 'journal-modal-title', textContent: editing ? tr('ui.editEntry', null, 'Edit journal entry') : (reviewingCandidate ? tr('ui.reviewCandidate', null, 'Review possible journal entry') : (reviewingTodo ? tr('ui.fromTodo', null, 'Create journal entry from completed todo') : tr('ui.addEntry', null, 'Add journal entry'))) }),
-          candidateContext,
-          todoContext,
-          el('div', { className: 'journal-modal-grid' }, [
-            el('label', { className: 'journal-field' }, [tr('ui.date', null, 'Date'), dateInput]),
-            el('label', { className: 'journal-field' }, [tr('ui.minutes', null, 'Minutes'), minutesInput]),
-            workspaceInput ? el('label', { className: 'journal-field wide' }, [tr('ui.workspace', null, 'Deal'), workspaceInput]) : null,
-            el('label', { className: 'journal-field wide' }, [tr('ui.fieldTitle', null, 'Title'), titleInput]),
-            el('label', { className: 'journal-field wide' }, [tr('ui.body', null, 'Body'), summaryInput]),
-            el('label', { className: 'journal-billable' }, [billableInput, tr('ui.billable', null, 'Billable')])
+          el('div', { className: 'journal-modal-body' }, [
+            candidateContext,
+            todoContext,
+            el('div', { className: 'journal-modal-grid' }, [
+              el('label', { className: 'journal-field' }, [tr('ui.date', null, 'Date'), dateInput]),
+              el('label', { className: 'journal-field' }, [tr('ui.minutes', null, 'Minutes'), minutesInput]),
+              workspaceInput ? el('label', { className: 'journal-field wide' }, [tr('ui.workspace', null, 'Deal'), workspaceInput]) : null,
+              el('label', { className: 'journal-field wide' }, [tr('ui.fieldTitle', null, 'Title'), titleInput]),
+              el('label', { className: 'journal-field wide' }, [tr('ui.body', null, 'Body'), summaryInput]),
+              el('label', { className: 'journal-billable' }, [billableInput, tr('ui.billable', null, 'Billable')])
+            ]),
+            candidateActivities
           ]),
-          candidateActivities,
           el('div', { className: 'journal-modal-actions' }, [
             el('button', { className: 'journal-btn ghost', type: 'button', textContent: tr('ui.cancel', null, 'Cancel'), onClick: closeEntryModal }),
             el('button', { className: 'journal-btn primary', type: 'button', 'data-journal-action': 'save-entry', textContent: editing ? tr('ui.saveChanges', null, 'Save changes') : tr('ui.addEntryShort', null, 'Add entry'), onClick: saveEntry })
