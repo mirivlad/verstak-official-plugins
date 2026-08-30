@@ -518,11 +518,13 @@ function byData(container, attr, value) {
     id: 'todo:Project:project-review',
     title: 'Prepare project review',
     description: 'Collect factual review notes.',
-    workspaceRootPath: 'Project',
+    workspaceId: 'deal-project',
+    workspaceName: 'Project',
     completedAt: '2026-06-27T11:15:00.000Z',
   };
   const todoView = await mountWithApi(api, {
-    workspaceNode: { name: 'Project' },
+    workspaceId: 'deal-project',
+    workspaceNode: { workspaceId: 'deal-project', name: 'Project' },
     workspaceRootPath: 'Project',
     toolRequest: { type: 'completed-todo', todo: completedTodo },
   });
@@ -554,7 +556,8 @@ function byData(container, attr, value) {
   }
 
   const duplicateTodoView = await mountWithApi(api, {
-    workspaceNode: { name: 'Project' },
+    workspaceId: 'deal-project',
+    workspaceNode: { workspaceId: 'deal-project', name: 'Project' },
     workspaceRootPath: 'Project',
     toolRequest: { type: 'completed-todo', todo: completedTodo },
   });

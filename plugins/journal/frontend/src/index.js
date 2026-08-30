@@ -775,17 +775,19 @@
     return candidate;
   }
 
-  function completedTodoFromRequest(request, workspaceRoot) {
+  function completedTodoFromRequest(request, workspaceId, workspaceRoot) {
     var value = request && request.type === 'completed-todo' ? request.todo : null;
     if (!value || typeof value !== 'object') return null;
-    var workspace = cleanWorkspace(value.workspaceRootPath);
+    var requestWorkspaceID = text(value.workspaceId).trim();
+    var workspace = cleanWorkspace(value.workspaceName || value.workspaceRootPath || workspaceRoot);
     var todoId = text(value.id).trim();
     var title = text(value.title).trim();
-    if (!todoId || !title || !workspace || workspace !== cleanWorkspace(workspaceRoot)) return null;
+    if (!todoId || !title || !workspace || !requestWorkspaceID || requestWorkspaceID !== text(workspaceId).trim()) return null;
     return {
       id: todoId,
       title: title,
       description: text(value.description || value.body),
+      workspaceId: requestWorkspaceID,
       workspaceRootPath: workspace,
       completedAt: text(value.completedAt)
     };
@@ -1821,7 +1823,7 @@
       // A proposal handed over from another tool opens straight away; asking
       // every provider for its own list must not delay that.
       var candidate = candidateFromRequest(props && props.toolRequest, scope.workspaceId);
-      var completedTodo = completedTodoFromRequest(props && props.toolRequest, scope.workspaceRoot);
+      var completedTodo = completedTodoFromRequest(props && props.toolRequest, scope.workspaceId, scope.workspaceRoot);
       if (candidate) showEntryModal(null, candidate);
       else if (completedTodo) showEntryModal(null, null, completedTodo);
       return loadProposals();
