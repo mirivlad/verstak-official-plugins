@@ -58,11 +58,13 @@ function loadBundle(document) {
   byAttr(dealView, 'data-project-meta-field', 'description').value = 'Prepare launch';
   byAttr(dealView, 'data-project-meta-field', 'status').value = 'active';
   byAttr(dealView, 'data-project-meta-field', 'priority').value = 'high';
+  byAttr(dealView, 'data-project-meta-field', 'startDate').value = '2026-08-01';
+  byAttr(dealView, 'data-project-meta-field', 'dueDate').value = '2026-09-01';
   byAttr(dealView, 'data-project-meta-field', 'tags').value = 'alpha, Launch, alpha';
   byAttr(dealView, 'data-project-meta-action', 'save').click();
   await flush(3);
   const saved = configs[dealOne];
-  if (!saved || saved.schemaVersion !== 1 || saved.name !== 'Launch plan' || saved.description !== 'Prepare launch' || saved.status !== 'active' || saved.priority !== 'high' || saved.tags.join('|') !== 'alpha|Launch') throw new Error(`Deal metadata was not saved as Project Meta: ${JSON.stringify(saved)}`);
+  if (!saved || saved.schemaVersion !== 1 || saved.name !== 'Launch plan' || saved.description !== 'Prepare launch' || saved.status !== 'active' || saved.priority !== 'high' || saved.startDate !== '2026-08-01' || saved.dueDate !== '2026-09-01' || saved.tags.join('|') !== 'alpha|Launch') throw new Error(`Deal metadata was not saved as Project Meta: ${JSON.stringify(saved)}`);
   if (Object.prototype.hasOwnProperty.call(saved, 'workspaceId') || Object.prototype.hasOwnProperty.call(saved, 'projectId')) throw new Error('Project Meta stored a second resource scope');
   bundle.components.ProjectMetaView.unmount(dealView);
 

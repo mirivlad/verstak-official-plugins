@@ -61,6 +61,8 @@
       status: STATUS_VALUES.indexOf(raw.status) >= 0 ? raw.status : 'active',
       priority: PRIORITY_VALUES.indexOf(raw.priority) >= 0 ? raw.priority : 'normal',
       tags: normalizeTags(raw.tags),
+      startDate: text(raw.startDate).trim(),
+      dueDate: text(raw.dueDate).trim(),
       updatedAt: text(raw.updatedAt)
     };
   }
@@ -106,12 +108,21 @@
       }
       selectField(translate(api, 'ui.status', 'Status'), 'status', STATUS_VALUES);
       selectField(translate(api, 'ui.priority', 'Priority'), 'priority', PRIORITY_VALUES);
+      var dates = el('div', { className: 'project-meta-row' });
+      form.appendChild(dates);
+      function dateField(label, key) {
+        var input = el('input', { className: 'project-meta-input', type: 'date', 'data-project-meta-field': key, value: state.meta[key] });
+        fields[key] = input;
+        dates.appendChild(el('label', { className: 'project-meta-field' }, [el('span', { className: 'project-meta-label', textContent: label }), input]));
+      }
+      dateField(translate(api, 'ui.startDate', 'Start date'), 'startDate');
+      dateField(translate(api, 'ui.dueDate', 'Due date'), 'dueDate');
       field(translate(api, 'ui.tags', 'Tags'), 'tags', 'input', { value: state.meta.tags.join(', ') });
       var save = el('button', { className: 'project-meta-save', type: 'button', 'data-project-meta-action': 'save', textContent: state.saving ? translate(api, 'ui.saving', 'Saving…') : translate(api, 'ui.save', 'Save') });
       save.disabled = state.saving;
       save.addEventListener('click', function () {
         if (state.saving) return;
-        var next = normalizeMeta({ name: fields.name.value, description: fields.description.value, status: fields.status.value, priority: fields.priority.value, tags: fields.tags.value, updatedAt: new Date().toISOString() });
+        var next = normalizeMeta({ name: fields.name.value, description: fields.description.value, status: fields.status.value, priority: fields.priority.value, startDate: fields.startDate.value, dueDate: fields.dueDate.value, tags: fields.tags.value, updatedAt: new Date().toISOString() });
         state.saving = true; state.error = ''; state.saved = false; render();
         Promise.resolve(api.workspaces.writeToolConfig(scope.id, next)).then(function () { if (disposed) return; state.meta = next; state.saving = false; state.saved = true; render(); }).catch(function () { if (disposed) return; state.saving = false; state.error = translate(api, 'ui.saveError', 'Could not save Project Meta.'); render(); });
       });
