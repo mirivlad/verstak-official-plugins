@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "id": "verstak.milestones",
+  "name": "Milestones",
+  "version": "0.1.0",
+  "apiVersion": "0.1.0",
+  "description": "Independent Deal-scoped milestones.",
+  "localization": {
+    "defaultLocale": "en",
+    "locales": {
+      "en": "locales/en.json",
+      "ru": "locales/ru.json"
+    }
+  },
+  "source": "official",
+  "icon": "flag",
+  "provides": [
+    "verstak/milestones/v1"
+  ],
+  "permissions": [
+    "storage.namespace",
+    "ui.register",
+    "commands.register"
+  ],
+  "sync": {
+    "records": [
+      {
+        "id": "milestones",
+        "storage": "data",
+        "name": "milestones",
+        "identity": "id"
+      }
+    ]
+  },
+  "frontend": {
+    "entry": "frontend/src/index.js"
+  },
+  "contributes": {
+    "views": [
+      {
+        "id": "verstak.milestones.view",
+        "title": "Milestones",
+        "icon": "flag",
+        "component": "MilestonesView"
+      }
+    ],
+    "sidebarItems": [
+      {
+        "id": "verstak.milestones.sidebar",
+        "title": "Milestones",
+        "icon": "flag",
+        "view": "verstak.milestones.view",
+        "position": 36
+      }
+    ],
+    "workspaceItems": [
+      {
+        "id": "verstak.milestones.workspace",
+        "title": "Milestones",
+        "icon": "flag",
+        "order": 35,
+        "component": "MilestonesView"
+      }
+    ],
+    "commands": [
+      {
+        "id": "verstak.milestones.list",
+        "title": "List Milestones",
+        "handler": "verstak.milestones.list"
+      },
+      {
+        "id": "verstak.milestones.create",
+        "title": "Create Milestone",
+        "handler": "verstak.milestones.create"
+      },
+      {
+        "id": "verstak.milestones.update",
+        "title": "Update Milestone",
+        "handler": "verstak.milestones.update"
+      },
+      {
+        "id": "verstak.milestones.delete",
+        "title": "Delete Milestone",
+        "handler": "verstak.milestones.delete"
+      }
+    ]
+  },
+  "capabilityOperations": {
+    "verstak/milestones/v1": {
+      "list": "verstak.milestones.list",
+      "create": "verstak.milestones.create",
+      "update": "verstak.milestones.update",
+      "delete": "verstak.milestones.delete"
+    }
+  }
+}
