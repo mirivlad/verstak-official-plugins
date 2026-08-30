@@ -1749,11 +1749,20 @@
     return fallback || key;
   }
 
+  function dealRootForScope(api, args) {
+    var scope = args && args.scope;
+    var workspaceId = text((scope && scope.kind === 'deal' && scope.workspaceId) || (args && args.workspaceId)).trim();
+    if (!workspaceId || !api || !api.workspaces || typeof api.workspaces.list !== 'function') return Promise.resolve('');
+    return api.workspaces.list().then(function (workspaces) {
+      var deal = (Array.isArray(workspaces) ? workspaces : []).find(function (item) { return text(item && item.id).trim() === workspaceId; });
+      return cleanWorkspace(deal && deal.rootPath);
+    }).catch(function () { return ''; });
+  }
 
   function provideOverview(api, args) {
-    var workspace = cleanWorkspace(args && args.workspaceRootPath);
-    if (!workspace) return Promise.resolve({});
-    return readJournalEntries(api, workspace).then(function (entries) {
+    return dealRootForScope(api, args).then(function (workspace) {
+      if (!workspace) return {};
+      return readJournalEntries(api, workspace).then(function (entries) {
       entries = entries.filter(function (entry) { return cleanWorkspace(entry.workspaceRootPath) === workspace; });
       var action = { workspaceItemId: 'verstak.journal.workspace' };
       var count = entries.length;
@@ -1787,6 +1796,7 @@
         }),
         lastActiveAt: entries.length ? entries[0].date : ''
       };
+      });
     }).catch(function (err) {
       console.warn('[verstak.journal] overview provider:', err);
       return {};
