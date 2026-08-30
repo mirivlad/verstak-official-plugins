@@ -46,6 +46,7 @@ const api = {
   if (Object.keys(commands).length !== 6) throw new Error('Templates commands were not registered');
   const seeds = await commands['verstak.templates.list']({});
   if (seeds.length !== 5 || !seeds.some((row) => row.name === 'Project')) throw new Error('Seed templates were not persisted');
+  if (seeds.some((row) => row.workspaceTools.includes('verstak.activity'))) throw new Error('Background Activity provider must not be stored as a Deal workspace tool');
   const custom = await commands['verstak.templates.create']({ id: 'custom', name: 'Custom', workspaceTools: ['verstak.notes', 'verstak.files'], initialFolders: ['Notes'], initialFiles: [{ path: 'README.md', content: '# Custom' }], toolConfig: { notes: { layout: 'compact' } } });
   const updated = await commands['verstak.templates.update']({ ...custom, name: 'Custom updated', version: 2 });
   if (updated.name !== 'Custom updated') throw new Error('Template update failed');
