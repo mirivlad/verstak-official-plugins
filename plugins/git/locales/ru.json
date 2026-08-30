@@ -1,0 +1,6 @@
+{
+  "manifest.name":"Git", "manifest.description":"Несколько Git-репозиториев для каждого Дела.",
+  "contributions.views.verstak.git.view.title":"Git", "contributions.sidebarItems.verstak.git.sidebar.title":"Git", "contributions.workspaceItems.verstak.git.workspace.title":"Git",
+  "contributions.commands.verstak.git.list.title":"Список Git-репозиториев", "contributions.commands.verstak.git.add.title":"Добавить Git-репозиторий", "contributions.commands.verstak.git.update.title":"Изменить Git-репозиторий", "contributions.commands.verstak.git.remove.title":"Удалить Git-репозиторий",
+  "ui.title":"Git-репозитории", "ui.empty":"В этом Деле пока нет Git-репозиториев.", "ui.add":"Добавить репозиторий", "ui.save":"Сохранить", "ui.remove":"Удалить", "ui.name":"Название", "ui.remote":"Remote URL", "ui.branch":"Основная ветка", "ui.credential":"Секрет учётных данных", "ui.none":"Без ссылки на секрет", "ui.local":"Только на этом устройстве", "ui.error":"Не удалось сохранить репозиторий.", "ui.missingDeal":"Выберите Дело для управления его репозиториями."
+}
