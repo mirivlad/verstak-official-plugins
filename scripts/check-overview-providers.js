@@ -22,5 +22,7 @@ for (const manifest of manifests) {
     if (!workspaceIds.has(match[1])) throw new Error(`${manifest.id}: unknown Overview workspaceItemId ${match[1]}`);
   }
 }
-if (providers !== 5) throw new Error(`expected 5 official Overview providers, found ${providers}`);
+// Activity reconstructs Journal evidence in the background and intentionally
+// no longer adds a user-facing Overview card.
+if (providers !== 4) throw new Error(`expected 4 user-facing Overview providers, found ${providers}`);
 console.log(`OK ${providers} Overview providers use declared commands and exact workspace item ids`);
