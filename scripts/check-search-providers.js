@@ -50,5 +50,7 @@ for (const capability of ['verstak/core/capability-registry/v1', 'verstak/core/w
   if (!searchOptional.has(capability)) fail(`verstak.search must declare optional dependency ${capability}`);
 }
 
-if (providerCount !== 4) throw new Error(`expected 4 official Search providers, found ${providerCount}`);
+// Activity is intentionally absent from global user search; it remains a
+// background Journal provider rather than a discoverable result surface.
+if (providerCount !== 3) throw new Error(`expected 3 user-facing Search providers, found ${providerCount}`);
 console.log(`OK ${providerCount} Search providers use declared background commands`);
