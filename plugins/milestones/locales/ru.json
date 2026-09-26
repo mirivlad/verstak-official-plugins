@@ -15,6 +15,7 @@
   "ui.save": "Сохранить",
   "ui.cancel": "Отмена",
   "ui.delete": "Удалить",
+  "ui.deleteConfirm": "Удалить эту веху? Отменить действие нельзя.",
   "ui.titleLabel": "Название",
   "ui.titlePlaceholder": "Например: релиз v1.0",
   "ui.dueDate": "Срок",

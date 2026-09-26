@@ -15,6 +15,7 @@
   "ui.save": "Save",
   "ui.cancel": "Cancel",
   "ui.delete": "Delete",
+  "ui.deleteConfirm": "Delete this milestone? This cannot be undone.",
   "ui.titleLabel": "Title",
   "ui.titlePlaceholder": "For example: v1.0 release",
   "ui.dueDate": "Due",

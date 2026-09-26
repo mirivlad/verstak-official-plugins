@@ -55,12 +55,12 @@ function byData(node, name, value) {
 function clone(value) { return JSON.parse(JSON.stringify(value)); }
 
 async function flush() {
-  for (let index = 0; index < 8; index += 1) await Promise.resolve();
+  for (let index = 0; index < 24; index += 1) await Promise.resolve();
 }
 
-function loadBundle(document) {
+function loadBundle(document, confirm) {
   let bundle;
-  const window = { VerstakPluginRegister(_id, definition) { bundle = definition; } };
+  const window = { confirm, VerstakPluginRegister(_id, definition) { bundle = definition; } };
   vm.runInNewContext(source, { console, Date, Math, Promise, document, window }, { filename: sourcePath });
   if (!bundle?.components?.MilestonesView || typeof bundle.activate !== 'function') {
     throw new Error('Milestones plugin did not register its view and commands');
@@ -95,7 +95,9 @@ function loadBundle(document) {
     workspaces: { list: async () => [{ id: dealOne, name: 'Standalone Deal' }, { id: dealTwo, name: 'Second Deal' }] },
     commands: { register: async (id, handler) => { commands[id] = handler; } },
   };
-  const bundle = loadBundle(document);
+  let confirmationAllowed = false;
+  const confirmations = [];
+  const bundle = loadBundle(document, (message) => { confirmations.push(message); return confirmationAllowed; });
   await bundle.activate(api);
 
   const created = await commands['verstak.milestones.create']({ scope: { kind: 'deal', workspaceId: dealOne }, title: 'Beta', dueAt: '2026-09-01' });
@@ -120,7 +122,15 @@ function loadBundle(document) {
   byData(container, 'data-milestone-input', 'title').value = 'UI milestone';
   byData(container, 'data-milestone-action', 'save').click();
   await flush();
-  if (!records.some((record) => record.title === 'UI milestone' && record.workspaceId === dealOne)) throw new Error('Milestones Deal UI did not persist its own record');
+  const uiMilestone = records.find((record) => record.title === 'UI milestone' && record.workspaceId === dealOne);
+  if (!uiMilestone) throw new Error('Milestones Deal UI did not persist its own record');
+  byData(byData(container, 'data-milestone-id', uiMilestone.id), 'data-milestone-action', 'delete').click();
+  await flush();
+  if (!records.some((record) => record.id === uiMilestone.id) || confirmations.length !== 1) throw new Error('Cancelled UI delete removed a milestone');
+  confirmationAllowed = true;
+  byData(byData(container, 'data-milestone-id', uiMilestone.id), 'data-milestone-action', 'delete').click();
+  await flush();
+  if (records.some((record) => record.id === uiMilestone.id)) throw new Error('Confirmed UI delete kept a milestone');
   bundle.components.MilestonesView.unmount(container);
 
   await commands['verstak.milestones.delete']({ scope: { kind: 'deal', workspaceId: dealOne }, id: created.id });
