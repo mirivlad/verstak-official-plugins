@@ -37,10 +37,76 @@
   function TemplatesSettings() {}
   TemplatesSettings.mount = function (container, props, api) {
     inject(); var disposed = false; var templates = []; var catalog = []; var selected = null; var selectedTools = []; var draft = null; var message = '';
+    function draftIsDirty() {
+      var current = templates.find(function (row) { return row.id === selected; });
+      if (!current || !draft) return false;
+      return draft.name !== current.name || draft.description !== current.description || draft.folders !== current.initialFolders.join('\n') ||
+        selectedTools.length !== current.workspaceTools.length || selectedTools.some(function (tool, index) { return tool !== current.workspaceTools[index]; });
+    }
+    function canDiscardDraft() {
+      return !draftIsDirty() || (typeof window.confirm === 'function' && window.confirm(translate(api, 'ui.discardConfirm', 'Discard unsaved template changes?')));
+    }
     function render() {
-      if (disposed) return; container.innerHTML = ''; var shell = element('div', { className: 'templates-shell' }); shell.appendChild(element('h1', { className: 'templates-title', textContent: translate(api, 'ui.title', 'Deal templates') })); var layout = element('div', { className: 'templates-layout' }); var list = element('div', { className: 'templates-list' }); list.appendChild(element('button', { className: 'templates-btn primary', type: 'button', textContent: translate(api, 'ui.new', 'New template'), onClick: function () { var fresh = normalize({ name: 'Untitled template' }); createTemplate(api, fresh).then(function () { select(fresh.id); return refresh(); }).catch(fail); } })); if (!templates.length) list.appendChild(element('div', { className: 'templates-empty', textContent: translate(api, 'ui.empty', 'No templates yet.') })); templates.forEach(function (template) { list.appendChild(element('button', { className: 'templates-template' + (selected === template.id ? ' selected' : ''), type: 'button', textContent: template.name, onClick: function () { select(template.id); message = ''; render(); } })); }); layout.appendChild(list);
-      var template = templates.find(function (row) { return row.id === selected; }) || templates[0]; if (template && !selected) select(template.id);
-      var form = element('div', { className: 'templates-form', 'data-templates-form': '' }); if (template) { var name = element('input', { className: 'templates-input', 'data-template-field': 'name', value: draft ? draft.name : template.name }); var description = element('textarea', { className: 'templates-textarea', 'data-template-field': 'description', value: draft ? draft.description : template.description }); var folders = element('textarea', { className: 'templates-textarea', 'data-template-field': 'folders', value: draft ? draft.folders : template.initialFolders.join('\n') }); function saveDraft() { draft = { name: name.value, description: description.value, folders: folders.value }; } function field(label, input) { form.appendChild(element('label', { className: 'templates-label' }, [element('span', { textContent: label }), input])); } field(translate(api, 'ui.name', 'Template name'), name); field(translate(api, 'ui.description', 'Description'), description); form.appendChild(element('span', { className: 'templates-label', textContent: translate(api, 'ui.tools', 'Deal tools') })); var toolGrid = element('div', { className: 'templates-tool-grid' }); catalog.forEach(function (tool) { var checked = selectedTools.indexOf(tool.id) !== -1; toolGrid.appendChild(element('button', { className: 'templates-tool' + (checked ? ' selected' : ''), type: 'button', 'aria-pressed': checked ? 'true' : 'false', 'data-template-tool': tool.id, 'data-template-tool-icon': tool.icon, onClick: function () { saveDraft(); selectedTools = checked ? selectedTools.filter(function (id) { return id !== tool.id; }) : selectedTools.concat([tool.id]); render(); } }, [element('span', { className: 'templates-tool-icon', 'aria-hidden': 'true' }), element('span', { className: 'templates-tool-title', textContent: tool.title }), element('span', { className: 'templates-tool-description', textContent: tool.description })])); }); selectedTools.filter(function (id) { return !catalog.some(function (tool) { return tool.id === id; }); }).forEach(function (id) { toolGrid.appendChild(element('button', { className: 'templates-tool', type: 'button', disabled: 'disabled', 'data-template-tool': id }, [element('span', { className: 'templates-tool-icon', 'aria-hidden': 'true' }), element('span', { className: 'templates-tool-title', textContent: translate(api, 'ui.toolUnavailable', 'Unavailable workspace tool') }), element('span', { className: 'templates-tool-description', textContent: translate(api, 'ui.missing', 'Install or enable these plugins before creating this Deal:') })])); }); form.appendChild(toolGrid); field(translate(api, 'ui.folders', 'Initial folders (one per line)'), folders); form.appendChild(element('div', { className: 'templates-row' }, [element('button', { className: 'templates-btn primary', type: 'button', 'data-template-action': 'save', textContent: translate(api, 'ui.save', 'Save template'), onClick: function () { saveDraft(); updateTemplate(api, Object.assign({}, template, { name: draft.name, description: draft.description, workspaceTools: selectedTools, initialFolders: lines(draft.folders), version: template.version + 1, updatedAt: now() })).then(function () { message = translate(api, 'ui.saved', 'Template saved.'); return refresh(); }).catch(fail); } }), element('button', { className: 'templates-btn', type: 'button', 'data-template-action': 'duplicate', textContent: translate(api, 'ui.duplicate', 'Duplicate'), onClick: function () { duplicateTemplate(api, template.id).then(function (duplicated) { select(duplicated.id); message = translate(api, 'ui.duplicated', 'Template duplicated.'); return refresh(); }).catch(fail); } }), element('button', { className: 'templates-btn', type: 'button', 'data-template-action': 'delete', textContent: translate(api, 'ui.delete', 'Delete'), onClick: function () { deleteTemplate(api, template.id).then(function () { selected = ''; selectedTools = []; draft = null; return refresh(); }).catch(fail); } })])); } if (message) form.appendChild(element('div', { className: 'templates-message', textContent: message })); layout.appendChild(form); shell.appendChild(layout); container.appendChild(shell);
+      if (disposed) return;
+      container.innerHTML = '';
+      var shell = element('div', { className: 'templates-shell' });
+      shell.appendChild(element('h1', { className: 'templates-title', textContent: translate(api, 'ui.title', 'Deal templates') }));
+      var layout = element('div', { className: 'templates-layout' });
+      var list = element('div', { className: 'templates-list' });
+      list.appendChild(element('button', { className: 'templates-btn primary', type: 'button', textContent: translate(api, 'ui.new', 'New template'), onClick: function () {
+        if (!canDiscardDraft()) return;
+        var fresh = normalize({ name: 'Untitled template' });
+        createTemplate(api, fresh).then(function () { select(fresh.id); return refresh(); }).catch(fail);
+      } }));
+      if (!templates.length) list.appendChild(element('div', { className: 'templates-empty', textContent: translate(api, 'ui.empty', 'No templates yet.') }));
+      templates.forEach(function (template) {
+        list.appendChild(element('button', { className: 'templates-template' + (selected === template.id ? ' selected' : ''), type: 'button', textContent: template.name, onClick: function () {
+          if (selected === template.id || !canDiscardDraft()) return;
+          select(template.id); message = ''; render();
+        } }));
+      });
+      layout.appendChild(list);
+      var template = templates.find(function (row) { return row.id === selected; }) || templates[0];
+      if (template && !selected) select(template.id);
+      var form = element('div', { className: 'templates-form', 'data-templates-form': '' });
+      if (template) {
+        var name = element('input', { className: 'templates-input', 'data-template-field': 'name', value: draft ? draft.name : template.name });
+        var description = element('textarea', { className: 'templates-textarea', 'data-template-field': 'description', value: draft ? draft.description : template.description });
+        var folders = element('textarea', { className: 'templates-textarea', 'data-template-field': 'folders', value: draft ? draft.folders : template.initialFolders.join('\n') });
+        function saveDraft() { draft = { name: name.value, description: description.value, folders: folders.value }; }
+        [name, description, folders].forEach(function (input) { input.addEventListener('input', saveDraft); });
+        function field(label, input) { form.appendChild(element('label', { className: 'templates-label' }, [element('span', { textContent: label }), input])); }
+        field(translate(api, 'ui.name', 'Template name'), name);
+        field(translate(api, 'ui.description', 'Description'), description);
+        form.appendChild(element('span', { className: 'templates-label', textContent: translate(api, 'ui.tools', 'Deal tools') }));
+        var toolGrid = element('div', { className: 'templates-tool-grid' });
+        catalog.forEach(function (tool) {
+          var checked = selectedTools.indexOf(tool.id) !== -1;
+          toolGrid.appendChild(element('button', { className: 'templates-tool' + (checked ? ' selected' : ''), type: 'button', 'aria-pressed': checked ? 'true' : 'false', 'data-template-tool': tool.id, 'data-template-tool-icon': tool.icon, onClick: function () {
+            saveDraft(); selectedTools = checked ? selectedTools.filter(function (id) { return id !== tool.id; }) : selectedTools.concat([tool.id]); render();
+          } }, [element('span', { className: 'templates-tool-icon', 'aria-hidden': 'true' }), element('span', { className: 'templates-tool-title', textContent: tool.title }), element('span', { className: 'templates-tool-description', textContent: tool.description })]));
+        });
+        selectedTools.filter(function (id) { return !catalog.some(function (tool) { return tool.id === id; }); }).forEach(function (id) {
+          toolGrid.appendChild(element('button', { className: 'templates-tool', type: 'button', disabled: 'disabled', 'data-template-tool': id }, [element('span', { className: 'templates-tool-icon', 'aria-hidden': 'true' }), element('span', { className: 'templates-tool-title', textContent: translate(api, 'ui.toolUnavailable', 'Unavailable workspace tool') }), element('span', { className: 'templates-tool-description', textContent: translate(api, 'ui.missing', 'Install or enable these plugins before creating this Deal:') })]));
+        });
+        form.appendChild(toolGrid);
+        field(translate(api, 'ui.folders', 'Initial folders (one per line)'), folders);
+        form.appendChild(element('div', { className: 'templates-row' }, [
+          element('button', { className: 'templates-btn primary', type: 'button', 'data-template-action': 'save', textContent: translate(api, 'ui.save', 'Save template'), onClick: function () {
+            saveDraft(); updateTemplate(api, Object.assign({}, template, { name: draft.name, description: draft.description, workspaceTools: selectedTools, initialFolders: lines(draft.folders), version: template.version + 1, updatedAt: now() })).then(function () { message = translate(api, 'ui.saved', 'Template saved.'); return refresh(); }).catch(fail);
+          } }),
+          element('button', { className: 'templates-btn', type: 'button', 'data-template-action': 'duplicate', textContent: translate(api, 'ui.duplicate', 'Duplicate'), onClick: function () {
+            if (!canDiscardDraft()) return;
+            duplicateTemplate(api, template.id).then(function (duplicated) { select(duplicated.id); message = translate(api, 'ui.duplicated', 'Template duplicated.'); return refresh(); }).catch(fail);
+          } }),
+          element('button', { className: 'templates-btn', type: 'button', 'data-template-action': 'delete', textContent: translate(api, 'ui.delete', 'Delete'), onClick: function () {
+            if (typeof window.confirm !== 'function' || !window.confirm(translate(api, 'ui.deleteConfirm', 'Delete this template? This cannot be undone.') + '\n' + template.name)) return;
+            deleteTemplate(api, template.id).then(function () { selected = ''; selectedTools = []; draft = null; return refresh(); }).catch(fail);
+          } })
+        ]));
+      }
+      if (message) form.appendChild(element('div', { className: 'templates-message', textContent: message }));
+      layout.appendChild(form); shell.appendChild(layout); container.appendChild(shell);
     }
     function select(templateID) { selected = templateID; var template = templates.find(function (row) { return row.id === templateID; }); selectedTools = template ? template.workspaceTools.slice() : []; draft = template ? { name: template.name, description: template.description, folders: template.initialFolders.join('\n') } : null; }
     function fail() { message = translate(api, 'ui.error', 'Could not complete that action.'); render(); }

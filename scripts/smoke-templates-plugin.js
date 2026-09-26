@@ -14,6 +14,38 @@ function assertExcludes(value, expected, message) {
   if (value.includes(expected)) throw new Error(message + ': found ' + expected);
 }
 
+class FakeNode {
+  constructor(tag = '') {
+    this.tagName = String(tag).toUpperCase();
+    this.children = [];
+    this.attributes = {};
+    this.listeners = {};
+    this.value = '';
+    this.className = '';
+    this._textContent = '';
+  }
+  appendChild(node) { this.children.push(node); return node; }
+  setAttribute(name, value) { this.attributes[name] = String(value); }
+  getAttribute(name) { return this.attributes[name]; }
+  addEventListener(type, listener) { (this.listeners[type] ||= []).push(listener); }
+  dispatchEvent(type) { (this.listeners[type] || []).forEach((listener) => listener({ target: this })); }
+  click() { this.dispatchEvent('click'); }
+  set innerHTML(_value) { this.children = []; this._textContent = ''; }
+  get textContent() { return this._textContent + this.children.map((child) => child.textContent).join(''); }
+  set textContent(value) { this._textContent = String(value == null ? '' : value); this.children = []; }
+}
+
+function walk(node, predicate) {
+  if (predicate(node)) return node;
+  for (const child of node.children || []) {
+    const result = walk(child, predicate);
+    if (result) return result;
+  }
+  return null;
+}
+
+async function flush() { for (let index = 0; index < 24; index += 1) await Promise.resolve(); }
+
 if (!(manifest.contributes.settingsPanels || []).some((panel) => panel.id === 'verstak.templates.settings')) {
   throw new Error('Templates settings panel was not declared');
 }
@@ -60,5 +92,48 @@ const api = {
   if (JSON.stringify(copied.workspaceTools) !== JSON.stringify(['verstak.notes', 'verstak.files']) || copied.initialFiles.length !== 1 || copied.toolConfig.notes.layout !== 'compact') throw new Error('Template copy was coupled to later original changes');
   await commands['verstak.templates.delete']({ id: 'custom' });
   if ((await commands['verstak.templates.list']({})).some((row) => row.id === 'custom')) throw new Error('Template delete failed');
+
+  const prompts = [];
+  let allowConfirmation = false;
+  global.window.confirm = (message) => { prompts.push(message); return allowConfirmation; };
+  global.document = {
+    head: new FakeNode('head'),
+    createElement: (tag) => new FakeNode(tag),
+    createTextNode: (value) => { const node = new FakeNode('#text'); node.textContent = value; return node; },
+    getElementById: () => null,
+  };
+  const container = new FakeNode('div');
+  bundle.definition.components.TemplatesSettings.mount(container, {}, api);
+  await flush();
+  const find = (predicate) => walk(container, predicate);
+  const buttonNamed = (name) => find((node) => node.tagName === 'BUTTON' && node.className.includes('templates-template') && node.textContent === name);
+  const field = (name) => find((node) => node.getAttribute && node.getAttribute('data-template-field') === name);
+  const action = (name) => find((node) => node.getAttribute && node.getAttribute('data-template-action') === name);
+  field('name').value = 'Unsaved name';
+  field('name').dispatchEvent('input');
+  buttonNamed('Project').click();
+  await flush();
+  if (field('name').value !== 'Unsaved name' || !buttonNamed('General').className.includes('selected') || prompts.length !== 1) throw new Error('Switching templates discarded an unsaved draft');
+  allowConfirmation = true;
+  buttonNamed('Project').click();
+  await flush();
+  if (field('name').value !== 'Project') throw new Error('Confirmed template switch did not select the target');
+  field('description').value = 'Unsaved description';
+  field('description').dispatchEvent('input');
+  allowConfirmation = false;
+  const beforeAbortedActions = records.length;
+  action('duplicate').click();
+  await flush();
+  find((node) => node.tagName === 'BUTTON' && node.textContent === 'New template').click();
+  await flush();
+  if (records.length !== beforeAbortedActions || field('description').value !== 'Unsaved description') throw new Error('New or duplicate discarded an unsaved draft');
+  action('delete').click();
+  await flush();
+  if (!records.some((row) => row.name === 'Project')) throw new Error('Cancelled UI delete removed a template');
+  allowConfirmation = true;
+  action('delete').click();
+  await flush();
+  if (records.some((row) => row.name === 'Project')) throw new Error('Confirmed UI delete kept a template');
+  bundle.definition.components.TemplatesSettings.unmount(container);
   console.log('templates plugin smoke passed');
 })().catch((error) => { console.error(error.stack || error); process.exit(1); });

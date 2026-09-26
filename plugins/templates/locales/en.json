@@ -14,6 +14,8 @@
   "ui.save": "Save template",
   "ui.duplicate": "Duplicate",
   "ui.delete": "Delete",
+  "ui.deleteConfirm": "Delete this template? This cannot be undone.",
+  "ui.discardConfirm": "Discard unsaved template changes?",
   "ui.name": "Template name",
   "ui.description": "Description",
   "ui.tools": "Deal tools",
