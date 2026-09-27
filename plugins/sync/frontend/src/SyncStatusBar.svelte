@@ -16,7 +16,7 @@
 
   $: presentation = deriveSyncState(status)
 
-  function statusColor() {
+  function statusColor(presentation) {
     if (presentation.kind === 'success') return '#34d399'
     if (presentation.kind === 'error' || presentation.kind === 'revoked') return '#ff6b6b'
     if (presentation.kind === 'syncing') return '#60a5fa'
@@ -24,7 +24,7 @@
     return '#8b95a7'
   }
 
-  function statusText() {
+  function statusText(presentation, status, locale) {
     const relative = formatRelativeSyncTime(status?.lastSyncAt, locale)
     const labels = {
       success: relative
@@ -41,8 +41,8 @@
     return labels[presentation.kind] || tr('ui.status.disabled', null, 'Not configured')
   }
 
-  function statusTooltip() {
-    const lines = [tr('ui.title', null, 'Sync') + ': ' + statusText()]
+  function statusTooltip(presentation, status, locale) {
+    const lines = [tr('ui.title', null, 'Sync') + ': ' + statusText(presentation, status, locale)]
     if (status?.serverUrl) lines.push(tr('ui.status.server', { server: status.serverUrl }, 'Server: {server}'))
     const exact = formatExactSyncTime(status?.lastSyncAt, locale)
     if (exact) lines.push(tr('ui.status.lastSuccess', { date: exact }, 'Last successful sync: {date}'))
@@ -80,9 +80,9 @@
   })
 </script>
 
-<button class="sync-status-bar" on:click={openSettings} title={statusTooltip()}>
-  <span class="status-dot" style="background: {statusColor()}"></span>
-  <span class="status-label">{statusText()}</span>
+<button class="sync-status-bar" on:click={openSettings} title={statusTooltip(presentation, status, locale)}>
+  <span class="status-dot" style="background: {statusColor(presentation)}"></span>
+  <span class="status-label">{statusText(presentation, status, locale)}</span>
 </button>
 
 <style>

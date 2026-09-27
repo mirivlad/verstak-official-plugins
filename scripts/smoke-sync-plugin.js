@@ -65,6 +65,16 @@ if (!statusSource.includes('createSyncController')) {
 if (!statusSource.includes('formatRelativeSyncTime') || !statusSource.includes('formatExactSyncTime')) {
   throw new Error('SyncStatusBar must show relative and exact last-success times');
 }
+if (!/statusColor\(presentation\)/.test(statusSource) || !/statusText\(presentation, status, locale\)/.test(statusSource) || !/statusTooltip\(presentation, status, locale\)/.test(statusSource)) {
+  throw new Error('SyncStatusBar markup must reference changing status and locale so Svelte updates it');
+}
+const svelteCompilerPath = path.join(root, 'plugins', 'sync', 'frontend', 'node_modules', 'svelte', 'compiler.cjs');
+if (fs.existsSync(svelteCompilerPath)) {
+  const compiled = require(svelteCompilerPath).compile(statusSource, { filename: 'SyncStatusBar.svelte', generate: 'dom' }).js.code;
+  if (!/p\(ctx, \[dirty\]\)\s*\{[\s\S]*?set_data\(t\d+, t\d+_value\)/.test(compiled)) {
+    throw new Error('SyncStatusBar must update its label when status changes');
+  }
+}
 if (!entrySource.includes('$destroy')) {
   throw new Error('Sync plugin wrapper must destroy Svelte components and their timers on unmount');
 }
