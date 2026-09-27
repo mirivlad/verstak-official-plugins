@@ -161,8 +161,9 @@ async function mountEditor(secretProviderEnabled, translations, settings = {}, o
   const api = {
     files: {
       readText: async () => options.content || '[DB password](verstak-secret://client-a.db)\n',
-      writeText: async (path, content) => {
+      writeText: (path, content) => {
         written.push({ path, content });
+        return options.writeText ? options.writeText(path, content) : Promise.resolve();
       },
       list: async (dir) => {
         listed.push(dir);
@@ -426,6 +427,60 @@ async function mountEditor(secretProviderEnabled, translations, settings = {}, o
   await flush();
   if (walk(linking.container, (node) => node.getAttribute && node.getAttribute('data-note-suggest') === '')) {
     throw new Error('suggestions appeared with the caret outside a wiki link');
+  }
+
+  // A save acknowledges exactly the bytes it wrote, not edits made while the
+  // filesystem operation was pending.
+  let finishWrite;
+  const racing = await mountEditor(false, {}, {}, {
+    content: 'original',
+    writeText: () => new Promise((resolve) => { finishWrite = resolve; }),
+  });
+  walk(racing.container, (node) => node.getAttribute && node.getAttribute('data-editor-mode-button') === 'edit').dispatchEvent('click');
+  const racingText = walk(racing.container, (node) => node.getAttribute && node.getAttribute('data-editor-textarea') === '');
+  racingText.value = 'first draft';
+  racingText.dispatchEvent('input');
+  walk(racing.container, (node) => node.getAttribute && node.getAttribute('data-editor-action') === 'save').dispatchEvent('click');
+  racingText.value = 'newer draft';
+  racingText.dispatchEvent('input');
+  finishWrite();
+  await flush();
+  const racingSave = walk(racing.container, (node) => node.getAttribute && node.getAttribute('data-editor-action') === 'save');
+  if (racing.written[0].content !== 'first draft' || racingSave.disabled || !racing.container.textContent.includes('Modified')) {
+    throw new Error('a stale save response marked newer edits as saved');
+  }
+  racingSave.dispatchEvent('click');
+  if (racing.written[1]?.content !== 'newer draft') throw new Error('saving again did not write the newer draft');
+  finishWrite();
+  await flush();
+  if (!racingSave.disabled || !racing.container.textContent.includes('Saved')) throw new Error('the newer draft was not marked saved after its own write');
+
+  // Find and replace operates on the open note without changing its Markdown
+  // formatting or writing it to disk until the user saves.
+  const finding = await mountEditor(false, {}, {}, { content: 'Alpha beta alpha' });
+  walk(finding.container, (node) => node.getAttribute && node.getAttribute('data-editor-action') === 'find').dispatchEvent('click');
+  const query = walk(finding.container, (node) => node.getAttribute && node.getAttribute('data-editor-find-query') === '');
+  if (!query) throw new Error('find panel did not open');
+  query.value = 'alpha';
+  query.dispatchEvent('input');
+  const findText = walk(finding.container, (node) => node.getAttribute && node.getAttribute('data-editor-textarea') === '');
+  if (!findText || findText.selectionStart !== 0 || findText.selectionEnd !== 5) throw new Error('find did not select the first match');
+  walk(finding.container, (node) => node.getAttribute && node.getAttribute('data-editor-find-action') === 'next').dispatchEvent('click');
+  if (findText.selectionStart !== 11 || findText.selectionEnd !== 16) throw new Error('find next did not wrap to the second match');
+  const replacement = walk(finding.container, (node) => node.getAttribute && node.getAttribute('data-editor-replace-value') === '');
+  replacement.value = 'gamma';
+  walk(finding.container, (node) => node.getAttribute && node.getAttribute('data-editor-find-action') === 'replace').dispatchEvent('click');
+  if (findText.value !== 'Alpha beta gamma' || finding.written.length !== 0) throw new Error('replace one altered wrong content or saved implicitly');
+  walk(finding.container, (node) => node.getAttribute && node.getAttribute('data-editor-find-action') === 'replace-all').dispatchEvent('click');
+  if (findText.value !== 'gamma beta gamma') throw new Error('replace all did not replace remaining case-insensitive match');
+  findText.value += ' [x]';
+  findText.dispatchEvent('input');
+  query.value = '[';
+  query.dispatchEvent('input');
+  if (!finding.container.textContent.includes('1 matches')) throw new Error('search punctuation must be treated as literal text');
+  finding.container.dispatchEvent('keydown', { code: 'KeyF', ctrlKey: true });
+  if (walk(finding.container, (node) => node.getAttribute && node.getAttribute('data-editor-find-panel') === '').hidden) {
+    throw new Error('Ctrl+F did not open the in-note search panel');
   }
 
   console.log('default editor smoke passed');
