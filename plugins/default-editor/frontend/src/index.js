@@ -25,6 +25,7 @@
     '.de-toolbar-btn:hover,.de-md-btn:hover{background:#2a2a4e;border-color:#4ecca3}',
     '.de-toolbar-btn.active{background:#1a3a2a;border-color:#4ecca3;color:#4ecca3}',
     '.de-toolbar-btn:disabled,.de-md-btn:disabled{opacity:.45;cursor:default}',
+    '.de-find{display:flex;align-items:center;gap:.4rem;padding:.45rem .75rem;border-bottom:1px solid #16213e;background:#101028;flex-wrap:wrap}.de-find[hidden]{display:none}.de-find-input{box-sizing:border-box;min-width:8rem;flex:1 1 11rem;padding:.3rem .45rem;border:1px solid #2c456a;border-radius:4px;background:#0d0d1a;color:#e0e0e0;font:inherit;font-size:.8rem}.de-find-input:focus{outline:2px solid #4ecca3;outline-offset:1px}.de-find-count{min-width:5rem;font-size:.75rem;color:#a0a0bb}',
     '.de-status{font-size:.72rem;color:#8b8ba8;padding:.15rem .5rem;white-space:nowrap}',
     '.de-status.saved{color:#4ecca3}.de-status.error{color:#e74c3c}.de-status.dirty{color:#f39c12}.de-status.saving{color:#79c0ff}',
     '.de-editor-wrap{flex:1;display:flex;min-height:0;overflow:hidden;background:#0d0d1a}',
@@ -357,6 +358,7 @@
       var saveState = '';
       var lastSavedAt = '';
       var saveTimer = null;
+      var inFlightSave = null;
       var disposed = false;
       var textarea = null;
       var linesEl = null;
@@ -392,6 +394,7 @@
       var previewBtn = isMarkdown ? el('button', { className: 'de-toolbar-btn', 'data-editor-mode-button': 'preview' }, [tr('ui.preview', null, 'Preview')]) : null;
       var splitBtn = isMarkdown ? el('button', { className: 'de-toolbar-btn', 'data-editor-mode-button': 'split' }, [tr('ui.split', null, 'Split')]) : null;
       var reloadBtn = el('button', { className: 'de-toolbar-btn', 'data-editor-action': 'reload' }, [tr('ui.reload', null, 'Reload')]);
+      var findBtn = el('button', { className: 'de-toolbar-btn', type: 'button', 'data-editor-action': 'find' }, [tr('ui.find', null, 'Find / replace')]);
       var saveBtn = el('button', { className: 'de-toolbar-btn', 'data-editor-action': 'save' }, [tr('ui.save', null, 'Save')]);
       var wrapBtn = el('button', { className: 'de-toolbar-btn', type: 'button', 'data-editor-action': 'toggle-wrap', 'aria-pressed': 'true' }, [tr('ui.wrapLongLines', null, 'Wrap long lines')]);
       var outlineBtn = isMarkdown ? el('button', {
@@ -405,8 +408,22 @@
       var toolbarChildren = [contextLabel];
       if (notesBadge) toolbarChildren.push(notesBadge);
       toolbarChildren.push(spacer);
-      [editBtn, previewBtn, splitBtn, outlineBtn, wrapBtn, reloadBtn, saveBtn, statusEl].forEach(function (node) { if (node) toolbarChildren.push(node); });
+      [editBtn, previewBtn, splitBtn, outlineBtn, wrapBtn, findBtn, reloadBtn, saveBtn, statusEl].forEach(function (node) { if (node) toolbarChildren.push(node); });
       containerEl.appendChild(el('div', { className: 'de-toolbar' }, toolbarChildren));
+
+      var findPanel = el('div', { className: 'de-find', 'data-editor-find-panel': '' });
+      findPanel.hidden = true;
+      var findQuery = el('input', { className: 'de-find-input', type: 'search', 'data-editor-find-query': '', 'aria-label': tr('ui.findQuery', null, 'Find in note'), placeholder: tr('ui.findQuery', null, 'Find in note') });
+      var replaceValue = el('input', { className: 'de-find-input', type: 'text', 'data-editor-replace-value': '', 'aria-label': tr('ui.replaceValue', null, 'Replace with'), placeholder: tr('ui.replaceValue', null, 'Replace with') });
+      var findCount = el('span', { className: 'de-find-count', 'data-editor-find-count': '', 'aria-live': 'polite' });
+      function findAction(name, key, fallback) { return el('button', { className: 'de-toolbar-btn', type: 'button', 'data-editor-find-action': name }, [tr(key, null, fallback)]); }
+      var previousBtn = findAction('previous', 'ui.findPrevious', 'Previous');
+      var nextBtn = findAction('next', 'ui.findNext', 'Next');
+      var replaceBtn = findAction('replace', 'ui.replace', 'Replace');
+      var replaceAllBtn = findAction('replace-all', 'ui.replaceAll', 'Replace all');
+      var closeFindBtn = findAction('close', 'ui.closeFind', 'Close');
+      [findQuery, findCount, previousBtn, nextBtn, replaceValue, replaceBtn, replaceAllBtn, closeFindBtn].forEach(function (node) { findPanel.appendChild(node); });
+      containerEl.appendChild(findPanel);
 
       var mdToolbar = null;
       if (isMarkdown) {
@@ -557,6 +574,78 @@
         updateStatus();
         updatePreview();
         renderOutline();
+        updateFindCount();
+      }
+
+      function matchesInContent() {
+        var query = findQuery.value;
+        if (!query) return [];
+        var expression = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+        var matches = [];
+        var found;
+        while ((found = expression.exec(currentContent)) !== null) matches.push(found.index);
+        return matches;
+      }
+
+      function updateFindCount() {
+        var matches = matchesInContent();
+        findCount.textContent = findQuery.value ? tr('ui.findCount', { count: matches.length }, matches.length + ' matches') : '';
+        previousBtn.disabled = nextBtn.disabled = replaceBtn.disabled = replaceAllBtn.disabled = matches.length === 0;
+      }
+
+      function ensureFindEditor() {
+        if (isMarkdown && viewMode === 'preview') setMode('edit');
+        return textarea;
+      }
+
+      function selectMatch(direction, fromStart, keepQueryFocus) {
+        var editor = ensureFindEditor();
+        var matches = matchesInContent();
+        if (!editor || !matches.length) return;
+        var caret = fromStart ? 0 : (direction < 0 ? editor.selectionStart : editor.selectionEnd);
+        var match = direction < 0
+          ? matches.filter(function (start) { return start < caret; }).pop()
+          : matches.find(function (start) { return start >= caret; });
+        if (match === undefined) match = direction < 0 ? matches[matches.length - 1] : matches[0];
+        if (!keepQueryFocus) editor.focus();
+        editor.setSelectionRange(match, match + findQuery.value.length);
+      }
+
+      function replaceCurrent() {
+        var editor = ensureFindEditor();
+        if (!editor || !findQuery.value) return;
+        var start = editor.selectionStart;
+        var end = editor.selectionEnd;
+        if (editor.value.slice(start, end).toLocaleLowerCase() !== findQuery.value.toLocaleLowerCase()) {
+          selectMatch(1, true);
+          return;
+        }
+        editor.value = editor.value.slice(0, start) + replaceValue.value + editor.value.slice(end);
+        editor.setSelectionRange(start + replaceValue.value.length, start + replaceValue.value.length);
+        syncFromTextarea();
+        selectMatch(1, false);
+      }
+
+      function replaceAll() {
+        var editor = ensureFindEditor();
+        var matches = matchesInContent();
+        if (!editor || !matches.length) return;
+        var result = '';
+        var offset = 0;
+        matches.forEach(function (start) {
+          result += editor.value.slice(offset, start) + replaceValue.value;
+          offset = start + findQuery.value.length;
+        });
+        editor.value = result + editor.value.slice(offset);
+        editor.setSelectionRange(0, 0);
+        syncFromTextarea();
+        editor.focus();
+      }
+
+      function openFind() {
+        findPanel.hidden = false;
+        findQuery.focus();
+        updateFindCount();
       }
 
       function updateWrapPresentation() {
@@ -790,14 +879,15 @@
 
       function save() {
         if (!dirty || disposed) return Promise.resolve();
+        if (inFlightSave) return inFlightSave.then(function () { return dirty ? save() : undefined; });
+        var contentToSave = currentContent;
         saveState = 'saving';
         updateStatus();
-        var savePromise = api.files.writeText(resourcePath, currentContent, { createIfMissing: false, overwrite: true });
-        return savePromise.then(function () {
+        inFlightSave = Promise.resolve(api.files.writeText(resourcePath, contentToSave, { createIfMissing: false, overwrite: true })).then(function () {
           if (disposed) return;
-          savedContent = currentContent;
-          dirty = false;
-          saveState = 'saved';
+          savedContent = contentToSave;
+          dirty = currentContent !== savedContent;
+          saveState = dirty ? '' : 'saved';
           lastSavedAt = new Date().toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
           updateStatus();
           if (saveTimer) clearTimeout(saveTimer);
@@ -812,7 +902,11 @@
           saveState = 'error';
           updateStatus();
           console.error('[default-editor] save error:', err);
+        }).finally(function () {
+          inFlightSave = null;
+          if (!disposed) updateStatus();
         });
+        return inFlightSave;
       }
 
       function reloadFromDisk() {
@@ -861,6 +955,24 @@
       }
 
       saveBtn.addEventListener('click', save);
+      containerEl.addEventListener('keydown', function (event) {
+        if (matchesShortcut(event, { code: 'KeyF', ctrlOrMeta: true }) || matchesShortcut(event, { code: 'KeyH', ctrlOrMeta: true })) {
+          event.preventDefault();
+          openFind();
+          if (event.code === 'KeyH') replaceValue.focus();
+        }
+      });
+      findBtn.addEventListener('click', openFind);
+      findQuery.addEventListener('input', function () { updateFindCount(); selectMatch(1, true, true); });
+      previousBtn.addEventListener('click', function () { selectMatch(-1, false); });
+      nextBtn.addEventListener('click', function () { selectMatch(1, false); });
+      replaceBtn.addEventListener('click', replaceCurrent);
+      replaceAllBtn.addEventListener('click', replaceAll);
+      closeFindBtn.addEventListener('click', function () { findPanel.hidden = true; });
+      findQuery.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') { event.preventDefault(); selectMatch(event.shiftKey ? -1 : 1, false, true); }
+        if (event.key === 'Escape') { event.preventDefault(); findPanel.hidden = true; }
+      });
       wrapBtn.addEventListener('click', function () {
         wrapLongLines = !wrapLongLines;
         updateWrapPresentation();
@@ -913,6 +1025,17 @@
           reloadBtn.textContent = tr('ui.reload', null, 'Reload');
           saveBtn.textContent = tr('ui.save', null, 'Save');
           wrapBtn.textContent = tr('ui.wrapLongLines', null, 'Wrap long lines');
+          findBtn.textContent = tr('ui.find', null, 'Find / replace');
+          findQuery.setAttribute('aria-label', tr('ui.findQuery', null, 'Find in note'));
+          findQuery.setAttribute('placeholder', tr('ui.findQuery', null, 'Find in note'));
+          replaceValue.setAttribute('aria-label', tr('ui.replaceValue', null, 'Replace with'));
+          replaceValue.setAttribute('placeholder', tr('ui.replaceValue', null, 'Replace with'));
+          previousBtn.textContent = tr('ui.findPrevious', null, 'Previous');
+          nextBtn.textContent = tr('ui.findNext', null, 'Next');
+          replaceBtn.textContent = tr('ui.replace', null, 'Replace');
+          replaceAllBtn.textContent = tr('ui.replaceAll', null, 'Replace all');
+          closeFindBtn.textContent = tr('ui.closeFind', null, 'Close');
+          updateFindCount();
           if (mdToolbar) {
             [
               ['heading', 'ui.md.heading', 'Heading'], ['bold', 'ui.md.bold', 'Bold'], ['italic', 'ui.md.italic', 'Italic'],
