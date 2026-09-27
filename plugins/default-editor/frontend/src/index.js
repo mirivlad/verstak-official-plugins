@@ -54,7 +54,9 @@
     '.de-outline-item[data-level="2"]{padding-left:1.5rem}.de-outline-item[data-level="3"]{padding-left:2.25rem}',
     '.de-outline-item[data-level="4"]{padding-left:3rem}.de-outline-item[data-level="5"]{padding-left:3.75rem}.de-outline-item[data-level="6"]{padding-left:4.5rem}',
     '.de-outline-empty{padding:.6rem .75rem;font-size:.75rem;color:#6b6b85;line-height:1.4}',
+    '.de-links{box-sizing:border-box;flex:0 0 16rem;max-width:38%;min-height:0;overflow:auto;border-left:1px solid #16213e;background:#0a0a15;padding:.7rem}.de-links-head{display:flex;align-items:center;justify-content:space-between;gap:.5rem}.de-links-title{font-size:.85rem;font-weight:650;color:#f0f0ff;margin:0}.de-links-section{margin-top:1rem}.de-links-section h3{font-size:.73rem;color:#a0a0bb;margin:0 0 .35rem}.de-links-item{display:block;width:100%;text-align:left;font:inherit;font-size:.8rem;padding:.42rem .5rem;margin:.15rem 0;border:1px solid #24314a;border-radius:4px;background:#12192b;color:#d8d8e8;cursor:pointer;overflow-wrap:anywhere}.de-links-item:hover{border-color:#4ecca3}.de-links-item:disabled{opacity:.65;cursor:default}.de-links-empty,.de-links-message{font-size:.75rem;line-height:1.45;color:#a0a0bb}.de-links-message{color:#ffb3bc}',
     '@media(max-width:780px){.de-outline{flex-basis:auto;max-width:none;max-height:9rem;border-right:0;border-bottom:1px solid #16213e}}',
+    '@media(max-width:780px){.de-links{flex-basis:auto;max-width:none;max-height:13rem;border-left:0;border-top:1px solid #16213e}}',
     '.de-suggest{position:absolute;z-index:40;min-width:12rem;max-width:22rem;max-height:13rem;overflow:auto;border:1px solid #2c456a;border-radius:5px;background:#12122a;box-shadow:0 8px 22px rgba(0,0,0,.5);padding:.2rem 0}',
     '.de-suggest-item{display:block;width:100%;text-align:left;border:0;background:transparent;color:#d8d8e8;cursor:pointer;font-size:.8rem;padding:.28rem .6rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '.de-suggest-item:hover,.de-suggest-item.is-active{background:#1a3a2a;color:#4ecca3}',
@@ -109,23 +111,29 @@
     return String(path || '').split('/').filter(Boolean).join('/');
   }
 
-  function normalizeNoteFilename(title) {
-    var value = String(title == null ? '' : title).trim();
-    if (/\.markdown$/i.test(value) && value.length > 9) value = value.slice(0, -9);
-    else if (/\.md$/i.test(value) && value.length > 3) value = value.slice(0, -3);
-    if (!value) throw new Error('note title must not be empty');
-    value = value.replace(/\s+/g, '_');
-    value = value.replace(/[\u2012\u2013\u2014\u2015\u2212]/g, '-');
-    value = value.replace(/[<>:"/\\|?*\x00-\x1f\x7f]/g, '');
-    var out = '';
-    for (var i = 0; i < value.length; i++) {
-      var ch = value.charAt(i);
-      if (/[A-Za-z0-9._-]/.test(ch) || /[\p{L}\p{N}]/u.test(ch)) out += ch;
-      else if (/\S/.test(ch)) out += '_';
-    }
-    out = out.replace(/[_.-]+/g, '_').replace(/^[._\-\s]+|[._\-\s]+$/g, '');
-    if (!out) throw new Error('note title normalizes to an empty filename');
-    return out + '.md';
+  function noteTitleFromFilename(name) {
+    return String(name || '').replace(/\.(md|markdown)$/i, '').replace(/_/g, ' ').trim();
+  }
+
+  function noteTitleKey(title) {
+    return String(title || '').replace(/_/g, ' ').trim().toLocaleLowerCase();
+  }
+
+  function wikiTargets(content) {
+    var result = [];
+    var inFence = false;
+    String(content || '').split(/\r?\n/).forEach(function (line) {
+      if (/^\s*```/.test(line)) { inFence = !inFence; return; }
+      if (inFence) return;
+      // Inline code is literal text, not a note reference.
+      line.split('`').forEach(function (part, index) {
+        if (index % 2 !== 0) return;
+        var match;
+        var pattern = /\[\[([^\]\n]+)\]\]/g;
+        while ((match = pattern.exec(part)) !== null) result.push(match[1].trim());
+      });
+    });
+    return result.filter(Boolean);
   }
 
   // A heading's anchor. Both the rendered preview and the outline derive it
@@ -171,21 +179,19 @@
   }
 
   function renderInline(text, isNotesContext, secretLinksAvailable) {
-    var html = escapeHtml(text);
-    // Internal wiki links [[Title]] — only render in notes context
-    if (isNotesContext) {
-      html = html.replace(/\[\[([^\]]+)\]\]/g, '<a href="#" class="internal-link" data-note-link="$1">$1</a>');
-    }
-    if (secretLinksAvailable) {
-      html = html.replace(/\[([^\]]+)\]\(verstak-secret:\/\/([^)]+)\)/g, '<a href="#" class="secret-link" data-secret-id="$2">$1</a>');
-    }
-    html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
-    html = html.replace(/!\[([^\]]*)\]\((https?:\/\/[^)]+)\)/g, '<img alt="$1" src="$2">');
-    html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+|mailto:[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-    html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-    return html;
+    return String(text || '').split(/(`[^`\n]+`)/g).map(function (part) {
+      if (/^`[^`\n]+`$/.test(part)) return '<code>' + escapeHtml(part.slice(1, -1)) + '</code>';
+      var html = escapeHtml(part);
+      // Inline code is already separated, so examples like `[[Title]]` stay literal.
+      if (isNotesContext) html = html.replace(/\[\[([^\]]+)\]\]/g, '<a href="#" class="internal-link" data-note-link="$1">$1</a>');
+      if (secretLinksAvailable) html = html.replace(/\[([^\]]+)\]\(verstak-secret:\/\/([^)]+)\)/g, '<a href="#" class="secret-link" data-secret-id="$2">$1</a>');
+      html = html.replace(/!\[([^\]]*)\]\((https?:\/\/[^)]+)\)/g, '<img alt="$1" src="$2">');
+      html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+|mailto:[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+      html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+      html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+      return html;
+    }).join('');
   }
 
   function renderMarkdown(text, isNotesContext, secretLinksAvailable) {
@@ -404,11 +410,14 @@
         'aria-pressed': 'false',
         title: tr('ui.outlineHint', null, 'Show the headings of this note as a navigable outline')
       }, [tr('ui.outline', null, 'Outline')]) : null;
+      var linksBtn = editorMode === 'notes-markdown' ? el('button', {
+        className: 'de-toolbar-btn', type: 'button', 'data-editor-action': 'toggle-links', 'aria-pressed': 'false'
+      }, [tr('ui.links', null, 'Links')]) : null;
       var statusEl = el('span', { className: 'de-status', 'data-save-state': '' });
       var toolbarChildren = [contextLabel];
       if (notesBadge) toolbarChildren.push(notesBadge);
       toolbarChildren.push(spacer);
-      [editBtn, previewBtn, splitBtn, outlineBtn, wrapBtn, findBtn, reloadBtn, saveBtn, statusEl].forEach(function (node) { if (node) toolbarChildren.push(node); });
+      [editBtn, previewBtn, splitBtn, outlineBtn, linksBtn, wrapBtn, findBtn, reloadBtn, saveBtn, statusEl].forEach(function (node) { if (node) toolbarChildren.push(node); });
       containerEl.appendChild(el('div', { className: 'de-toolbar' }, toolbarChildren));
 
       var findPanel = el('div', { className: 'de-find', 'data-editor-find-panel': '' });
@@ -447,6 +456,14 @@
 
       var editorWrap = el('div', { className: 'de-editor-wrap' });
       containerEl.appendChild(editorWrap);
+
+      var linksPanel = linksBtn ? el('aside', { className: 'de-links', 'data-note-links-panel': '' }) : null;
+      var linksVisible = false;
+      var linksLoading = false;
+      var linksError = '';
+      var backlinks = [];
+      var linksScanComplete = false;
+      var linksGeneration = 0;
 
       var outlineVisible = false;
       var outlineListEl = null;
@@ -575,6 +592,7 @@
         updatePreview();
         renderOutline();
         updateFindCount();
+        renderLinks();
       }
 
       function matchesInContent() {
@@ -669,26 +687,161 @@
       var suggestStart = -1;
 
       function notesFolderPath() {
+        var scoped = cleanPath(request.context && request.context.notesScopePath);
+        if (scoped) return scoped + '/Notes';
         var current = cleanPath(resourcePath);
         var index = current.indexOf('/Notes/');
         if (index !== -1) return current.slice(0, index) + '/Notes';
         return current.indexOf('/') === -1 ? 'Notes' : current.slice(0, current.lastIndexOf('/'));
       }
 
+      var noteCatalog = null;
+      var noteCatalogPromise = null;
+
+      function loadNoteCatalog(force) {
+        if (force) { noteCatalog = null; noteCatalogPromise = null; noteTitlesPromise = null; }
+        if (noteCatalogPromise) return noteCatalogPromise;
+        var folder = notesFolderPath();
+        noteCatalogPromise = api.files.list(folder).then(function (entries) {
+          noteCatalog = (entries || []).filter(function (entry) {
+            return entry && entry.type === 'file' && /\.(md|markdown)$/i.test(entry.name || '');
+          }).map(function (entry) {
+            return { title: noteTitleFromFilename(entry.name), path: cleanPath(entry.relativePath || folder + '/' + entry.name) };
+          });
+          return noteCatalog;
+        }).catch(function (error) {
+          noteCatalogPromise = null;
+          throw error;
+        });
+        return noteCatalogPromise;
+      }
+
+      function matchingNotesForTitle(title, catalog) {
+        var key = noteTitleKey(title);
+        var matches = (catalog || []).filter(function (entry) { return noteTitleKey(entry.title) === key; });
+        if (!matches.length && /\.(md|markdown)$/i.test(title)) {
+          key = noteTitleKey(title.replace(/\.(md|markdown)$/i, ''));
+          matches = (catalog || []).filter(function (entry) { return noteTitleKey(entry.title) === key; });
+        }
+        return matches;
+      }
+
+      function noteForTitle(title, catalog) {
+        var matches = matchingNotesForTitle(title, catalog);
+        return matches.length === 1 ? matches[0] : null;
+      }
+
       function loadNoteTitles() {
         if (noteTitlesPromise) return noteTitlesPromise;
-        noteTitlesPromise = api.files.list(notesFolderPath()).then(function (entries) {
-          noteTitles = (entries || [])
-            .filter(function (entry) { return entry.type === 'file' && /\.md$/i.test(entry.name || ''); })
-            .map(function (entry) { return String(entry.name).replace(/\.md$/i, ''); })
-            .filter(function (title) { return title && title !== fileName(resourcePath).replace(/\.md$/i, ''); })
+        noteTitlesPromise = loadNoteCatalog().then(function (catalog) {
+          noteTitles = catalog
+            .filter(function (entry) { return entry.path !== cleanPath(resourcePath); })
+            .map(function (entry) { return entry.title; })
             .sort(function (a, b) { return a.localeCompare(b); });
           return noteTitles;
         }).catch(function () {
+          noteTitlesPromise = null;
           noteTitles = [];
           return noteTitles;
         });
         return noteTitlesPromise;
+      }
+
+      function openRelatedNote(entry) {
+        return api.workbench.openResource({
+          kind: 'vault-file', path: entry.path, mode: 'view',
+          extension: /\.markdown$/i.test(entry.path) ? '.markdown' : '.md',
+          context: {
+            sourcePluginId: 'verstak.default-editor', sourceView: 'editor',
+            isInsideNotesFolder: true, notesMode: true,
+            notesScopePath: request.context && request.context.notesScopePath || cleanPath(notesFolderPath()).replace(/\/Notes$/, '')
+          }
+        });
+      }
+
+      function renderLinks() {
+        if (!linksPanel || !linksVisible) return;
+        linksPanel.innerHTML = '';
+        var heading = el('div', { className: 'de-links-head' }, [
+          el('h2', { className: 'de-links-title' }, [tr('ui.links', null, 'Links')]),
+          el('button', { className: 'de-toolbar-btn', type: 'button', 'data-note-links-refresh': '', onClick: refreshLinks }, [tr('ui.linksRefresh', null, 'Refresh')])
+        ]);
+        linksPanel.appendChild(heading);
+        if (linksError) linksPanel.appendChild(el('p', { className: 'de-links-message', role: 'alert' }, [linksError]));
+        if (linksLoading) linksPanel.appendChild(el('p', { className: 'de-links-empty' }, [tr('ui.linksLoading', null, 'Checking notes…')]));
+
+        var outgoing = el('section', { className: 'de-links-section' }, [el('h3', {}, [tr('ui.linksOutgoing', null, 'Links from this note')])]);
+        var seen = {};
+        var targets = wikiTargets(currentContent).filter(function (title) {
+          var key = noteTitleKey(title);
+          if (!key || seen[key]) return false;
+          seen[key] = true;
+          return true;
+        });
+        if (!targets.length) outgoing.appendChild(el('p', { className: 'de-links-empty' }, [tr('ui.linksNoOutgoing', null, 'No links yet. Type [[ to link another note.') ]));
+        targets.forEach(function (title) {
+          var entry = noteForTitle(title, noteCatalog);
+          var matches = matchingNotesForTitle(title, noteCatalog);
+          var reason = linksLoading ? tr('ui.linksChecking', null, 'Checking…')
+            : !noteCatalog ? tr('ui.linksUnavailable', null, 'Unavailable')
+              : matches.length > 1 ? tr('ui.linksAmbiguous', null, 'Ambiguous title') : tr('ui.linksMissing', null, 'Not found');
+          outgoing.appendChild(el('button', {
+            className: 'de-links-item', type: 'button', disabled: !entry,
+            'data-note-outgoing': entry ? entry.path : '',
+            onClick: function () { if (entry) openRelatedNote(entry).catch(function () { linksError = tr('ui.linksOpenFailed', null, 'Could not open the note.'); renderLinks(); }); }
+          }, [entry ? entry.title : title + ' · ' + reason]));
+        });
+        linksPanel.appendChild(outgoing);
+
+        var incoming = el('section', { className: 'de-links-section' }, [el('h3', {}, [tr('ui.linksIncoming', null, 'Linked from')])]);
+        if (linksScanComplete && !backlinks.length) incoming.appendChild(el('p', { className: 'de-links-empty' }, [tr('ui.linksNoIncoming', null, 'No other notes link here.') ]));
+        backlinks.forEach(function (entry) {
+          incoming.appendChild(el('button', {
+            className: 'de-links-item', type: 'button', 'data-note-backlink': entry.path,
+            onClick: function () { openRelatedNote(entry).catch(function () { linksError = tr('ui.linksOpenFailed', null, 'Could not open the note.'); renderLinks(); }); }
+          }, [entry.title]));
+        });
+        linksPanel.appendChild(incoming);
+      }
+
+      function refreshLinks(preserveError) {
+        if (!linksVisible) return;
+        var generation = ++linksGeneration;
+        linksLoading = true;
+        backlinks = [];
+        linksScanComplete = false;
+        if (preserveError !== true) linksError = '';
+        renderLinks();
+        loadNoteCatalog(true).then(async function (catalog) {
+          var sources = catalog.filter(function (entry) { return entry.path !== cleanPath(resourcePath); });
+          var found = [];
+          var failures = 0;
+          var next = 0;
+          async function worker() {
+            while (next < sources.length) {
+              var source = sources[next++];
+              try {
+                var content = await api.files.readText(source.path);
+                if (wikiTargets(content).some(function (title) {
+                  var target = noteForTitle(title, catalog);
+                  return target && target.path === cleanPath(resourcePath);
+                })) found.push(source);
+              } catch (_) { failures += 1; }
+            }
+          }
+          await Promise.all(Array.from({ length: Math.min(4, sources.length) }, worker));
+          if (disposed || generation !== linksGeneration) return;
+          backlinks = found.sort(function (a, b) { return a.title.localeCompare(b.title); });
+          linksLoading = false;
+          linksScanComplete = failures === 0;
+          if (failures) linksError = tr('ui.linksScanFailed', null, 'Some notes could not be checked. Refresh to try again.');
+          renderLinks();
+        }).catch(function () {
+          if (disposed || generation !== linksGeneration) return;
+          linksLoading = false;
+          linksError = tr('ui.linksListFailed', null, 'Could not list notes in this Deal.');
+          renderLinks();
+        });
       }
 
       function hideSuggestions() {
@@ -867,6 +1020,7 @@
           editorWrap.appendChild(makeEditorPane());
           editorWrap.appendChild(makePreviewPane());
         }
+        if (linksVisible && linksPanel) { editorWrap.appendChild(linksPanel); renderLinks(); }
         if (editBtn) editBtn.className = 'de-toolbar-btn' + (viewMode === 'edit' ? ' active' : '');
         if (previewBtn) previewBtn.className = 'de-toolbar-btn' + (viewMode === 'preview' ? ' active' : '');
         if (splitBtn) splitBtn.className = 'de-toolbar-btn' + (viewMode === 'split' ? ' active' : '');
@@ -991,6 +1145,13 @@
           api.settings.write('outlineVisible', outlineVisible).catch(function () {});
         }
       });
+      if (linksBtn) linksBtn.addEventListener('click', function () {
+        linksVisible = !linksVisible;
+        linksBtn.className = 'de-toolbar-btn' + (linksVisible ? ' active' : '');
+        linksBtn.setAttribute('aria-pressed', linksVisible ? 'true' : 'false');
+        if (linksVisible) { editorWrap.appendChild(linksPanel); refreshLinks(); }
+        else { linksGeneration += 1; if (linksPanel.parentNode) linksPanel.parentNode.removeChild(linksPanel); }
+      });
       if (mdToolbar) {
         mdToolbar.addEventListener('click', function (event) {
           var button = event.target.closest('[data-md-action]');
@@ -1025,6 +1186,7 @@
           reloadBtn.textContent = tr('ui.reload', null, 'Reload');
           saveBtn.textContent = tr('ui.save', null, 'Save');
           wrapBtn.textContent = tr('ui.wrapLongLines', null, 'Wrap long lines');
+          if (linksBtn) { linksBtn.textContent = tr('ui.links', null, 'Links'); renderLinks(); }
           findBtn.textContent = tr('ui.find', null, 'Find / replace');
           findQuery.setAttribute('aria-label', tr('ui.findQuery', null, 'Find in note'));
           findQuery.setAttribute('placeholder', tr('ui.findQuery', null, 'Find in note'));
@@ -1078,28 +1240,30 @@
         event.preventDefault();
         var noteTitle = link.getAttribute('data-note-link');
         if (!noteTitle) return;
-        var currentPath = cleanPath(resourcePath);
-        var notesIdx = currentPath.indexOf('/Notes/');
-        var notesRoot = notesIdx === -1 ? 'Notes' : currentPath.slice(0, notesIdx) + '/Notes';
-        var targetPath = cleanPath(notesRoot + '/' + normalizeNoteFilename(noteTitle));
-        api.workbench.openResource({
-          kind: 'vault-file',
-          path: targetPath,
-          mode: 'view',
-          extension: '.md',
-          context: {
-            sourcePluginId: 'verstak.default-editor',
-            sourceView: 'editor',
-            isInsideNotesFolder: true,
-            notesMode: true
+        loadNoteCatalog().then(function (catalog) {
+          if (disposed) return;
+          var entry = noteForTitle(noteTitle, catalog);
+          if (!entry) {
+            linksError = tr('ui.linksTargetUnavailable', null, 'The linked note was not found or its title is ambiguous.');
+            if (!linksVisible && linksBtn) {
+              linksVisible = true;
+              linksBtn.className = 'de-toolbar-btn active';
+              linksBtn.setAttribute('aria-pressed', 'true');
+              editorWrap.appendChild(linksPanel);
+              refreshLinks(true);
+            } else renderLinks();
+            return;
           }
-        }).catch(function (err) {
-          console.error('[default-editor] open internal link:', err);
+          return openRelatedNote(entry);
+        }).catch(function () {
+          linksError = tr('ui.linksOpenFailed', null, 'Could not open the note.');
+          renderLinks();
         });
       });
 
       containerEl.__deCleanup = function () {
         disposed = true;
+        linksGeneration += 1;
         hideSuggestions();
         if (typeof localeUnsubscribe === 'function') localeUnsubscribe();
         if (saveTimer) clearTimeout(saveTimer);
