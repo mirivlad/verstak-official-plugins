@@ -160,7 +160,12 @@ async function mountEditor(secretProviderEnabled, translations, settings = {}, o
   const listed = [];
   const api = {
     files: {
-      readText: async () => options.content || '[DB password](verstak-secret://client-a.db)\n',
+      readText: async (filePath) => {
+        if ((options.readFailures || []).includes(filePath)) throw new Error('read failed');
+        return options.files && Object.prototype.hasOwnProperty.call(options.files, filePath)
+          ? options.files[filePath]
+          : (options.content || '[DB password](verstak-secret://client-a.db)\n');
+      },
       writeText: (path, content) => {
         written.push({ path, content });
         return options.writeText ? options.writeText(path, content) : Promise.resolve();
@@ -207,8 +212,8 @@ async function mountEditor(secretProviderEnabled, translations, settings = {}, o
   component.mount(container, {
     request: {
       kind: 'vault-file',
-      path: 'Project/Notes/Secret.md',
-      extension: '.md',
+      path: options.path || 'Project/Notes/Secret.md',
+      extension: /\.markdown$/i.test(options.path || '') ? '.markdown' : '.md',
       mode: 'view',
       context: options.context,
     },
@@ -481,6 +486,121 @@ async function mountEditor(secretProviderEnabled, translations, settings = {}, o
   finding.container.dispatchEvent('keydown', { code: 'KeyF', ctrlKey: true });
   if (walk(finding.container, (node) => node.getAttribute && node.getAttribute('data-editor-find-panel') === '').hidden) {
     throw new Error('Ctrl+F did not open the in-note search panel');
+  }
+
+  // Links are scoped to the current Deal, resolve actual filenames, and skip
+  // wiki-link-like text in code fences when building backlinks.
+  const related = await mountEditor(false, {}, {}, {
+    path: 'Project/Notes/Target.md',
+    context: { notesMode: true, isInsideNotesFolder: true, notesScopePath: 'Project' },
+    notes: ['Target.md', 'Source.md', 'Code.md', 'Inline.md', 'Meeting notes.markdown'],
+    files: {
+      'Project/Notes/Target.md': '# Target\nSee [[Meeting notes]]',
+      'Project/Notes/Source.md': 'A link to [[Target]] and [[Target]] again.',
+      'Project/Notes/Code.md': '```\n[[Target]]\n```',
+      'Project/Notes/Inline.md': '`[[Target]]`',
+      'Project/Notes/Meeting notes.markdown': '# Meeting notes',
+    },
+  });
+  const linksToggle = walk(related.container, (node) => node.getAttribute && node.getAttribute('data-editor-action') === 'toggle-links');
+  if (!linksToggle) throw new Error('notes editor has no links panel');
+  linksToggle.dispatchEvent('click');
+  await flush();
+  const linksPanel = walk(related.container, (node) => node.getAttribute && node.getAttribute('data-note-links-panel') === '');
+  if (!linksPanel) throw new Error('links panel did not open');
+  const backlink = walk(linksPanel, (node) => node.getAttribute && node.getAttribute('data-note-backlink') === 'Project/Notes/Source.md');
+  if (!backlink || walk(linksPanel, (node) => node.getAttribute && ['Project/Notes/Code.md', 'Project/Notes/Inline.md'].includes(node.getAttribute('data-note-backlink')))) {
+    throw new Error('backlinks should include only actual links outside code fences');
+  }
+  backlink.dispatchEvent('click');
+  await flush();
+  if (!related.opened.some((request) => request.path === 'Project/Notes/Source.md' && request.context.notesMode)) {
+    throw new Error('backlink did not navigate to its source note');
+  }
+  const outgoing = walk(linksPanel, (node) => node.getAttribute && node.getAttribute('data-note-outgoing') === 'Project/Notes/Meeting notes.markdown');
+  if (!outgoing) throw new Error('outgoing link did not resolve the existing .markdown filename');
+  related.container.dispatchEvent('click', {
+    target: { closest: (selector) => selector === '.internal-link' ? { getAttribute: () => 'Meeting notes' } : null },
+  });
+  await flush();
+  if (!related.opened.some((request) => request.path === 'Project/Notes/Meeting notes.markdown')) {
+    throw new Error('wiki link did not navigate to the actual .markdown path');
+  }
+  const literal = await mountEditor(false, {}, {}, {
+    content: '`[[Target]]` and [[Target]]', context: { notesMode: true },
+  });
+  const literalPreview = walk(literal.container, (node) => node.className === 'de-preview');
+  if (!literalPreview || (literalPreview.innerHTML.match(/class="internal-link"/g) || []).length !== 1) {
+    throw new Error('inline code must not create a navigable note link');
+  }
+  const openedBeforeMissing = related.opened.length;
+  related.container.dispatchEvent('click', {
+    target: { closest: (selector) => selector === '.internal-link' ? { getAttribute: () => 'Missing note' } : null },
+  });
+  await flush();
+  if (related.opened.length !== openedBeforeMissing || !linksPanel.textContent.includes('not found or its title is ambiguous')) {
+    throw new Error('a missing wiki link must not open an invented file path');
+  }
+  walk(related.container, (node) => node.getAttribute && node.getAttribute('data-editor-mode-button') === 'edit').dispatchEvent('click');
+  const relatedText = walk(related.container, (node) => node.getAttribute && node.getAttribute('data-editor-textarea') === '');
+  relatedText.value = '# Target\nSee [[Source]]';
+  relatedText.dispatchEvent('input');
+  if (!walk(linksPanel, (node) => node.getAttribute && node.getAttribute('data-note-outgoing') === 'Project/Notes/Source.md')) {
+    throw new Error('outgoing links did not follow unsaved edits');
+  }
+
+  const ambiguous = await mountEditor(false, {}, {}, {
+    path: 'Project/Notes/Target.md',
+    context: { notesMode: true, notesScopePath: 'Project' },
+    notes: ['Target.md', 'Meeting_notes.md', 'Meeting notes.markdown'],
+    content: '[[Meeting notes]]',
+  });
+  ambiguous.container.dispatchEvent('click', {
+    target: { closest: (selector) => selector === '.internal-link' ? { getAttribute: () => 'Meeting notes' } : null },
+  });
+  await flush();
+  if (ambiguous.opened.length || !ambiguous.container.textContent.includes('ambiguous')) {
+    throw new Error('ambiguous note titles must not silently choose one file');
+  }
+
+  const ambiguousBacklink = await mountEditor(false, {}, {}, {
+    path: 'Project/Notes/Meeting_notes.md', context: { notesMode: true, notesScopePath: 'Project' },
+    notes: ['Meeting_notes.md', 'Meeting notes.markdown', 'Source.md'],
+    files: {
+      'Project/Notes/Meeting_notes.md': '# Meeting notes',
+      'Project/Notes/Meeting notes.markdown': '# Another',
+      'Project/Notes/Source.md': '[[Meeting notes]]',
+    },
+  });
+  walk(ambiguousBacklink.container, (node) => node.getAttribute && node.getAttribute('data-editor-action') === 'toggle-links').dispatchEvent('click');
+  await flush();
+  if (walk(ambiguousBacklink.container, (node) => node.getAttribute && node.getAttribute('data-note-backlink') === 'Project/Notes/Source.md')) {
+    throw new Error('an ambiguous link must not be attributed to either possible target');
+  }
+
+  const underscored = await mountEditor(false, {}, {}, {
+    path: 'Project/Notes/Target.md', context: { notesMode: true, notesScopePath: 'Project' },
+    notes: ['Target.md', 'Meeting_notes.md'], content: '[[Meeting notes]]',
+  });
+  underscored.container.dispatchEvent('click', {
+    target: { closest: (selector) => selector === '.internal-link' ? { getAttribute: () => 'Meeting notes' } : null },
+  });
+  await flush();
+  if (underscored.opened[0]?.path !== 'Project/Notes/Meeting_notes.md') {
+    throw new Error('wiki link did not resolve an existing underscored filename');
+  }
+
+  const partial = await mountEditor(false, {}, {}, {
+    path: 'Project/Notes/Target.md', context: { notesMode: true, notesScopePath: 'Project' },
+    notes: ['Target.md', 'Readable.md', 'Unreadable.md'],
+    files: { 'Project/Notes/Target.md': '# Target', 'Project/Notes/Readable.md': '[[Target]]' },
+    readFailures: ['Project/Notes/Unreadable.md'],
+  });
+  walk(partial.container, (node) => node.getAttribute && node.getAttribute('data-editor-action') === 'toggle-links').dispatchEvent('click');
+  await flush();
+  if (!partial.container.textContent.includes('Some notes could not be checked')
+    || !walk(partial.container, (node) => node.getAttribute && node.getAttribute('data-note-backlink') === 'Project/Notes/Readable.md')) {
+    throw new Error('partial backlink scan must report its uncertainty and retain readable results');
   }
 
   console.log('default editor smoke passed');
