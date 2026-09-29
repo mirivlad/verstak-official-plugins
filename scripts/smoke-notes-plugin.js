@@ -367,8 +367,49 @@ async function mountNotes(api) {
   if (!createApi.entries.has('Project/Notes/Renamed_Note.md') || createApi.entries.has('Project/Notes/Third_Note.md')) {
     throw new Error('unique note rename was incorrectly reported as a conflict');
   }
+  const renamedContent = createApi.entries.get('Project/Notes/Renamed_Note.md').content;
+  if (!renamedContent.includes('"Third Note"') || !renamedContent.includes('# Third Note')) {
+    throw new Error('rename did not retain the old title as an alias while preserving the note body');
+  }
+  await flush();
+  const renamedRow = walk(container, (node) => node.getAttribute && node.getAttribute('data-note-path') === 'Project/Notes/Renamed_Note.md');
+  if (!renamedRow) throw new Error('renamed note did not appear in the refreshed list');
+  walk(renamedRow, (node) => node.getAttribute && node.getAttribute('data-note-action') === 'rename').click();
+  const againModal = walk(document.body, (node) => node.getAttribute && node.getAttribute('data-notes-rename-modal') !== undefined);
+  const againInput = walk(againModal, (node) => node.getAttribute && node.getAttribute('data-notes-rename-input') !== undefined);
+  againInput.value = 'Final Note';
+  againInput.dispatchEvent('keydown', { key: 'Enter' });
+  await flush();
+  const finalContent = createApi.entries.get('Project/Notes/Final_Note.md')?.content || '';
+  if (!finalContent.includes('"Third Note"') || !finalContent.includes('"Renamed Note"')) {
+    throw new Error('second rename did not retain both earlier titles');
+  }
+  createButton.click();
+  const aliasCreateModal = walk(document.body, (node) => node.getAttribute && node.getAttribute('data-notes-create-modal') !== undefined);
+  const aliasCreateInput = walk(aliasCreateModal, (node) => node.getAttribute && node.getAttribute('data-notes-create-input') !== undefined);
+  aliasCreateInput.value = 'Third Note';
+  aliasCreateInput.dispatchEvent('keydown', { key: 'Enter' });
+  await flush();
+  if (createApi.entries.has('Project/Notes/Third_Note.md') || !aliasCreateModal.textContent.includes('already exists')) {
+    throw new Error('creating a note with an existing alias should be rejected');
+  }
+  aliasCreateInput.dispatchEvent('keydown', { key: 'Escape' });
+  await flush();
 
-  const providerAction = walk(container, (node) => node.getAttribute && node.getAttribute('data-note-contribution-action') === 'provider.note.action');
+  const firstRow = walk(container, (node) => node.getAttribute && node.getAttribute('data-note-path') === 'Project/Notes/First_Note.md');
+  walk(firstRow, (node) => node.getAttribute && node.getAttribute('data-note-action') === 'rename').click();
+  const aliasRenameModal = walk(document.body, (node) => node.getAttribute && node.getAttribute('data-notes-rename-modal') !== undefined);
+  const aliasRenameInput = walk(aliasRenameModal, (node) => node.getAttribute && node.getAttribute('data-notes-rename-input') !== undefined);
+  aliasRenameInput.value = 'Third Note';
+  aliasRenameInput.dispatchEvent('keydown', { key: 'Enter' });
+  await flush();
+  if (!createApi.entries.has('Project/Notes/First_Note.md') || !aliasRenameModal.textContent.includes('already exists')) {
+    throw new Error('renaming a note to an existing alias should be rejected');
+  }
+  aliasRenameInput.dispatchEvent('keydown', { key: 'Escape' });
+  await flush();
+
+  const providerAction = firstRow && walk(firstRow, (node) => node.getAttribute && node.getAttribute('data-note-contribution-action') === 'provider.note.action');
   if (!providerAction) throw new Error('provider note action button not found');
   providerAction.click();
   await flush();
@@ -376,7 +417,7 @@ async function mountNotes(api) {
     throw new Error(`expected provider note action call, got ${JSON.stringify(createApi.contributionCalls)}`);
   }
 
-  const trashButton = walk(container, (node) => node.getAttribute && node.getAttribute('data-note-action') === 'trash');
+  const trashButton = firstRow && walk(firstRow, (node) => node.getAttribute && node.getAttribute('data-note-action') === 'trash');
   if (!trashButton) throw new Error('trash note button not found');
   trashButton.click();
   await flush();
@@ -392,7 +433,7 @@ async function mountNotes(api) {
   const mergeApi = makeApi({ metadataAlwaysExists: true });
   mergeApi.entries.set('Project/Notes', { type: 'folder' });
   mergeApi.entries.set('Project/Notes/Alpha.md', { type: 'file', content: '# Alpha\n\nalpha body\n' });
-  mergeApi.entries.set('Project/Notes/Beta.md', { type: 'file', content: '# Beta\n\nbeta body\n' });
+  mergeApi.entries.set('Project/Notes/Beta.md', { type: 'file', content: '<!-- verstak-note-aliases-v1: ["Old Beta"] -->\n# Beta\n\nbeta body\n' });
   mergeApi.entries.set('Project/Notes/Gamma.md', { type: 'file', content: '' });
   const merge = await mountNotes(mergeApi);
 
@@ -478,6 +519,7 @@ async function mountNotes(api) {
   if (merged.content.indexOf('## Alpha') > merged.content.indexOf('## Beta')) {
     throw new Error('merged sections are not in list order');
   }
+  if (merged.content.includes('verstak-note-aliases-v1')) throw new Error('merge copied alias metadata into note content');
   // The originals stay: a merge the user cannot check against its sources is
   // a merge they cannot trust.
   ['Alpha', 'Beta', 'Gamma'].forEach((title) => {

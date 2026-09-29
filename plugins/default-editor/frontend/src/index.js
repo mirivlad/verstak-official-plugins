@@ -119,6 +119,19 @@
     return String(title || '').replace(/_/g, ' ').trim().toLocaleLowerCase();
   }
 
+  function noteAliases(content) {
+    content = String(content == null ? '' : content);
+    var match = /^<!-- verstak-note-aliases-v1: (\[[^\r\n]*\]) -->(\r?\n)/.exec(content);
+    if (!match) return { aliases: [], header: '', body: content };
+    try {
+      var aliases = JSON.parse(match[1]);
+      if (Array.isArray(aliases) && aliases.every(function (alias) { return typeof alias === 'string' && alias.trim(); })) {
+        return { aliases: aliases, header: match[0], body: content.slice(match[0].length) };
+      }
+    } catch (_) {}
+    return { aliases: [], header: '', body: content };
+  }
+
   function wikiTargets(content) {
     var result = [];
     var inFence = false;
@@ -360,6 +373,7 @@
       var viewMode = isMarkdown ? (requestedMode === 'edit' ? 'edit' : 'preview') : 'edit';
       var currentContent = '';
       var savedContent = '';
+      var aliasHeader = '';
       var dirty = false;
       var saveState = '';
       var lastSavedAt = '';
@@ -697,9 +711,10 @@
 
       var noteCatalog = null;
       var noteCatalogPromise = null;
+      var aliasCatalogPromise = null;
 
       function loadNoteCatalog(force) {
-        if (force) { noteCatalog = null; noteCatalogPromise = null; noteTitlesPromise = null; }
+        if (force) { noteCatalog = null; noteCatalogPromise = null; noteTitlesPromise = null; aliasCatalogPromise = null; }
         if (noteCatalogPromise) return noteCatalogPromise;
         var folder = notesFolderPath();
         noteCatalogPromise = api.files.list(folder).then(function (entries) {
@@ -716,12 +731,37 @@
         return noteCatalogPromise;
       }
 
+      function loadAliasCatalog(force) {
+        if (force) aliasCatalogPromise = null;
+        if (aliasCatalogPromise) return aliasCatalogPromise;
+        aliasCatalogPromise = loadNoteCatalog(force).then(async function (catalog) {
+          var failures = 0;
+          var next = 0;
+          async function worker() {
+            while (next < catalog.length) {
+              var entry = catalog[next++];
+              try {
+                var parsed = noteAliases(await api.files.readText(entry.path));
+                entry.aliases = parsed.aliases;
+                entry.body = parsed.body;
+              } catch (_) { failures += 1; }
+            }
+          }
+          await Promise.all(Array.from({ length: Math.min(4, catalog.length) }, worker));
+          return { catalog: catalog, failures: failures };
+        }).catch(function (error) { aliasCatalogPromise = null; throw error; });
+        return aliasCatalogPromise;
+      }
+
       function matchingNotesForTitle(title, catalog) {
         var key = noteTitleKey(title);
-        var matches = (catalog || []).filter(function (entry) { return noteTitleKey(entry.title) === key; });
+        function matchesKey(entry) {
+          return noteTitleKey(entry.title) === key || (entry.aliases || []).some(function (alias) { return noteTitleKey(alias) === key; });
+        }
+        var matches = (catalog || []).filter(matchesKey);
         if (!matches.length && /\.(md|markdown)$/i.test(title)) {
           key = noteTitleKey(title.replace(/\.(md|markdown)$/i, ''));
-          matches = (catalog || []).filter(function (entry) { return noteTitleKey(entry.title) === key; });
+          matches = (catalog || []).filter(matchesKey);
         }
         return matches;
       }
@@ -812,29 +852,21 @@
         linksScanComplete = false;
         if (preserveError !== true) linksError = '';
         renderLinks();
-        loadNoteCatalog(true).then(async function (catalog) {
+        loadAliasCatalog(true).then(function (result) {
+          var catalog = result.catalog;
           var sources = catalog.filter(function (entry) { return entry.path !== cleanPath(resourcePath); });
           var found = [];
-          var failures = 0;
-          var next = 0;
-          async function worker() {
-            while (next < sources.length) {
-              var source = sources[next++];
-              try {
-                var content = await api.files.readText(source.path);
-                if (wikiTargets(content).some(function (title) {
-                  var target = noteForTitle(title, catalog);
-                  return target && target.path === cleanPath(resourcePath);
-                })) found.push(source);
-              } catch (_) { failures += 1; }
-            }
-          }
-          await Promise.all(Array.from({ length: Math.min(4, sources.length) }, worker));
+          sources.forEach(function (source) {
+            if (source.body !== undefined && wikiTargets(source.body).some(function (title) {
+              var target = noteForTitle(title, catalog);
+              return target && target.path === cleanPath(resourcePath);
+            })) found.push(source);
+          });
           if (disposed || generation !== linksGeneration) return;
           backlinks = found.sort(function (a, b) { return a.title.localeCompare(b.title); });
           linksLoading = false;
-          linksScanComplete = failures === 0;
-          if (failures) linksError = tr('ui.linksScanFailed', null, 'Some notes could not be checked. Refresh to try again.');
+          linksScanComplete = result.failures === 0;
+          if (result.failures) linksError = tr('ui.linksScanFailed', null, 'Some notes could not be checked. Refresh to try again.');
           renderLinks();
         }).catch(function () {
           if (disposed || generation !== linksGeneration) return;
@@ -1037,7 +1069,7 @@
         var contentToSave = currentContent;
         saveState = 'saving';
         updateStatus();
-        inFlightSave = Promise.resolve(api.files.writeText(resourcePath, contentToSave, { createIfMissing: false, overwrite: true })).then(function () {
+        inFlightSave = Promise.resolve(api.files.writeText(resourcePath, aliasHeader + contentToSave, { createIfMissing: false, overwrite: true })).then(function () {
           if (disposed) return;
           savedContent = contentToSave;
           dirty = currentContent !== savedContent;
@@ -1070,7 +1102,9 @@
         var readPromise = api.files.readText(resourcePath);
         readPromise.then(function (content) {
           if (disposed) return;
-          currentContent = String(content == null ? '' : content);
+          var parsed = editorMode === 'notes-markdown' ? noteAliases(content) : { header: '', body: String(content == null ? '' : content) };
+          aliasHeader = parsed.header;
+          currentContent = parsed.body;
           savedContent = currentContent;
           dirty = false;
           saveState = '';
@@ -1240,9 +1274,9 @@
         event.preventDefault();
         var noteTitle = link.getAttribute('data-note-link');
         if (!noteTitle) return;
-        loadNoteCatalog().then(function (catalog) {
+        loadAliasCatalog().then(function (result) {
           if (disposed) return;
-          var entry = noteForTitle(noteTitle, catalog);
+          var entry = result.failures ? null : noteForTitle(noteTitle, result.catalog);
           if (!entry) {
             linksError = tr('ui.linksTargetUnavailable', null, 'The linked note was not found or its title is ambiguous.');
             if (!linksVisible && linksBtn) {

@@ -143,6 +143,53 @@
     return filename.replace(/_/g, ' ').trim();
   }
 
+  var ALIAS_PREFIX = '<!-- verstak-note-aliases-v1: ';
+  function noteTitleKey(value) { return String(value || '').replace(/_/g, ' ').trim().toLocaleLowerCase(); }
+  function parseNoteAliases(content) {
+    content = String(content || '');
+    if (content.indexOf(ALIAS_PREFIX) !== 0) return { aliases: [], body: content, newline: '\n' };
+    var match = /^<!-- verstak-note-aliases-v1: (\[[^\r\n]*\]) -->(\r?\n)/.exec(content);
+    if (!match) throw new Error('invalid-note-aliases');
+    var aliases;
+    try { aliases = JSON.parse(match[1]); } catch (_) { throw new Error('invalid-note-aliases'); }
+    if (!Array.isArray(aliases) || aliases.some(function (alias) { return typeof alias !== 'string' || !alias.trim(); })) {
+      throw new Error('invalid-note-aliases');
+    }
+    return { aliases: aliases, body: content.slice(match[0].length), newline: match[2] };
+  }
+  function withNoteAlias(content, title) {
+    var parsed = parseNoteAliases(content);
+    var aliases = parsed.aliases.slice();
+    if (!aliases.some(function (alias) { return noteTitleKey(alias) === noteTitleKey(title); })) aliases.push(title);
+    return ALIAS_PREFIX + JSON.stringify(aliases) + ' -->' + parsed.newline + parsed.body;
+  }
+  async function readNoteCatalog(api, folder) {
+    var entries;
+    try { entries = await api.files.list(folder); }
+    catch (error) { if (isNotFoundError(error)) return []; throw error; }
+    var notes = (entries || []).filter(function (entry) {
+      return entry && entry.type === 'file' && /\.(md|markdown)$/i.test(entry.name || '');
+    }).map(function (entry) {
+      return { path: cleanPath(entry.relativePath || folder + '/' + entry.name), title: titleFromFilename(entry.name) };
+    });
+    var next = 0;
+    async function worker() {
+      while (next < notes.length) {
+        var note = notes[next++];
+        note.content = String(await api.files.readText(note.path));
+        note.aliases = parseNoteAliases(note.content).aliases;
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(4, notes.length) }, worker));
+    return notes;
+  }
+  function titleConflict(catalog, title, exceptPath) {
+    var key = noteTitleKey(title);
+    return catalog.find(function (note) {
+      return note.path !== exceptPath && (noteTitleKey(note.title) === key || note.aliases.some(function (alias) { return noteTitleKey(alias) === key; }));
+    });
+  }
+
   function normalizeNoteFilename(title) {
     var original = String(title == null ? '' : title);
     var value = original.trim();
@@ -250,8 +297,13 @@
       function createNote(parent, title) {
         var trimmedTitle = String(title || '').trim();
         if (!trimmedTitle) return Promise.reject(new Error('note title must not be empty'));
-        var path = notesFolderPath(parent) + '/' + normalizeNoteFilename(trimmedTitle);
+        var folder = notesFolderPath(parent);
+        var path = folder + '/' + normalizeNoteFilename(trimmedTitle);
         return ensureNotesFolder(parent).then(function () {
+          return readNoteCatalog(api, folder);
+        }).then(function (catalog) {
+          var conflict = titleConflict(catalog, trimmedTitle, '');
+          if (conflict) return { path: path, existingPath: conflict.path, conflict: true };
           return api.files.writeText(path, '# ' + trimmedTitle + '\n', {
             createIfMissing: true,
             overwrite: false
@@ -269,10 +321,21 @@
         if (!trimmedTitle) return Promise.reject(new Error('note title must not be empty'));
         var newPath = parentPath(notePath) + '/' + normalizeNoteFilename(trimmedTitle);
         if (newPath === notePath) return Promise.resolve({ path: notePath });
-        return api.files.move(notePath, newPath, { overwrite: false }).then(function () {
-          return { path: newPath };
+        return readNoteCatalog(api, parentPath(notePath)).then(function (catalog) {
+          var source = catalog.find(function (note) { return note.path === notePath; });
+          if (!source) throw new Error('note-not-found');
+          var conflict = titleConflict(catalog, trimmedTitle, notePath);
+          if (conflict) return { path: newPath, existingPath: conflict.path, conflict: true };
+          return api.files.readText(notePath).then(function (latest) {
+            if (latest !== source.content) throw new Error('note-changed-during-rename');
+            return api.files.writeText(notePath, withNoteAlias(latest, source.title), { createIfMissing: false, overwrite: true });
+          }).then(function () {
+            return api.files.move(notePath, newPath, { overwrite: false });
+          }).then(function () {
+            return { path: newPath };
+          });
         }).catch(function (moveErr) {
-          if (isConflictError(moveErr)) return { path: newPath, conflict: true };
+          if (isConflictError(moveErr)) return { path: newPath, existingPath: newPath, conflict: true };
           throw moveErr;
         });
       }
@@ -687,7 +750,7 @@
       // against the originals, which is why the originals are also kept.
       function mergedContent(sources) {
         return sources.map(function (source) {
-          var body = String(source.content || '').replace(/\s+$/, '');
+          var body = parseNoteAliases(source.content).body.replace(/\s+$/, '');
           return '## ' + source.title + '\n\n' + (body || '_' + tr('ui.mergeEmptySource', null, 'This note was empty') + '_');
         }).join('\n\n');
       }
@@ -726,11 +789,14 @@
         // Read every source before writing anything: a merge that produced a
         // half-filled note because one read failed would be worse than a merge
         // that did not happen.
-        Promise.all(chosen.map(function (note) {
-          return api.files.readText(note.path).then(function (content) {
-            return { title: note.title || fileName(note.path), content: content };
-          });
-        })).then(function (sources) {
+        readNoteCatalog(api, notesFolderPath(parent)).then(function (catalog) {
+          if (titleConflict(catalog, title, '')) throw new Error('conflict: note title or alias');
+          return Promise.all(chosen.map(function (note) {
+            return api.files.readText(note.path).then(function (content) {
+              return { title: note.title || fileName(note.path), content: content };
+            });
+          }));
+        }).then(function (sources) {
           return api.files.writeText(targetPath, mergedContent(sources), { createIfMissing: true, overwrite: false });
         }).then(function () {
           if (disposed) return;
@@ -790,7 +856,7 @@
           if (disposed) return;
           data = data || {};
           if (data.conflict) {
-            setCreateError(conflictMessage(title, data.path));
+            setCreateError(conflictMessage(title, data.existingPath || data.path));
             createInput.focus();
             return;
           }
@@ -854,7 +920,7 @@
           if (disposed) return;
           data = data || {};
           if (data.conflict) {
-            setRenameError(conflictMessage(newTitle, data.path));
+            setRenameError(conflictMessage(newTitle, data.existingPath || data.path));
             renameInput.focus();
             return;
           }
@@ -1028,8 +1094,13 @@
     return api.files.createFolder(folder).catch(function (err) {
       if (!isConflictError(err)) throw err;
     }).then(function () {
+      return readNoteCatalog(api, folder);
+    }).then(function (catalog) {
+      var conflict = titleConflict(catalog, title, '');
+      if (conflict) return { title: title, path: path, existingPath: conflict.path, parentPath: workspace, conflict: true };
       return api.files.writeText(path, '# ' + title + '\n', { createIfMissing: true, overwrite: false });
-    }).then(function () {
+    }).then(function (result) {
+      if (result && result.conflict) return result;
       return { title: title, filename: path.slice(path.lastIndexOf('/') + 1), path: path, parentPath: workspace };
     }).catch(function (err) {
       if (isConflictError(err)) return { title: title, path: path, parentPath: workspace, conflict: true };
