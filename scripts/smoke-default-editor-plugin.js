@@ -590,6 +590,68 @@ async function mountEditor(secretProviderEnabled, translations, settings = {}, o
     throw new Error('wiki link did not resolve an existing underscored filename');
   }
 
+  const aliasHeader = '<!-- verstak-note-aliases-v1: ["Third Note","Renamed Note"] -->\n';
+  const renamed = await mountEditor(false, {}, {}, {
+    path: 'Project/Notes/Final_Note.md', context: { notesMode: true, notesScopePath: 'Project' },
+    notes: ['Final_Note.md', 'Source.md'],
+    files: {
+      'Project/Notes/Final_Note.md': aliasHeader + '# Final Note\nContent',
+      'Project/Notes/Source.md': 'See [[Third Note]] and [[Renamed Note]]',
+    },
+  });
+  const renamedPreview = walk(renamed.container, (node) => node.className === 'de-preview');
+  if (!renamedPreview || renamedPreview.innerHTML.includes('verstak-note-aliases-v1')) {
+    throw new Error('alias metadata must not appear in the note preview');
+  }
+  walk(renamed.container, (node) => node.getAttribute && node.getAttribute('data-editor-action') === 'toggle-links').dispatchEvent('click');
+  await flush();
+  if (!walk(renamed.container, (node) => node.getAttribute && node.getAttribute('data-note-backlink') === 'Project/Notes/Source.md')) {
+    throw new Error('old wiki links must remain backlinks after repeated renames');
+  }
+  walk(renamed.container, (node) => node.getAttribute && node.getAttribute('data-editor-mode-button') === 'edit').dispatchEvent('click');
+  const renamedText = walk(renamed.container, (node) => node.getAttribute && node.getAttribute('data-editor-textarea') === '');
+  if (renamedText.value.includes('verstak-note-aliases-v1')) throw new Error('alias metadata must not appear in the editor');
+  renamedText.value += '\nEdited';
+  renamedText.dispatchEvent('input');
+  walk(renamed.container, (node) => node.getAttribute && node.getAttribute('data-editor-action') === 'save').dispatchEvent('click');
+  await flush();
+  if (renamed.written[0]?.content !== aliasHeader + '# Final Note\nContent\nEdited') {
+    throw new Error('editing a renamed note must preserve its aliases');
+  }
+  const oldLink = await mountEditor(false, {}, {}, {
+    path: 'Project/Notes/Source.md', context: { notesMode: true, notesScopePath: 'Project' },
+    notes: ['Final_Note.md', 'Source.md'],
+    files: {
+      'Project/Notes/Final_Note.md': aliasHeader + '# Final Note',
+      'Project/Notes/Source.md': 'See [[Third Note]] and [[Renamed Note]]',
+    },
+  });
+  for (const title of ['Third Note', 'Renamed Note']) {
+    oldLink.container.dispatchEvent('click', {
+      target: { closest: (selector) => selector === '.internal-link' ? { getAttribute: () => title } : null },
+    });
+    await flush();
+  }
+  if (oldLink.opened.length !== 2 || oldLink.opened.some((request) => request.path !== 'Project/Notes/Final_Note.md')) {
+    throw new Error('clicking either old link must open the renamed note');
+  }
+  const collidingAlias = await mountEditor(false, {}, {}, {
+    path: 'Project/Notes/Source.md', context: { notesMode: true, notesScopePath: 'Project' },
+    notes: ['Final_Note.md', 'Third_Note.md', 'Source.md'],
+    files: {
+      'Project/Notes/Final_Note.md': aliasHeader + '# Final Note',
+      'Project/Notes/Third_Note.md': '# Another note',
+      'Project/Notes/Source.md': '[[Third Note]]',
+    },
+  });
+  collidingAlias.container.dispatchEvent('click', {
+    target: { closest: (selector) => selector === '.internal-link' ? { getAttribute: () => 'Third Note' } : null },
+  });
+  await flush();
+  if (collidingAlias.opened.length || !collidingAlias.container.textContent.includes('ambiguous')) {
+    throw new Error('an externally introduced alias collision must not open an arbitrary note');
+  }
+
   const partial = await mountEditor(false, {}, {}, {
     path: 'Project/Notes/Target.md', context: { notesMode: true, notesScopePath: 'Project' },
     notes: ['Target.md', 'Readable.md', 'Unreadable.md'],
