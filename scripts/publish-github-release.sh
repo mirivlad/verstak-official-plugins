@@ -38,6 +38,19 @@ if [[ "$HEAD" != "$("$GIT_BIN" rev-parse origin/main)" ]]; then
   exit 1
 fi
 
+# A new tag must not sort below an existing one. Stray v0.1.7-v0.1.9 tags from
+# August once outranked the v0.1.4/v0.1.5 releases published after them, so
+# anything choosing "the newest plugins tag" by version got month-old code.
+if ! "$GIT_BIN" rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+  NEW_BASE="${VERSION#v}"
+  NEW_BASE="${NEW_BASE%%-*}"
+  HIGHEST_BASE="$("$GIT_BIN" tag --list 'v[0-9]*' | sed -e 's/^v//' -e 's/-.*//' | sort -V | tail -n1)"
+  if [[ -n "$HIGHEST_BASE" && "$(printf '%s\n%s\n' "$HIGHEST_BASE" "$NEW_BASE" | sort -V | tail -n1)" != "$NEW_BASE" ]]; then
+    echo "release $VERSION would sort below existing tag v$HIGHEST_BASE; pick a higher version" >&2
+    exit 1
+  fi
+fi
+
 "$RELEASE_SCRIPT" "$VERSION"
 
 ASSETS=(
