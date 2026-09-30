@@ -1,15 +1,16 @@
 import './style.css';
+import { mount as mountComponent, unmount as unmountComponent } from 'svelte';
 import ImportSettings from './ImportSettings.svelte';
 
 function mount(container, props, api) {
-  container.__verstakImportInstance?.$destroy?.();
-  const instance = new ImportSettings({ target: container, props: { ...props, api } });
+  unmount(container);
+  const instance = mountComponent(ImportSettings, { target: container, props: { ...props, api } });
   container.__verstakImportInstance = instance;
   return instance;
 }
 
 function unmount(container) {
-  container.__verstakImportInstance?.$destroy?.();
+  if (container.__verstakImportInstance) unmountComponent(container.__verstakImportInstance);
   delete container.__verstakImportInstance;
 }
 

@@ -8,7 +8,9 @@ export default defineConfig({
     lib: {
       entry: 'src/index.js',
       formats: ['iife'],
-      name: 'VerstakSyncPlugin'
+      name: 'VerstakSyncPlugin',
+      // Vite 6+ names lib CSS after the package; plugin.json points at style.css.
+      cssFileName: 'style'
     },
     rollupOptions: {
       output: {
