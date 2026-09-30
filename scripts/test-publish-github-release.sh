@@ -51,7 +51,13 @@ case "${1:-}" in
     echo test-commit
     ;;
   describe) echo v0.0.0-previous ;;
-  tag) touch "$TEST_STATE/tag"; printf 'tag:%s\n' "${3:-}" >> "$LOG" ;;
+  tag)
+    if [[ "${2:-}" == "--list" ]]; then
+      cat "$TEST_STATE/existing-tags" 2>/dev/null || true
+      exit 0
+    fi
+    touch "$TEST_STATE/tag"; printf 'tag:%s\n' "${3:-}" >> "$LOG"
+    ;;
   push) printf 'push:%s:%s\n' "${2:-}" "${3:-}" >> "$LOG" ;;
   *) echo "unexpected git invocation: $*" >&2; exit 1 ;;
 esac
@@ -74,6 +80,7 @@ SCRIPT
 chmod +x "$WORK/bin/gh"
 
 run_publisher() {
+  local version="${1:-$VERSION}"
   VERSTAK_RELEASE_SCRIPT="$WORK/release.sh" \
   VERSTAK_RELEASE_DIR="$WORK/release" \
   VERSTAK_RELEASE_NOTES_DIR="$WORK/release-notes" \
@@ -81,8 +88,26 @@ run_publisher() {
   GH_BIN="$WORK/bin/gh" \
   EXPECTED_ROOT="$ROOT" \
   TEST_STATE="$WORK/state" \
-  "$PUBLISHER" "$VERSION"
+  "$PUBLISHER" "$version"
 }
+
+# A version that sorts below an existing tag is refused before anything is
+# built or tagged.
+printf 'v0.1.4\nv0.1.9\nv0.1.0-beta.20260723\n' > "$WORK/state/existing-tags"
+printf 'notes\n' > "$WORK/release-notes/v0.1.5.md"
+if run_publisher v0.1.5 >/dev/null 2>&1; then
+  echo "publisher accepted v0.1.5 below existing v0.1.9" >&2
+  exit 1
+fi
+if [[ -s "$LOG" ]] && grep -Eq '^(release|tag):' "$LOG"; then
+  echo "publisher built or tagged before refusing a lower version" >&2
+  exit 1
+fi
+printf "notes\n" > "$WORK/release-notes/v0.2.0.md"
+run_publisher v0.2.0 >/dev/null
+grep -Fqx "tag:v0.2.0" "$LOG"
+rm -f "$WORK/state/"* "$LOG"
+
 
 run_publisher
 grep -Fqx "release:$VERSION" "$LOG"

@@ -297,6 +297,14 @@ if [ "$MISSING_EXEC" -eq 0 ]; then
 fi
 
 echo ""
+echo "[release scripts]"
+for release_test in test-build-windows.sh test-package-portable.sh test-publish-github-release.sh; do
+  release_test_status=0
+  bash "$ROOT/scripts/$release_test" >/dev/null || release_test_status=$?
+  report "$release_test" "$release_test_status"
+done
+
+echo ""
 echo "[frontend smoke]"
 if command -v node &>/dev/null; then
   node "$ROOT/scripts/smoke-platform-frontend.js"
