@@ -15,14 +15,16 @@
     "verstak/core/files/v1",
     "verstak/core/workbench/v1"
   ],
+  "optionalRequires": ["verstak/notes/v1"],
   "permissions": [
     "files.read",
     "files.write",
     "storage.namespace",
+    "events.subscribe",
     "workbench.open"
   ],
   "frontend": {
-    "entry": "frontend/src/index.js"
+    "entry": "frontend/dist/index.js"
   },
   "contributes": {
     "openProviders": [

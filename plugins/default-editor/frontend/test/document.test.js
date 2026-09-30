@@ -47,3 +47,16 @@ test('inserted link is one undoable action and preserves following text', () => 
   doc.undo();
   assert.equal(doc.text, 'before after');
 });
+
+test('italic can be added to and removed from bold without removing bold', () => {
+  const doc = createDocument({ text: 'word' });
+  doc.select(0, 4);
+  doc.format('bold');
+  assert.equal(doc.active('italic'), false);
+  doc.format('italic');
+  assert.equal(doc.text, '***word***');
+  assert.equal(doc.active('italic'), true);
+  doc.format('italic');
+  assert.equal(doc.text, '**word**');
+  assert.equal(doc.active('bold'), true);
+});

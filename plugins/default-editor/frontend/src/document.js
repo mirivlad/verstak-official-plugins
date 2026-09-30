@@ -1,7 +1,7 @@
 import { EditorState, Compartment, Transaction } from '@codemirror/state';
 import { EditorView, keymap, drawSelection, highlightActiveLine } from '@codemirror/view';
 import { history, undo, redo, undoDepth, redoDepth, defaultKeymap, indentMore, indentLess, isolateHistory } from '@codemirror/commands';
-import { markdown, markdownKeymap } from '@codemirror/lang-markdown';
+import { markdown, markdownLanguage, markdownKeymap, insertNewlineContinueMarkupCommand } from '@codemirror/lang-markdown';
 import { syntaxHighlighting, HighlightStyle, bracketMatching } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import { autocompletion, completionKeymap } from '@codemirror/autocomplete';
@@ -32,13 +32,14 @@ export function createDocument({ text = '', isMarkdown = true, onChange = () => 
       EditorState.allowMultipleSelections.of(true),
       EditorState.tabSize.of(2),
       wrap.of(EditorView.lineWrapping),
-      ...(isMarkdown ? [markdown(), syntaxHighlighting(proseHighlight)] : []),
+      ...(isMarkdown ? [markdown({ base: markdownLanguage, addKeymap: false }), syntaxHighlighting(proseHighlight)] : []),
       keymap.of([
-        ...(isMarkdown ? markdownKeymap : []),
+        ...completionKeymap,
+        ...(isMarkdown ? [{ key: 'Enter', run: insertNewlineContinueMarkupCommand({ nonTightLists: false }) }, ...markdownKeymap.filter(binding => binding.key !== 'Enter')] : []),
         { key: 'Tab', run: indentMore }, { key: 'Shift-Tab', run: indentLess },
-        ...completionKeymap, ...defaultKeymap,
+        ...defaultKeymap,
       ]),
-      ...(completeNotes ? [autocompletion({ override: [completeNotes] })] : []),
+      ...(completeNotes ? [autocompletion({ override: [completeNotes], interactionDelay: 0 })] : []),
       EditorView.contentAttributes.of({ 'aria-label': 'Note text', 'data-editor-textarea': '', spellcheck: 'true' }),
       EditorView.domEventHandlers({ keydown: (event) => onShortcut ? onShortcut(event) : false }),
       EditorView.theme({
@@ -78,9 +79,10 @@ export function createDocument({ text = '', isMarkdown = true, onChange = () => 
   function wrapSelection(marker, close = marker, placeholder = '') {
     const { from, to } = state.selection.main;
     const selected = state.sliceDoc(from, to);
-    if (selected.startsWith(marker) && selected.endsWith(close) && selected.length >= marker.length + close.length) {
+    const italicOutside = marker !== '*' || ((selected.match(/^\*+/)?.[0].length || 0) % 2 === 1 && (selected.match(/\*+$/)?.[0].length || 0) % 2 === 1);
+    if (selected.startsWith(marker) && selected.endsWith(close) && selected.length >= marker.length + close.length && italicOutside) {
       change({ from, to, insert: selected.slice(marker.length, -close.length) }, { anchor: from, head: to - marker.length - close.length });
-    } else if (state.sliceDoc(Math.max(0, from - marker.length), from) === marker && state.sliceDoc(to, to + close.length) === close) {
+    } else if (state.sliceDoc(Math.max(0, from - marker.length), from) === marker && state.sliceDoc(to, to + close.length) === close && (marker !== '*' || active('italic'))) {
       change([{ from: from - marker.length, to: from, insert: '' }, { from: to, to: to + close.length, insert: '' }],
         { anchor: from - marker.length, head: to - marker.length });
     } else {
@@ -107,6 +109,11 @@ export function createDocument({ text = '', isMarkdown = true, onChange = () => 
     const marker = { bold: '**', italic: '*', code: '`' }[action];
     if (!marker) return false;
     const { from, to } = state.selection.main;
+    if (action === 'italic') {
+      const before = state.sliceDoc(0, from).match(/\*+$/)?.[0].length || 0;
+      const after = state.sliceDoc(to).match(/^\*+/)?.[0].length || 0;
+      return before % 2 === 1 && after % 2 === 1;
+    }
     return state.sliceDoc(Math.max(0, from - marker.length), from) === marker && state.sliceDoc(to, to + marker.length) === marker;
   }
   function format(action) {
@@ -124,7 +131,9 @@ export function createDocument({ text = '', isMarkdown = true, onChange = () => 
         const previous = action === 'quote' || action === 'heading' ? null : line.text.match(/^\s*(?:[-+*] (?:\[[ xX]\] )?|\d+[.)] )/);
         return { from: line.from, to: line.from + (previous ? previous[0].length : 0), insert: action === 'numbered' ? `${index + 1}. ` : style.prefix };
       });
-      change(changes);
+      const mapped = state.changes(changes);
+      const range = state.selection.main;
+      change(changes, { anchor: mapped.mapPos(range.anchor, 1), head: mapped.mapPos(range.head, 1) });
     }
     view?.focus();
   }
