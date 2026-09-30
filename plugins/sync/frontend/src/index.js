@@ -1,9 +1,10 @@
+import { mount, unmount } from 'svelte';
 import SyncSettings from './SyncSettings.svelte';
 import SyncStatusBar from './SyncStatusBar.svelte';
 
 function mountSvelte(Component, container, props, api) {
-  container.__verstakSyncInstance?.$destroy?.();
-  const instance = new Component({
+  unmountSvelte(container);
+  const instance = mount(Component, {
     target: container,
     props: { ...props, api }
   });
@@ -12,7 +13,7 @@ function mountSvelte(Component, container, props, api) {
 }
 
 function unmountSvelte(container) {
-  container.__verstakSyncInstance?.$destroy?.();
+  if (container.__verstakSyncInstance) unmount(container.__verstakSyncInstance);
   delete container.__verstakSyncInstance;
 }
 

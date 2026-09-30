@@ -68,14 +68,27 @@ if (!statusSource.includes('formatRelativeSyncTime') || !statusSource.includes('
 if (!/statusColor\(presentation\)/.test(statusSource) || !/statusText\(presentation, status, locale\)/.test(statusSource) || !/statusTooltip\(presentation, status, locale\)/.test(statusSource)) {
   throw new Error('SyncStatusBar markup must reference changing status and locale so Svelte updates it');
 }
-const svelteCompilerPath = path.join(root, 'plugins', 'sync', 'frontend', 'node_modules', 'svelte', 'compiler.cjs');
-if (fs.existsSync(svelteCompilerPath)) {
-  const compiled = require(svelteCompilerPath).compile(statusSource, { filename: 'SyncStatusBar.svelte', generate: 'dom' }).js.code;
-  if (!/p\(ctx, \[dirty\]\)\s*\{[\s\S]*?set_data\(t\d+, t\d+_value\)/.test(compiled)) {
-    throw new Error('SyncStatusBar must update its label when status changes');
-  }
+// Compile with the plugin's own Svelte and prove the label is re-rendered from
+// status and locale. This used to be skipped silently whenever the compiler was
+// not at the path Svelte 4 used, which is exactly how a check stops checking.
+const syncFrontendRequire = require('module').createRequire(path.join(root, 'plugins', 'sync', 'frontend', 'package.json'));
+let svelteCompiler;
+try {
+  svelteCompiler = syncFrontendRequire('svelte/compiler');
+} catch (error) {
+  throw new Error('Svelte compiler for the Sync plugin is not installed; run scripts/build.sh first (' + error.message + ')');
 }
-if (!entrySource.includes('$destroy')) {
+const compiled = svelteCompiler.compile(statusSource, { filename: 'SyncStatusBar.svelte', generate: 'client' }).js.code;
+// Svelte 5 re-runs a template expression only for the signals it reads outside
+// $.untrack(...); find the thunk that produces the label text and check those.
+const labelThunk = compiled
+  .split('() => (')
+  .find((chunk) => /\$\.untrack\(\(\) => statusText\(/.test(chunk));
+const trackedLabelDeps = labelThunk ? labelThunk.slice(0, labelThunk.indexOf('$.untrack(')) : '';
+if (!trackedLabelDeps.includes('$.get(status)') || !trackedLabelDeps.includes('$.get(locale)')) {
+  throw new Error('SyncStatusBar must update its label when status or locale changes');
+}
+if (!/import \{ mount, unmount \} from 'svelte'/.test(entrySource) || !/unmount\(container\.__verstakSyncInstance\)/.test(entrySource)) {
   throw new Error('Sync plugin wrapper must destroy Svelte components and their timers on unmount');
 }
 

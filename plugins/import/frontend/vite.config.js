@@ -9,6 +9,8 @@ export default defineConfig({
       entry: 'src/index.js',
       formats: ['iife'],
       name: 'VerstakImportPlugin',
+      // Vite 6+ names lib CSS after the package; plugin.json points at style.css.
+      cssFileName: 'style',
     },
     rollupOptions: {
       output: {

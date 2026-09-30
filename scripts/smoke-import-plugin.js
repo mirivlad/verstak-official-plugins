@@ -47,7 +47,7 @@ if (!component.includes("tr('ui.sensitiveWarning'")) {
 if (!component.includes('window.confirm') || !component.includes('progress?.cancellable')) {
   throw new Error('Importer cancellation must be confirmed and respect cancellable progress');
 }
-if (!entry.includes('ImportSettings') || !entry.includes('$destroy')) {
+if (!/mountComponent\(ImportSettings,/.test(entry) || !/unmountComponent\(container\.__verstakImportInstance\)/.test(entry)) {
   throw new Error('Importer entry must mount and destroy the Svelte settings component');
 }
 for (const variable of ['--verstak-plugin-surface', '--verstak-plugin-border', '--verstak-plugin-text', '--verstak-plugin-accent']) {
