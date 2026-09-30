@@ -147,8 +147,8 @@ export function parseMarkdown(content, { notes = true, secrets = false, copyLabe
 }
 
 // Preserve the original bytes on no-op saves, including CRLF and alias metadata.
-export function noteFile(content) {
-  const parsed = readAliases(content);
+export function noteFile(content, notes = true) {
+  const parsed = notes ? readAliases(content) : { header: '', aliases: [], body: content };
   const body = parsed.body.replace(/\r\n/g, '\n');
   const newline = parsed.body.includes('\r\n') ? '\r\n' : '\n';
   return {

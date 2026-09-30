@@ -370,7 +370,7 @@ if command -v node &>/dev/null; then
       const content = fs.readFileSync('$bundle', 'utf8');
       // Provide minimal globals
       global.window = { VerstakPluginRegister: function(id, def) { global.__registered = id; } };
-      global.document = { getElementById: function() { return null; }, createElement: function() { return { style: {}, setAttribute: function(){}, appendChild: function(){} }; }, head: { appendChild: function(){} } };
+      global.document = { documentElement: { style: {} }, getElementById: function() { return null; }, createElement: function() { return { style: {}, setAttribute: function(){}, appendChild: function(){} }; }, head: { appendChild: function(){} } };
       try {
         new Function(content)();
         if (!global.__registered) {
