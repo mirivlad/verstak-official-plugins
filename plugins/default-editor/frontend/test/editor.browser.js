@@ -93,6 +93,24 @@ test('plain text keeps metadata literal and keyboard task activation is saved', 
   await expect.poll(() => stored(page)).toBe('- [x] Keyboard task');
 });
 
+test('editor toolbars use icon-only controls with accessible localized tooltips', async t => {
+  const page = await mount(t, { text: 'Text', mode: 'edit' });
+  const controls = page.locator('.de-toolbar .de-icon-button, .de-md-toolbar .de-icon-button');
+  assert.ok(await controls.count() >= 15);
+  for (const control of await controls.all()) {
+    await expect(control.locator('svg.de-icon')).toHaveCount(1);
+    const label = await control.getAttribute('aria-label');
+    const title = await control.getAttribute('title');
+    assert.ok(label?.trim());
+    assert.ok(title?.includes(label));
+    assert.equal((await control.textContent()).trim(), '');
+  }
+  await expect(page.locator('[data-editor-action=save]')).toHaveAttribute('title', /Ctrl\+S/);
+  await expect(page.locator('[data-editor-action=find]')).toHaveAttribute('title', /Ctrl\+F/);
+  await expect(page.locator('[data-md-action=bold]')).toHaveAttribute('title', /Ctrl\+B/);
+  await expect(page.locator('[data-editor-action=insert-link]')).toHaveAttribute('title', /Ctrl\+K/);
+});
+
 test('formatting targets selection, toggles and survives mode changes and saves in history', async t => {
   const page = await mount(t, { text: 'before word after', mode: 'edit' });
   const input = page.locator('.cm-content');
