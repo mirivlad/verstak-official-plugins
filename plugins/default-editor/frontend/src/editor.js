@@ -4,6 +4,46 @@ import { notesFolder, readCatalog, matchesTitle, backlinkSnippet } from './catal
 import { highlightCode } from './highlight.js';
 import styles from './style.css?inline';
 
+const ICONS = {
+  edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+  preview: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+  split: '<rect x="3" y="4" width="8" height="16" rx="1"/><rect x="13" y="4" width="8" height="16" rx="1"/>',
+  undo: '<path d="M9 7 4 12l5 5"/><path d="M20 17a8 8 0 0 0-8-8H4"/>',
+  redo: '<path d="m15 7 5 5-5 5"/><path d="M4 17a8 8 0 0 1 8-8h8"/>',
+  save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/>',
+  outline: '<path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>',
+  wide: '<path d="M8 7 3 12l5 5M16 7l5 5-5 5M3 12h18"/>',
+  links: '<path d="M10 13a5 5 0 0 0 7.54.54l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15"/><path d="M14 11a5 5 0 0 0-7.54-.54l-2 2a5 5 0 0 0 7.07 7.07l1.15-1.15"/>',
+  wrap: '<path d="M4 6h12a4 4 0 0 1 0 8H9"/><path d="m12 11-3 3 3 3"/><path d="M4 18h3"/>',
+  find: '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
+  reload: '<path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.5 9A7 7 0 0 0 6 6.5L4 11M5.5 15A7 7 0 0 0 18 17.5l2-4.5"/>',
+  heading: '<path d="M6 4v16M18 4v16M6 12h12"/>',
+  bold: '<path d="M7 5h6a4 4 0 0 1 0 8H7Z"/><path d="M7 13h7a3.5 3.5 0 0 1 0 7H7Z"/>',
+  italic: '<path d="M10 4h8M6 20h8M14 4 10 20"/>',
+  bullet: '<path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>',
+  numbered: '<path d="M10 6h11M10 12h11M10 18h11"/><path d="M4 4h1v4M4 8h2M4 11.5c.5-.5 2-.5 2 .7 0 1.3-2 1.3-2 2.8h2M4 17h1.5a1 1 0 0 1 0 2H4m1.5 0a1 1 0 0 1 0 2H4"/>',
+  task: '<rect x="3" y="4" width="5" height="5" rx="1"/><path d="m4 6 1 1 2-2M11 6h10"/><rect x="3" y="15" width="5" height="5" rx="1"/><path d="M11 17h10"/>',
+  quote: '<path d="M7 17H4a2 2 0 0 1-2-2v-3a5 5 0 0 1 5-5v3a2 2 0 0 0-2 2h2ZM18 17h-3a2 2 0 0 1-2-2v-3a5 5 0 0 1 5-5v3a2 2 0 0 0-2 2h2Z"/>',
+  code: '<path d="m8 9-4 3 4 3M16 9l4 3-4 3"/>',
+  'code-block': '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m9 9-3 3 3 3M15 9l3 3-3 3"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.54.54l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15"/><path d="M14 11a5 5 0 0 0-7.54-.54l-2 2a5 5 0 0 0 7.07 7.07l1.15-1.15"/>',
+  'note-link': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h8"/><path d="M14 2v6h6M10 13H8M10 17H8"/><path d="M16 16h2a3 3 0 0 1 0 6h-2M18 19h-4"/>',
+};
+
+function icon(name) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('class', 'de-icon');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.innerHTML = ICONS[name] || ICONS.edit;
+  return svg;
+}
+
 function node(tag, attributes = {}, children = []) {
   const result = document.createElement(tag);
   for (const [key, value] of Object.entries(attributes)) {
@@ -64,43 +104,60 @@ export const DefaultEditor = {
     function button(action, label, handler, attributes = {}) {
       return node('button', { type: 'button', 'data-editor-action': action, onClick: handler, ...attributes }, [label]);
     }
+    function iconButton(action, label, iconName, handler, attributes = {}) {
+      const title = attributes.title || label;
+      return node('button', {
+        type: 'button',
+        className: 'de-icon-button',
+        'data-editor-action': action,
+        title,
+        'aria-label': attributes['aria-label'] || label,
+        onClick: handler,
+        ...attributes,
+      }, [icon(iconName)]);
+    }
     const toolbar = node('div', { className: 'de-toolbar' });
     toolbar.append(node('span', { className: 'de-toolbar-context', title: path }, [path]));
     const modeButtons = new Map();
-    if (markdown) for (const [value, key, label] of [['edit', 'ui.edit', 'Edit'], ['preview', 'ui.preview', 'Read'], ['split', 'ui.split', 'Side by side']]) {
-      const control = button(`mode-${value}`, tr(key, label), () => setMode(value), { 'data-editor-mode-button': value });
+    if (markdown) for (const [value, key, label, iconName] of [
+      ['edit', 'ui.edit', 'Edit', 'edit'], ['preview', 'ui.preview', 'Read', 'preview'], ['split', 'ui.split', 'Side by side', 'split'],
+    ]) {
+      const translated = tr(key, label);
+      const control = iconButton(`mode-${value}`, translated, iconName, () => setMode(value), { 'data-editor-mode-button': value });
       modeButtons.set(value, control);
       toolbar.append(control);
     }
-    const undoButton = button('undo', tr('ui.undo', 'Undo'), () => session?.undo(), { title: tr('ui.undoHint', 'Undo — Ctrl+Z') });
-    const redoButton = button('redo', tr('ui.redo', 'Redo'), () => session?.redo(), { title: tr('ui.redoHint', 'Redo — Ctrl+Y / Ctrl+Shift+Z') });
-    const saveButton = button('save', tr('ui.save', 'Save'), () => save());
+    const undoButton = iconButton('undo', tr('ui.undo', 'Undo'), 'undo', () => session?.undo(), { title: tr('ui.undoHint', 'Undo — Ctrl+Z') });
+    const redoButton = iconButton('redo', tr('ui.redo', 'Redo'), 'redo', () => session?.redo(), { title: tr('ui.redoHint', 'Redo — Ctrl+Y / Ctrl+Shift+Z') });
+    const saveLabel = tr('ui.save', 'Save');
+    const saveButton = iconButton('save', saveLabel, 'save', () => save(), { title: `${saveLabel} — Ctrl+S` });
     const status = node('span', { className: 'de-status', 'data-save-state': '', 'aria-live': 'polite' });
-    const outlineButton = button('toggle-outline', tr('ui.outline', 'Outline'), () => {
+    const outlineButton = iconButton('toggle-outline', tr('ui.outline', 'Outline'), 'outline', () => {
       outlineVisible = !outlineVisible;
       api.settings?.write('outlineVisible', outlineVisible).catch(() => {});
       updateSides();
     });
-    const linksButton = button('toggle-links', tr('ui.links', 'Links'), () => {
+    const linksButton = iconButton('toggle-links', tr('ui.links', 'Links'), 'links', () => {
       linksVisible = !linksVisible;
       updateSides();
       if (linksVisible) refreshCatalog();
     });
-    const wrapButton = button('toggle-wrap', tr('ui.wrapLongLines', 'Wrap long lines'), () => {
+    const wrapButton = iconButton('toggle-wrap', tr('ui.wrapLongLines', 'Wrap long lines'), 'wrap', () => {
       wrap = !wrap;
       session?.setWrap(wrap);
       wrapButton.setAttribute('aria-pressed', String(wrap));
       api.settings?.write('wrapLongLines', wrap).catch(() => {});
     }, { 'aria-pressed': 'true' });
-    const wideButton = button('toggle-width', tr('ui.wide', 'Wide page'), () => {
+    const wideButton = iconButton('toggle-width', tr('ui.wide', 'Wide page'), 'wide', () => {
       const wide = root.classList.toggle('de-wide');
       wideButton.setAttribute('aria-pressed', String(wide));
     }, { 'aria-pressed': 'false' });
     toolbar.append(undoButton, redoButton);
     if (markdown) toolbar.append(outlineButton, wideButton);
     if (notes) toolbar.append(linksButton);
-    toolbar.append(wrapButton, button('find', tr('ui.find', 'Find / replace'), openFind),
-      button('reload', tr('ui.reload', 'Reload'), () => load(true)), saveButton, status);
+    const findLabel = tr('ui.find', 'Find / replace');
+    toolbar.append(wrapButton, iconButton('find', findLabel, 'find', openFind, { title: `${findLabel} — Ctrl+F` }),
+      iconButton('reload', tr('ui.reload', 'Reload'), 'reload', () => load(true)), saveButton, status);
     root.append(toolbar);
 
     const formatting = node('div', { className: 'de-md-toolbar', role: 'toolbar', 'aria-label': tr('ui.formatting', 'Text formatting') });
@@ -110,14 +167,23 @@ export const DefaultEditor = {
       ['bullet', 'bulletList', 'Bullet list'], ['numbered', 'numberedList', 'Numbered list'],
       ['task', 'taskItem', 'Task list'], ['quote', 'quote', 'Quote'], ['code', 'inlineCode', 'Inline code'], ['code-block', 'codeBlock', 'Code block'],
     ]) {
-      const control = button(`format-${action}`, tr(`ui.md.${key}`, label), () => session?.format(action), { 'data-md-action': action });
+      const translated = tr(`ui.md.${key}`, label);
+      const shortcut = action === 'bold' ? 'Ctrl+B' : action === 'italic' ? 'Ctrl+I' : '';
+      const control = iconButton(`format-${action}`, translated, action, () => session?.format(action), {
+        'data-md-action': action,
+        title: shortcut ? `${translated} — ${shortcut}` : translated,
+      });
       control.addEventListener('mousedown', event => event.preventDefault());
       formattingButtons.set(action, control);
       formatting.append(control);
     }
     if (markdown) {
-      formatting.append(button('insert-link', tr('ui.md.link', 'Link'), () => openLinkPicker(notes ? 'note' : 'web'), { 'data-md-action': 'link', title: 'Ctrl+K' }));
-      if (notes) formatting.append(button('insert-note-link', tr('ui.noteLink', 'Link to note'), () => openLinkPicker('note')));
+      const linkLabel = tr('ui.md.link', 'Link');
+      formatting.append(iconButton('insert-link', linkLabel, 'link', () => openLinkPicker(notes ? 'note' : 'web'), {
+        'data-md-action': 'link',
+        title: `${linkLabel} — Ctrl+K`,
+      }));
+      if (notes) formatting.append(iconButton('insert-note-link', tr('ui.noteLink', 'Link to note'), 'note-link', () => openLinkPicker('note')));
       root.append(formatting);
     }
     const message = node('p', { className: 'de-message', role: 'alert' });
@@ -604,10 +670,23 @@ export const DefaultEditor = {
       };
       for (const [action, [key, fallback]] of Object.entries(actions)) {
         const control = root.querySelector(`[data-editor-action="${action}"]`);
-        if (control) control.textContent = tr(`ui.${key}`, fallback);
+        if (!control) continue;
+        const label = tr(`ui.${key}`, fallback);
+        if (control.classList.contains('de-icon-button')) {
+          control.setAttribute('aria-label', label);
+          const shortcut = action === 'save' ? 'Ctrl+S' : action === 'find' ? 'Ctrl+F' : action === 'insert-link' ? 'Ctrl+K' : '';
+          control.title = action === 'undo' ? tr('ui.undoHint', 'Undo — Ctrl+Z')
+            : action === 'redo' ? tr('ui.redoHint', 'Redo — Ctrl+Y / Ctrl+Shift+Z')
+            : shortcut ? `${label} — ${shortcut}` : label;
+        } else control.textContent = label;
       }
       const formatKeys = { heading: 'heading', bold: 'bold', italic: 'italic', bullet: 'bulletList', numbered: 'numberedList', task: 'taskItem', quote: 'quote', code: 'inlineCode', 'code-block': 'codeBlock' };
-      for (const [action, control] of formattingButtons) control.textContent = tr(`ui.md.${formatKeys[action]}`, control.textContent);
+      for (const [action, control] of formattingButtons) {
+        const label = tr(`ui.md.${formatKeys[action]}`, control.getAttribute('aria-label') || action);
+        control.setAttribute('aria-label', label);
+        const shortcut = action === 'bold' ? 'Ctrl+B' : action === 'italic' ? 'Ctrl+I' : '';
+        control.title = shortcut ? `${label} — ${shortcut}` : label;
+      }
       for (const [control, key] of [[query, 'findQuery'], [replacement, 'replaceValue']]) {
         const label = tr(`ui.${key}`, control.placeholder);
         control.placeholder = label; control.setAttribute('aria-label', label);
