@@ -20,7 +20,7 @@ async function mount(t, options = {}) {
   await page.evaluate(({ options, translations }) => {
     const path = options.path || 'Project/Notes/Current.md';
     window.files = { [path]: options.text ?? 'First paragraph\n\n- [ ] Same\n  - [ ] Same\n', ...options.files };
-    window.writes = []; window.binaryFiles = {}; window.opened = []; window.drafts = {}; window.failWrite = false; window.holdWrite = false;
+    window.writes = []; window.moves = []; window.binaryFiles = {}; window.opened = []; window.drafts = {}; window.failWrite = false; window.holdWrite = false;
     const settings = options.settings || {};
     window.api = {
       keys: { matches: (event, spec) => event.code === spec.code && (event.ctrlKey || event.metaKey) && event.shiftKey === !!spec.shift && !event.altKey },
@@ -33,6 +33,13 @@ async function mount(t, options = {}) {
         },
         list: async folder => Object.keys(window.files).filter(path => path.startsWith(folder + '/')).map(path => ({ type: 'file', relativePath: path, name: path.slice(folder.length + 1) })),
         createFolder: async () => {},
+        move: async (from, to, options) => {
+          if (!(from in window.files)) throw new Error('not found');
+          if (to in window.files && !options?.overwrite) throw new Error('conflict');
+          window.files[to] = window.files[from];
+          delete window.files[from];
+          window.moves.push({ from, to });
+        },
         readBytes: async path => {
           if (!(path in window.binaryFiles)) throw new Error('not-found');
           const dataBase64 = window.binaryFiles[path];
@@ -239,6 +246,110 @@ test('Ctrl+K edits existing web and note links without nesting them', async t =>
   assert.equal(await value(page), 'Look [Example](https://new.test) and [[New Note]]');
   await input.press('Control+z');
   assert.equal(await value(page), 'Look [Example](https://new.test) and [[Old Note]]');
+});
+
+test('note hotkeys save, switch editing modes and rename with backlinks intact', async t => {
+  const page = await mount(t, { text: '# Heading\n\nFirst', mode: 'edit', path: 'Project/Notes/Old_Note.md' });
+  const content = page.locator('.cm-content');
+  await content.click();
+  await content.press('Control+End');
+  await page.keyboard.type(' changed');
+  await content.press('Control+s');
+  await expect.poll(() => page.evaluate(() => window.files['Project/Notes/Old_Note.md'])).toBe('# Heading\n\nFirst changed');
+  await content.press('Control+e');
+  await expect(page.locator('.de-content')).toHaveAttribute('data-mode', 'preview');
+  await page.locator('[data-preview]').focus();
+  await page.keyboard.press('Control+Shift+e');
+  await expect(page.locator('.de-content')).toHaveAttribute('data-mode', 'split');
+  await page.locator('.cm-content').press('F2');
+  await expect(page.locator('.de-dialog h2')).toHaveText('Rename note');
+  await expect(page.locator('[data-rename-input]')).toHaveValue('Old Note');
+  await page.locator('[data-rename-input]').fill('New Note');
+  await page.locator('[data-editor-action=confirm-rename]').click();
+  await expect.poll(() => page.evaluate(() => window.opened.at(-1)?.path)).toBe('Project/Notes/New_Note.md');
+  assert.equal(await page.evaluate(() => window.files['Project/Notes/Old_Note.md']), undefined);
+  const newContent = await page.evaluate(() => window.files['Project/Notes/New_Note.md']);
+  assert.match(newContent, /verstak-note-aliases-v1: \["Old Note"\]/);
+  assert.ok(newContent.includes('# Heading\n\nFirst changed'));
+  await expect(page.locator('.de-toolbar-context')).toHaveText('Project/Notes/New_Note.md');
+  await expect(page.locator('[data-editor-action=rename]')).toHaveAttribute('title', /F2/);
+  await expect(page.locator('[data-editor-mode-button=edit]')).toHaveAttribute('title', /Ctrl\+E/);
+  await page.evaluate(() => {
+    window.component.unmount(document.getElementById('root'));
+    window.files['Project/Notes/Referrer.md'] = '[[Old Note]]';
+    window.props.request = { ...window.props.request, path: 'Project/Notes/Referrer.md', mode: 'view' };
+    window.mount();
+  });
+  await page.locator('[data-preview] [data-note-link="Old Note"]').click();
+  await expect.poll(() => page.evaluate(() => window.opened.at(-1)?.path)).toBe('Project/Notes/New_Note.md');
+});
+
+test('F2 rename handles conflicts and refuses to discard unsaved edits', async t => {
+  const page = await mount(t, { text: 'Old content', mode: 'edit', path: 'Project/Notes/Old.md',
+    files: { 'Project/Notes/Taken.md': 'Existing content' } });
+  const content = page.locator('.cm-content');
+  await content.focus();
+  await content.press('F2');
+  await page.locator('[data-rename-input]').fill('Taken');
+  await page.locator('[data-editor-action=confirm-rename]').click();
+  await expect(page.locator('.de-rename-error')).toContainText('already exists');
+  assert.equal(await page.evaluate(() => window.files['Project/Notes/Taken.md']), 'Existing content');
+  await page.locator('[data-editor-action=cancel-rename]').click();
+  await content.click();
+  await content.press('Control+End');
+  await page.keyboard.type(' changed');
+  await page.evaluate(() => { window.failWrite = true; });
+  await content.press('F2');
+  await page.locator('[data-rename-input]').fill('Renamed');
+  await page.locator('[data-editor-action=confirm-rename]').click();
+  await expect(page.locator('.de-rename-error')).toContainText('Save');
+  assert.equal(await page.evaluate(() => window.moves.length), 0);
+  assert.equal(await page.evaluate(() => window.files['Project/Notes/Old.md']), 'Old content');
+});
+
+test('markdown selection toolbar formats text and paired brackets wrap selection', async t => {
+  const page = await mount(t, { text: 'alpha beta', mode: 'edit' });
+  const input = page.locator('.cm-content');
+  await input.click();
+  await input.press('Control+Home');
+  for (let i = 0; i < 6; i++) await input.press('ArrowRight');
+  for (let i = 0; i < 4; i++) await input.press('Shift+ArrowRight');
+  await expect(page.locator('.de-selection-actions')).toBeVisible();
+  await page.locator('[data-editor-action=selection-bold]').click();
+  assert.equal(await value(page), 'alpha **beta**');
+  await input.press('Control+a');
+  await page.keyboard.type('(');
+  assert.equal(await value(page), '(alpha **beta**)');
+  await input.press('Control+a');
+  await page.keyboard.type('"');
+  assert.equal(await value(page), '"(alpha **beta**)"');
+});
+
+test('keyboard shortcut reference is available in editing and reading', async t => {
+  const page = await mount(t, { text: 'Text', mode: 'edit' });
+  await page.locator('[data-editor-action=shortcuts]').click();
+  await expect(page.locator('.de-dialog')).toContainText('Ctrl+S');
+  await expect(page.locator('.de-dialog')).toContainText('F2');
+  await expect(page.locator('.de-dialog')).toContainText('Ctrl+Shift+E');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.de-dialog')).toHaveCount(0);
+  await page.locator('[data-editor-mode-button=preview]').click();
+  await page.locator('[data-editor-action=shortcuts]').click();
+  await expect(page.locator('.de-dialog')).toContainText('Ctrl+K');
+  await page.locator('[data-editor-action=close-shortcuts]').click();
+});
+
+test('markdown list keyboard shortcuts format the selected line', async t => {
+  const page = await mount(t, { text: 'One', mode: 'edit' });
+  const input = page.locator('.cm-content');
+  await input.click();
+  await input.press('Control+Home');
+  await input.press('Control+Shift+8');
+  assert.equal(await value(page), '- One');
+  await input.press('Control+Shift+9');
+  assert.equal(await value(page), '- [ ] One');
+  await input.press('Control+Shift+7');
+  assert.equal(await value(page), '1. One');
 });
 
 test('formatting targets selection, toggles and survives mode changes and saves in history', async t => {

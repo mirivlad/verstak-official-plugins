@@ -4,7 +4,7 @@ import { history, undo, redo, undoDepth, redoDepth, defaultKeymap, indentMore, i
 import { markdown, markdownLanguage, markdownKeymap, insertNewlineContinueMarkupCommand } from '@codemirror/lang-markdown';
 import { syntaxHighlighting, HighlightStyle, bracketMatching } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
-import { autocompletion, completionKeymap } from '@codemirror/autocomplete';
+import { autocompletion, completionKeymap, closeBrackets } from '@codemirror/autocomplete';
 
 const proseHighlight = HighlightStyle.define([
   { tag: tags.heading1, fontSize: '1.55em', fontWeight: '700' },
@@ -32,7 +32,7 @@ export function createDocument({ text = '', isMarkdown = true, onChange = () => 
       EditorState.allowMultipleSelections.of(true),
       EditorState.tabSize.of(2),
       wrap.of(EditorView.lineWrapping),
-      ...(isMarkdown ? [markdown({ base: markdownLanguage, addKeymap: false }), syntaxHighlighting(proseHighlight)] : []),
+      ...(isMarkdown ? [markdown({ base: markdownLanguage, addKeymap: false }), syntaxHighlighting(proseHighlight), closeBrackets()] : []),
       keymap.of([
         ...completionKeymap,
         ...(isMarkdown ? [{ key: 'Enter', run: insertNewlineContinueMarkupCommand({ nonTightLists: false }) }, ...markdownKeymap.filter(binding => binding.key !== 'Enter')] : []),
