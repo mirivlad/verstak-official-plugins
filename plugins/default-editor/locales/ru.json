@@ -62,6 +62,7 @@
   "ui.redo": "Повторить",
   "ui.undoHint": "Отменить — Ctrl+Z",
   "ui.redoHint": "Повторить — Ctrl+Y / Ctrl+Shift+Z",
+  "ui.editorActions": "Действия редактора",
   "ui.formatting": "Оформление текста",
   "ui.wide": "Широкая страница",
   "ui.noteLink": "Ссылка на заметку",

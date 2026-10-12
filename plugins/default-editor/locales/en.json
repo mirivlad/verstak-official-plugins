@@ -62,6 +62,7 @@
   "ui.redo": "Redo",
   "ui.undoHint": "Undo — Ctrl+Z",
   "ui.redoHint": "Redo — Ctrl+Y / Ctrl+Shift+Z",
+  "ui.editorActions": "Editor actions",
   "ui.formatting": "Text formatting",
   "ui.wide": "Wide page",
   "ui.noteLink": "Link to note",

@@ -111,6 +111,38 @@ test('editor toolbars use icon-only controls with accessible localized tooltips'
   await expect(page.locator('[data-editor-action=insert-link]')).toHaveAttribute('title', /Ctrl\+K/);
 });
 
+test('narrow editor keeps both toolbars in single scrollable rows', async t => {
+  const page = await mount(t, { text: 'Narrow viewport', mode: 'edit' });
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 620 });
+    const result = await page.evaluate(() => {
+      const root = document.querySelector('.de-root');
+      const toolbar = root.querySelector('.de-toolbar');
+      const actions = root.querySelector('.de-toolbar-actions');
+      const formatting = root.querySelector('.de-md-toolbar');
+      const upper = [...actions.querySelectorAll('.de-icon-button')];
+      const lower = [...formatting.querySelectorAll('.de-icon-button')];
+      const ySpread = nodes => Math.max(...nodes.map(e => e.getBoundingClientRect().top)) - Math.min(...nodes.map(e => e.getBoundingClientRect().top));
+      return {
+        overflow: root.scrollWidth > root.clientWidth,
+        actionScroll: actions.scrollWidth > actions.clientWidth,
+        formatScroll: formatting.scrollWidth > formatting.clientWidth,
+        upperRows: ySpread(upper),
+        lowerRows: ySpread(lower),
+        toolbarHeight: toolbar.getBoundingClientRect().height,
+        formatHeight: formatting.getBoundingClientRect().height,
+      };
+    });
+    assert.equal(result.overflow, false, `root overflow at ${width}px`);
+    assert.equal(result.actionScroll, true);
+    assert.equal(result.formatScroll, true);
+    assert.ok(result.upperRows < 2);
+    assert.ok(result.lowerRows < 2);
+    assert.ok(result.toolbarHeight < 100);
+    assert.ok(result.formatHeight < 60);
+  }
+});
+
 test('formatting targets selection, toggles and survives mode changes and saves in history', async t => {
   const page = await mount(t, { text: 'before word after', mode: 'edit' });
   const input = page.locator('.cm-content');

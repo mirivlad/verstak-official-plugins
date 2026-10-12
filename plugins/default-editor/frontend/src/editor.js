@@ -118,6 +118,7 @@ export const DefaultEditor = {
     }
     const toolbar = node('div', { className: 'de-toolbar' });
     toolbar.append(node('span', { className: 'de-toolbar-context', title: path }, [path]));
+    const toolbarActions = node('div', { className: 'de-toolbar-actions', role: 'toolbar', 'aria-label': tr('ui.editorActions', 'Editor actions') });
     const modeButtons = new Map();
     if (markdown) for (const [value, key, label, iconName] of [
       ['edit', 'ui.edit', 'Edit', 'edit'], ['preview', 'ui.preview', 'Read', 'preview'], ['split', 'ui.split', 'Side by side', 'split'],
@@ -125,7 +126,7 @@ export const DefaultEditor = {
       const translated = tr(key, label);
       const control = iconButton(`mode-${value}`, translated, iconName, () => setMode(value), { 'data-editor-mode-button': value });
       modeButtons.set(value, control);
-      toolbar.append(control);
+      toolbarActions.append(control);
     }
     const undoButton = iconButton('undo', tr('ui.undo', 'Undo'), 'undo', () => session?.undo(), { title: tr('ui.undoHint', 'Undo — Ctrl+Z') });
     const redoButton = iconButton('redo', tr('ui.redo', 'Redo'), 'redo', () => session?.redo(), { title: tr('ui.redoHint', 'Redo — Ctrl+Y / Ctrl+Shift+Z') });
@@ -152,12 +153,13 @@ export const DefaultEditor = {
       const wide = root.classList.toggle('de-wide');
       wideButton.setAttribute('aria-pressed', String(wide));
     }, { 'aria-pressed': 'false' });
-    toolbar.append(undoButton, redoButton);
-    if (markdown) toolbar.append(outlineButton, wideButton);
-    if (notes) toolbar.append(linksButton);
+    toolbarActions.append(undoButton, redoButton);
+    if (markdown) toolbarActions.append(outlineButton, wideButton);
+    if (notes) toolbarActions.append(linksButton);
     const findLabel = tr('ui.find', 'Find / replace');
-    toolbar.append(wrapButton, iconButton('find', findLabel, 'find', openFind, { title: `${findLabel} — Ctrl+F` }),
+    toolbarActions.append(wrapButton, iconButton('find', findLabel, 'find', openFind, { title: `${findLabel} — Ctrl+F` }),
       iconButton('reload', tr('ui.reload', 'Reload'), 'reload', () => load(true)), saveButton, status);
+    toolbar.append(toolbarActions);
     root.append(toolbar);
 
     const formatting = node('div', { className: 'de-md-toolbar', role: 'toolbar', 'aria-label': tr('ui.formatting', 'Text formatting') });
