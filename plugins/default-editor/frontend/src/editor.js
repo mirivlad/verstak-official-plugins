@@ -28,6 +28,7 @@ const ICONS = {
   'code-block': '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m9 9-3 3 3 3M15 9l3 3-3 3"/>',
   link: '<path d="M10 13a5 5 0 0 0 7.54.54l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15"/><path d="M14 11a5 5 0 0 0-7.54-.54l-2 2a5 5 0 0 0 7.07 7.07l1.15-1.15"/>',
   'note-link': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h8"/><path d="M14 2v6h6M10 13H8M10 17H8"/><path d="M16 16h2a3 3 0 0 1 0 6h-2M18 19h-4"/>',
+  attachment: '<path d="m20.8 11.6-8.5 8.5a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8L15.2 6"/>',
 };
 
 function icon(name) {
@@ -186,7 +187,16 @@ export const DefaultEditor = {
         title: `${linkLabel} — Ctrl+K`,
       }));
       if (notes) formatting.append(iconButton('insert-note-link', tr('ui.noteLink', 'Link to note'), 'note-link', () => openLinkPicker('note')));
-      root.append(formatting);
+      const attachmentInput = node('input', { type: 'file', multiple: '', hidden: '', 'data-attachment-input': '', 'aria-label': tr('ui.attachFile', 'Attach file') });
+      attachmentInput.addEventListener('change', () => {
+        if (session && attachmentInput.files?.length) {
+          const { from, to } = session.selection;
+          queueAttachments(attachmentInput.files, from, to);
+        }
+        attachmentInput.value = '';
+      });
+      formatting.append(iconButton('attach-file', tr('ui.attachFile', 'Attach file'), 'attachment', () => attachmentInput.click()));
+      root.append(formatting, attachmentInput);
     }
     const message = node('p', { className: 'de-message', role: 'alert' });
     root.append(message);
@@ -212,6 +222,92 @@ export const DefaultEditor = {
     workspace.append(content, outline, links);
     root.append(workspace);
     updateSides();
+
+    const attachmentFolder = path.slice(0, path.lastIndexOf('/') + 1) + 'attachments';
+    let attachmentQueue = Promise.resolve();
+    function encodeBytes(bytes) {
+      let result = '';
+      for (let offset = 0; offset < bytes.length; offset += 8192) {
+        result += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
+      }
+      return btoa(result);
+    }
+    function safeAttachmentName(name) {
+      const cleaned = (name || 'image.png').normalize('NFC').replaceAll('/', '_').replaceAll(String.fromCharCode(92), '_').replace(/[<>:"|?*]/g, '_').split('').filter(char => char.charCodeAt(0) >= 32 && char.charCodeAt(0) !== 127).join('').replace(/\.\.+/g, '.').replace(/^\.+/, '').trim();
+      return (cleaned || 'attachment').slice(0, 120);
+    }
+    async function importAttachments(files, from, to, initialText) {
+      if (!markdown || !session || !api.files?.writeBytes || !api.files?.createFolder) return;
+      const imports = Array.from(files || []).filter(file => file && typeof file.arrayBuffer === 'function');
+      if (!imports.length) return;
+      const links = [];
+      let failed = false;
+      try {
+        try { await api.files.createFolder(attachmentFolder); }
+        catch (error) { if (!/conflict/i.test(String(error))) throw error; }
+        for (const file of imports) {
+          if (file.size > 8 * 1024 * 1024) throw new Error('too-large');
+          const filename = safeAttachmentName(file.name);
+          const dot = filename.lastIndexOf('.');
+          const stem = dot > 0 ? filename.slice(0, dot) : filename;
+          const ext = dot > 0 ? filename.slice(dot) : '';
+          const data = encodeBytes(new Uint8Array(await file.arrayBuffer()));
+          let selected;
+          for (let i = 0; i < 1000; i++) {
+            const candidate = i ? stem + '-' + i + ext : filename;
+            try {
+              await api.files.writeBytes(attachmentFolder + '/' + candidate, data, { createIfMissing: true, overwrite: false });
+              selected = candidate;
+              break;
+            } catch (error) {
+              if (!/exist|already|conflict/i.test(String(error))) throw error;
+            }
+          }
+          if (!selected) throw new Error('no-name');
+          const image = /\.(png|jpe?g|gif|webp|avif)$/i.test(selected);
+          const label = selected.replace(/[\[\]\\]/g, '\\$&');
+          const url = 'attachments/' + encodeURIComponent(selected).replace(/%2F/gi, '/');
+          links.push((image ? '!' : '') + '[' + label + '](' + url + ')');
+        }
+      } catch (error) {
+        failed = true;
+        message.textContent = tr('ui.attachmentFailed', 'Could not attach the file. Check storage permissions and the 8 MiB file-size limit.');
+      } finally {
+        if (links.length && !disposed && session) {
+          if (session.text === initialText) {
+            session.change({ from: Math.min(from, session.text.length), to: Math.min(to, session.text.length), insert: links.join('\n') });
+          } else {
+            session.replaceSelection(links.join('\n'));
+          }
+          if (!failed) message.textContent = '';
+        }
+      }
+    }
+    function queueAttachments(files, from, to) {
+      const snapshot = Array.from(files || []);
+      const initialText = session?.text;
+      attachmentQueue = attachmentQueue.catch(() => {}).then(() => importAttachments(snapshot, from, to, initialText));
+    }
+    root.addEventListener('dragover', event => {
+      if (markdown && Array.from(event.dataTransfer?.types || []).includes('Files')) event.preventDefault();
+    }, true);
+    root.addEventListener('drop', event => {
+      if (!markdown || !event.dataTransfer?.files?.length) return;
+      event.preventDefault();
+      if (mode === 'preview') setMode('edit');
+      let { from, to } = session.selection;
+      if (event.target.closest('.cm-editor') && Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
+        const position = session.view?.posAtCoords({ x: event.clientX, y: event.clientY });
+        if (position !== null && position !== undefined) from = to = position;
+      }
+      queueAttachments(event.dataTransfer.files, from, to);
+    }, true);
+    root.addEventListener('paste', event => {
+      if (!markdown || !event.clipboardData?.files?.length || !event.target.closest('.cm-editor')) return;
+      event.preventDefault();
+      const { from, to } = session.selection;
+      queueAttachments(event.clipboardData.files, from, to);
+    }, true);
 
     // Per-file drafts use the public plugin storage namespace. Keep the path in
     // the record too, so a hash collision can never restore another note.
@@ -388,6 +484,27 @@ export const DefaultEditor = {
       const prose = node('article', { className: 'de-prose' });
       prose.innerHTML = rendered.html;
       highlightCode(prose);
+      // Resolve private vault images through the permission-checked plugin API.
+      // A relative URL must never be resolved against the application's web origin.
+      for (const image of prose.querySelectorAll('img[src^="attachments/"]')) {
+        const relative = image.getAttribute('src');
+        image.removeAttribute('src');
+        let name;
+        try { name = decodeURIComponent(relative.slice('attachments/'.length)); }
+        catch (_) { continue; }
+        if (!name || name === '.' || name === '..' || name.includes('/') || name.includes(String.fromCharCode(92))) continue;
+        const mime = /\.png$/i.test(name) ? 'image/png'
+          : /\.jpe?g$/i.test(name) ? 'image/jpeg'
+          : /\.gif$/i.test(name) ? 'image/gif'
+          : /\.webp$/i.test(name) ? 'image/webp'
+          : /\.avif$/i.test(name) ? 'image/avif' : '';
+        if (!mime) continue;
+        api.files.readBytes(attachmentFolder + '/' + name).then(result => {
+          if (image.isConnected && result?.dataBase64 && result.size <= 8 * 1024 * 1024) {
+            image.src = 'data:' + mime + ';base64,' + result.dataBase64;
+          }
+        }).catch(() => {});
+      }
       preview.replaceChildren(prose);
       if (focusedTask) preview.querySelector(`[data-task-offset="${focusedTask}"]`)?.focus({ preventScroll: true });
       preview.scrollTop = scroll;
@@ -416,6 +533,21 @@ export const DefaultEditor = {
       }
       const internal = event.target.closest('[data-note-link]');
       if (internal) { event.preventDefault(); await openTitle(internal.dataset.noteLink); return; }
+      const attachment = event.target.closest('a[href^="attachments/"]');
+      if (attachment) {
+        event.preventDefault();
+        let filename;
+        try { filename = decodeURIComponent(attachment.getAttribute('href').slice('attachments/'.length)); }
+        catch (_) { return; }
+        if (!filename || filename === '.' || filename === '..' || filename.includes('/') || filename.includes(String.fromCharCode(92))) return;
+        if (dirty() && !await save()) return;
+        try {
+          await api.workbench.openResource({ kind: 'vault-file', path: attachmentFolder + '/' + filename,
+            extension: filename.includes('.') ? filename.slice(filename.lastIndexOf('.')) : '', mode: 'view',
+            context: { sourcePluginId: 'verstak.default-editor', sourceView: 'editor' } });
+        } catch (_) { message.textContent = tr('ui.attachmentOpenFailed', 'Could not open the attachment.'); }
+        return;
+      }
       const secret = event.target.closest('[data-secret-id]');
       if (secret) {
         event.preventDefault();
@@ -512,18 +644,39 @@ export const DefaultEditor = {
       } catch (_) { return null; }
     }
     function closeDialog() { dialog?.remove(); dialog = null; session?.focus(); }
+    function linkAtCaret() {
+      if (!session || session.selection.from !== session.selection.to) return null;
+      const offset = session.selection.from;
+      const line = session.state.doc.lineAt(offset);
+      const patterns = [
+        { kind: 'note', pattern: /\[\[([^\]\n]+)\]\]/g },
+        { kind: 'web', pattern: /\[([^\]\n]+)\]\(((?:https?:\/\/|mailto:)[^\s)]+)\)/g },
+      ];
+      for (const { kind, pattern } of patterns) {
+        for (const match of line.text.matchAll(pattern)) {
+          const from = line.from + match.index;
+          const to = from + match[0].length;
+          if (offset < from || offset > to || line.text[match.index - 1] === '!') continue;
+          return { from, to, kind, label: match[1], target: kind === 'note' ? match[1] : match[2] };
+        }
+      }
+      return null;
+    }
     async function openLinkPicker(kind) {
       if (!session) return;
       if (mode === 'preview') setMode('edit');
       closeDialog();
-      const range = { from: session.selection.from, to: session.selection.to };
+      const existing = linkAtCaret();
+      const range = existing || { from: session.selection.from, to: session.selection.to };
+      if (existing) kind = existing.kind;
+      const dialogTitle = existing ? tr('ui.editLink', 'Edit link') : tr('ui.insertLink', 'Insert link');
       dialog = node('div', { className: 'de-dialog-backdrop' });
-      const panel = node('section', { className: 'de-dialog', role: 'dialog', 'aria-modal': 'true', 'aria-label': tr('ui.insertLink', 'Insert link') });
+      const panel = node('section', { className: 'de-dialog', role: 'dialog', 'aria-modal': 'true', 'aria-label': dialogTitle });
       const type = node('select', { 'aria-label': tr('ui.linkType', 'Link type') });
       if (notes) type.append(node('option', { value: 'note' }, [tr('ui.noteLink', 'Link to note')]));
       type.append(node('option', { value: 'web' }, [tr('ui.webLink', 'Web link')]));
       type.value = kind;
-      const input = node('input', { type: 'text', 'data-link-query': '', 'aria-label': tr('ui.linkTarget', 'Note title or web address') });
+      const input = node('input', { type: 'text', 'data-link-query': '', 'aria-label': tr('ui.linkTarget', 'Note title or web address'), value: existing?.target || '' });
       const resultList = node('div', { className: 'de-picker-results' });
       const error = node('p', { role: 'alert' });
       const insert = value => {
@@ -565,7 +718,7 @@ export const DefaultEditor = {
           }
         } catch (_) { error.textContent = tr('ui.linksListFailed', 'Could not list notes in this Deal.'); }
       }
-      const confirm = button('confirm-link', tr('ui.insertLink', 'Insert link'), () => {
+      const confirm = button('confirm-link', existing ? tr('ui.updateLink', 'Update link') : tr('ui.insertLink', 'Insert link'), () => {
         if (type.value === 'note') {
           const found = results ? matchesTitle(results.notes, input.value) : [];
           if (found.length === 1) chooseNote(found[0]);
@@ -573,7 +726,7 @@ export const DefaultEditor = {
         } else {
           const url = input.value.trim();
           if (!/^(https?:\/\/|mailto:)/i.test(url) || /[\s<>]/.test(url)) { error.textContent = tr('ui.invalidURL', 'Enter an http, https or mailto address.'); return; }
-          const label = session.text.slice(range.from, range.to) || url;
+          const label = existing?.label || session.text.slice(range.from, range.to) || url;
           insert(`[${label.replace(/[\[\]]/g, '\\$&')}](${url.replace(/\(/g, '%28').replace(/\)/g, '%29')})`);
         }
       });
@@ -590,7 +743,7 @@ export const DefaultEditor = {
         else controls[Math.max(0, Math.min(controls.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)))]?.focus();
       });
       type.addEventListener('change', renderResults);
-      panel.append(node('h2', {}, [tr('ui.insertLink', 'Insert link')]), type, node('label', {}, [tr('ui.linkTarget', 'Note title or web address'), input]), resultList, error,
+      panel.append(node('h2', {}, [dialogTitle]), type, node('label', {}, [tr('ui.linkTarget', 'Note title or web address'), input]), resultList, error,
         node('div', { className: 'de-dialog-actions' }, [button('cancel-link', tr('ui.closeFind', 'Close'), closeDialog), confirm]));
       dialog.append(panel); root.append(dialog);
       dialog.addEventListener('keydown', event => {
@@ -666,7 +819,7 @@ export const DefaultEditor = {
         undo: ['undo', 'Undo'], redo: ['redo', 'Redo'], save: ['save', 'Save'], reload: ['reload', 'Reload'],
         'toggle-outline': ['outline', 'Outline'], 'toggle-links': ['links', 'Links'], 'toggle-width': ['wide', 'Wide page'],
         'toggle-wrap': ['wrapLongLines', 'Wrap long lines'], find: ['find', 'Find / replace'],
-        'insert-link': ['md.link', 'Link'], 'insert-note-link': ['noteLink', 'Link to note'],
+        'insert-link': ['md.link', 'Link'], 'insert-note-link': ['noteLink', 'Link to note'], 'attach-file': ['attachFile', 'Attach file or image'],
         'find-previous': ['findPrevious', 'Previous'], 'find-next': ['findNext', 'Next'],
         'find-replace': ['replace', 'Replace'], 'find-replace-all': ['replaceAll', 'Replace all'], 'close-find': ['closeFind', 'Close'],
       };
@@ -689,6 +842,7 @@ export const DefaultEditor = {
         const shortcut = action === 'bold' ? 'Ctrl+B' : action === 'italic' ? 'Ctrl+I' : '';
         control.title = shortcut ? `${label} — ${shortcut}` : label;
       }
+      root.querySelector('[data-attachment-input]')?.setAttribute('aria-label', tr('ui.attachFile', 'Attach file or image'));
       for (const [control, key] of [[query, 'findQuery'], [replacement, 'replaceValue']]) {
         const label = tr(`ui.${key}`, control.placeholder);
         control.placeholder = label; control.setAttribute('aria-label', label);

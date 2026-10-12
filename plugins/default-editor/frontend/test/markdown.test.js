@@ -35,6 +35,14 @@ test('unsafe links and HTML cannot execute, including reference links', () => {
   assert.ok(!result.html.includes('data:text'));
 });
 
+test('relative vault attachments are rendered only through safe paths', () => {
+  const html = parseMarkdown('![photo](attachments/photo.png) [report](attachments/report.pdf) ![svg](attachments/bad.svg) ![escape](attachments/../escape.png)').html;
+  assert.match(html, /src="attachments\/photo\.png"/);
+  assert.match(html, /href="attachments\/report\.pdf"/);
+  assert.ok(!html.includes('src="attachments/bad.svg"'));
+  assert.ok(!html.includes('src="attachments/../escape.png"'));
+});
+
 test('unchanged file and metadata are preserved byte-for-byte', () => {
   const source = '<!-- verstak-note-aliases-v1: ["Old"] -->\r\n# New\r\n\r\nbody\r\n';
   const file = noteFile(source);

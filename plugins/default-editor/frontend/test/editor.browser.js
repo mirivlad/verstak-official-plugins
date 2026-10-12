@@ -20,7 +20,7 @@ async function mount(t, options = {}) {
   await page.evaluate(({ options, translations }) => {
     const path = options.path || 'Project/Notes/Current.md';
     window.files = { [path]: options.text ?? 'First paragraph\n\n- [ ] Same\n  - [ ] Same\n', ...options.files };
-    window.writes = []; window.opened = []; window.drafts = {}; window.failWrite = false; window.holdWrite = false;
+    window.writes = []; window.binaryFiles = {}; window.opened = []; window.drafts = {}; window.failWrite = false; window.holdWrite = false;
     const settings = options.settings || {};
     window.api = {
       keys: { matches: (event, spec) => event.code === spec.code && (event.ctrlKey || event.metaKey) && event.shiftKey === !!spec.shift && !event.altKey },
@@ -32,6 +32,17 @@ async function mount(t, options = {}) {
           window.files[path] = content; window.writes.push({ path, content });
         },
         list: async folder => Object.keys(window.files).filter(path => path.startsWith(folder + '/')).map(path => ({ type: 'file', relativePath: path, name: path.slice(folder.length + 1) })),
+        createFolder: async () => {},
+        readBytes: async path => {
+          if (!(path in window.binaryFiles)) throw new Error('not-found');
+          const dataBase64 = window.binaryFiles[path];
+          return { dataBase64, size: atob(dataBase64).length, mimeHint: 'image/png' };
+        },
+        writeBytes: async (path, base64, options) => {
+          if (!options.overwrite && path in window.binaryFiles) throw new Error('already exists');
+          if (window.failWrite) throw new Error('write failed');
+          window.binaryFiles[path] = base64;
+        },
       },
       settings: { read: async key => settings[key], write: async (key, value) => { settings[key] = value; } },
       contributions: { list: async () => options.secrets ? [{ supports: [{ kind: 'secret' }] }] : [] },
@@ -141,6 +152,93 @@ test('narrow editor keeps both toolbars in single scrollable rows', async t => {
     assert.ok(result.toolbarHeight < 100);
     assert.ok(result.formatHeight < 60);
   }
+});
+
+test('dropping image and file writes vault attachments without overwriting names', async t => {
+  const page = await mount(t, { text: 'Base', mode: 'edit' });
+  await page.evaluate(async () => {
+    const target = document.querySelector('.cm-content');
+    const makeFile = (name, type) => new File([new Uint8Array([1, 2, 3])], name, { type });
+    const drop = file => {
+      const event = new Event('drop', { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'dataTransfer', { value: { files: [file] } });
+      target.dispatchEvent(event);
+    };
+    drop(makeFile('photo.png', 'image/png'));
+  });
+  await expect.poll(() => page.evaluate(() => Object.keys(window.binaryFiles).length)).toBe(1);
+  await expect(page.locator('.cm-content')).toContainText('![photo.png](attachments/photo.png)');
+  await page.evaluate(() => {
+    const event = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'dataTransfer', { value: { files: [new File(['more'], 'photo.png', { type: 'image/png' })] } });
+    document.querySelector('.cm-content').dispatchEvent(event);
+  });
+  await expect.poll(() => page.evaluate(() => Object.keys(window.binaryFiles).length)).toBe(2);
+  await expect(page.locator('.cm-content')).toContainText('![photo-1.png](attachments/photo-1.png)');
+  await page.locator('[data-editor-mode-button=preview]').click();
+  await expect(page.locator('[data-preview] img')).toHaveCount(2);
+  await expect.poll(() => page.locator('[data-preview] img').first().getAttribute('src')).toMatch(/^data:image\/png;base64,/);
+  await page.locator('[data-editor-mode-button=edit]').click();
+  await page.evaluate(() => { window.failWrite = true; });
+  await page.evaluate(() => {
+    const event = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'dataTransfer', { value: { files: [new File(['no'], 'failed.txt', { type: 'text/plain' })] } });
+    document.querySelector('.cm-content').dispatchEvent(event);
+  });
+  await expect(page.locator('.de-message')).toContainText('Could not attach the file');
+  await expect(page.locator('.cm-content')).not.toContainText('failed.txt');
+});
+
+test('pasted clipboard image becomes a vault attachment instead of raw content', async t => {
+  const page = await mount(t, { text: 'Hello', mode: 'edit' });
+  const prevented = await page.evaluate(() => {
+    const event = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'clipboardData', { value: { files: [new File(['image-bytes'], 'paste.png', { type: 'image/png' })] } });
+    document.querySelector('.cm-content').dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  assert.equal(prevented, true);
+  await expect.poll(() => page.evaluate(() => Object.keys(window.binaryFiles).length)).toBe(1);
+  await expect(page.locator('.cm-content')).toContainText('![paste.png](attachments/paste.png)');
+  await expect(page.locator('.cm-content')).not.toContainText('image-bytes');
+});
+
+test('file picker attaches document and preview opens it inside Verstak', async t => {
+  const page = await mount(t, { text: 'Text', mode: 'edit' });
+  await expect(page.locator('[data-editor-action=attach-file]')).toHaveAttribute('aria-label', 'Attach file or image');
+  await page.locator('[data-attachment-input]').setInputFiles({ name: 'report.txt', mimeType: 'text/plain', buffer: Buffer.from('hello') });
+  await expect.poll(() => page.evaluate(() => Object.keys(window.binaryFiles).length)).toBe(1);
+  await expect(page.locator('.cm-content')).toContainText('[report.txt](attachments/report.txt)');
+  await page.locator('[data-editor-mode-button=preview]').click();
+  await page.locator('[data-preview] a[href="attachments/report.txt"]').click();
+  await expect.poll(() => page.evaluate(() => window.opened[0]?.path)).toBe('Project/Notes/attachments/report.txt');
+});
+
+test('Ctrl+K edits existing web and note links without nesting them', async t => {
+  const page = await mount(t, { mode: 'edit', text: 'Look [Example](https://old.test) and [[Old Note]]', files: {
+    'Project/Notes/Old_Note.md': '# Old Note',
+    'Project/Notes/New_Note.md': '# New Note',
+  } });
+  const input = page.locator('.cm-content');
+  await input.click();
+  await input.press('Control+Home');
+  for (let i = 0; i < 12; i++) await input.press('ArrowRight');
+  await input.press('Control+k');
+  await expect(page.locator('.de-dialog h2')).toHaveText('Edit link');
+  await expect(page.locator('[data-link-query]')).toHaveValue('https://old.test');
+  await page.locator('[data-link-query]').fill('https://new.test');
+  await page.locator('[data-editor-action=confirm-link]').click();
+  assert.equal(await value(page), 'Look [Example](https://new.test) and [[Old Note]]');
+  await input.click();
+  await input.press('Control+End');
+  await input.press('ArrowLeft');
+  await input.press('Control+k');
+  await expect(page.locator('[data-link-query]')).toHaveValue('Old Note');
+  await page.locator('[data-link-query]').fill('New Note');
+  await page.locator('[data-editor-action=confirm-link]').click();
+  assert.equal(await value(page), 'Look [Example](https://new.test) and [[New Note]]');
+  await input.press('Control+z');
+  assert.equal(await value(page), 'Look [Example](https://new.test) and [[Old Note]]');
 });
 
 test('formatting targets selection, toggles and survives mode changes and saves in history', async t => {

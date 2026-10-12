@@ -40,6 +40,9 @@ function safeURL(value, image = false) {
   // Relative vault paths are resolved by the host, never by the web page URL.
   const url = String(value || '').trim();
   if (/^(https?:|mailto:)/i.test(url)) return !image || /^https?:/i.test(url);
+  if (/^attachments\/[a-z0-9_.%()-]+$/i.test(url) && !/%2f|%5c|\.\./i.test(url)) {
+    return !image || /\.(png|jpe?g|gif|webp|avif)$/i.test(url);
+  }
   return !image && /^#[^\s]*$/.test(url);
 }
 
