@@ -1,5 +1,5 @@
 import { createDocument } from './document.js';
-import { noteFile, parseMarkdown, titleKey } from './markdown.js';
+import { noteFile, parseMarkdown, readAliases, titleKey } from './markdown.js';
 import { notesFolder, readCatalog, matchesTitle, backlinkSnippet } from './catalog.js';
 import { highlightCode } from './highlight.js';
 import styles from './style.css?inline';
@@ -29,6 +29,8 @@ const ICONS = {
   link: '<path d="M10 13a5 5 0 0 0 7.54.54l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15"/><path d="M14 11a5 5 0 0 0-7.54-.54l-2 2a5 5 0 0 0 7.07 7.07l1.15-1.15"/>',
   'note-link': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h8"/><path d="M14 2v6h6M10 13H8M10 17H8"/><path d="M16 16h2a3 3 0 0 1 0 6h-2M18 19h-4"/>',
   attachment: '<path d="m20.8 11.6-8.5 8.5a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8L15.2 6"/>',
+  rename: '<path d="M12 20h9"/><path d="m15 5 4 4M5 19l4-.8L20 7.2 16.8 4 5.8 15Z"/>',
+  keyboard: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M10 13h.01M14 13h.01M18 13h.01M7 16h10"/>',
 };
 
 function icon(name) {
@@ -66,7 +68,7 @@ export const DefaultEditor = {
     root.replaceChildren();
     root.className = 'de-root';
     const request = props.request || {};
-    const path = request.path || '';
+    let path = request.path || '';
     const notes = !!(request.context?.notesMode || request.context?.isInsideNotesFolder);
     const markdown = notes || /\.(md|markdown)$/i.test(request.extension || path);
     const folder = notesFolder(request);
@@ -118,19 +120,24 @@ export const DefaultEditor = {
       }, [icon(iconName)]);
     }
     const toolbar = node('div', { className: 'de-toolbar' });
-    toolbar.append(node('span', { className: 'de-toolbar-context', title: path }, [path]));
+    const pathLabel = node('span', { className: 'de-toolbar-context', title: path }, [path]);
+    toolbar.append(pathLabel);
     const toolbarActions = node('div', { className: 'de-toolbar-actions', role: 'toolbar', 'aria-label': tr('ui.editorActions', 'Editor actions') });
     const modeButtons = new Map();
     if (markdown) for (const [value, key, label, iconName] of [
       ['edit', 'ui.edit', 'Edit', 'edit'], ['preview', 'ui.preview', 'Read', 'preview'], ['split', 'ui.split', 'Side by side', 'split'],
     ]) {
       const translated = tr(key, label);
-      const control = iconButton(`mode-${value}`, translated, iconName, () => setMode(value), { 'data-editor-mode-button': value });
+      const shortcut = value === 'split' ? 'Ctrl+Shift+E' : 'Ctrl+E';
+      const control = iconButton(`mode-${value}`, translated, iconName, () => setMode(value), {
+        'data-editor-mode-button': value, title: `${translated} — ${shortcut}`,
+      });
       modeButtons.set(value, control);
       toolbarActions.append(control);
     }
     const undoButton = iconButton('undo', tr('ui.undo', 'Undo'), 'undo', () => session?.undo(), { title: tr('ui.undoHint', 'Undo — Ctrl+Z') });
     const redoButton = iconButton('redo', tr('ui.redo', 'Redo'), 'redo', () => session?.redo(), { title: tr('ui.redoHint', 'Redo — Ctrl+Y / Ctrl+Shift+Z') });
+    const renameButton = iconButton('rename', tr('ui.rename', 'Rename note'), 'rename', () => openRenameDialog(), { title: `${tr('ui.rename', 'Rename note')} — F2` });
     const saveLabel = tr('ui.save', 'Save');
     const saveButton = iconButton('save', saveLabel, 'save', () => save(), { title: `${saveLabel} — Ctrl+S` });
     const status = node('span', { className: 'de-status', 'data-save-state': '', 'aria-live': 'polite' });
@@ -159,7 +166,11 @@ export const DefaultEditor = {
     if (notes) toolbarActions.append(linksButton);
     const findLabel = tr('ui.find', 'Find / replace');
     toolbarActions.append(wrapButton, iconButton('find', findLabel, 'find', openFind, { title: `${findLabel} — Ctrl+F` }),
-      iconButton('reload', tr('ui.reload', 'Reload'), 'reload', () => load(true)), saveButton, status);
+      iconButton('reload', tr('ui.reload', 'Reload'), 'reload', () => load(true)));
+    if (notes) toolbarActions.append(renameButton);
+    toolbarActions.append(saveButton);
+    toolbarActions.append(iconButton('shortcuts', tr('ui.shortcuts', 'Keyboard shortcuts'), 'keyboard', () => openShortcutHelp()));
+    toolbarActions.append(status);
     toolbar.append(toolbarActions);
     root.append(toolbar);
 
@@ -171,7 +182,9 @@ export const DefaultEditor = {
       ['task', 'taskItem', 'Task list'], ['quote', 'quote', 'Quote'], ['code', 'inlineCode', 'Inline code'], ['code-block', 'codeBlock', 'Code block'],
     ]) {
       const translated = tr(`ui.md.${key}`, label);
-      const shortcut = action === 'bold' ? 'Ctrl+B' : action === 'italic' ? 'Ctrl+I' : '';
+      const shortcut = action === 'bold' ? 'Ctrl+B' : action === 'italic' ? 'Ctrl+I'
+        : action === 'numbered' ? 'Ctrl+Shift+7' : action === 'bullet' ? 'Ctrl+Shift+8'
+        : action === 'task' ? 'Ctrl+Shift+9' : '';
       const control = iconButton(`format-${action}`, translated, action, () => session?.format(action), {
         'data-md-action': action,
         title: shortcut ? `${translated} — ${shortcut}` : translated,
@@ -197,6 +210,38 @@ export const DefaultEditor = {
       });
       formatting.append(iconButton('attach-file', tr('ui.attachFile', 'Attach file'), 'attachment', () => attachmentInput.click()));
       root.append(formatting, attachmentInput);
+    }
+    const selectionActions = node('div', {
+      className: 'de-selection-actions', role: 'toolbar',
+      'aria-label': tr('ui.selectionActions', 'Selected text actions'),
+    });
+    selectionActions.hidden = true;
+    for (const [action, key, fallback, iconName] of [
+      ['bold', 'md.bold', 'Bold', 'bold'], ['italic', 'md.italic', 'Italic', 'italic'],
+      ['link', 'md.link', 'Link', 'link'],
+    ]) {
+      const actionButton = iconButton('selection-' + action, tr('ui.' + key, fallback), iconName, () => {
+        if (action === 'link') openLinkPicker(notes ? 'note' : 'web');
+        else session?.format(action);
+      });
+      actionButton.addEventListener('mousedown', event => event.preventDefault());
+      selectionActions.append(actionButton);
+    }
+    root.append(selectionActions);
+    function updateSelectionActions() {
+      if (!markdown || mode === 'preview' || dialog || !session?.view ||
+          session.selection.from === session.selection.to) {
+        selectionActions.hidden = true;
+        return;
+      }
+      const rect = session.view.coordsAtPos(session.selection.from);
+      if (!rect) { selectionActions.hidden = true; return; }
+      const bounds = root.getBoundingClientRect();
+      const left = Math.max(6, Math.min(bounds.width - 120, rect.left - bounds.left));
+      const top = rect.top - bounds.top > 50 ? rect.top - bounds.top - 43 : rect.bottom - bounds.top + 6;
+      selectionActions.style.left = Math.round(left) + 'px';
+      selectionActions.style.top = Math.round(top) + 'px';
+      selectionActions.hidden = false;
     }
     const message = node('p', { className: 'de-message', role: 'alert' });
     root.append(message);
@@ -313,7 +358,7 @@ export const DefaultEditor = {
     // the record too, so a hash collision can never restore another note.
     let hash = 2166136261;
     for (const char of path) hash = Math.imul(hash ^ char.codePointAt(0), 16777619) >>> 0;
-    const draftKey = `draft-${hash.toString(16)}`;
+    let draftKey = `draft-${hash.toString(16)}`;
     function persistDraft() {
       clearTimeout(draftTimer);
       if (!session || !api.storage?.data || unresolvedDraft || !draftWritable) return;
@@ -338,6 +383,7 @@ export const DefaultEditor = {
         updateFind();
       }
       updateStatus();
+      if (update.selectionChanged || update.docChanged) updateSelectionActions();
     }
     function updateStatus() {
       undoButton.disabled = !session?.canUndo;
@@ -439,7 +485,11 @@ export const DefaultEditor = {
       formatting.hidden = mode === 'preview';
       wrapButton.hidden = mode === 'preview';
       for (const [value, control] of modeButtons) control.setAttribute('aria-pressed', String(mode === value));
-      if (session && mode !== 'preview') session.mount(nodePane('de-editor-pane'));
+      if (session && mode !== 'preview') {
+        const view = session.mount(nodePane('de-editor-pane'));
+        view.scrollDOM.addEventListener('scroll', updateSelectionActions, { passive: true });
+      }
+      updateSelectionActions();
       if (mode !== 'edit') {
         preview = node('div', { className: 'de-preview', 'data-preview': '', tabindex: '0' });
         nodePane('de-preview-pane').append(preview);
@@ -643,6 +693,162 @@ export const DefaultEditor = {
         })), validFor: /^[^\]\n]*$/ };
       } catch (_) { return null; }
     }
+    function normalizeNoteName(value) {
+      let title = String(value || '').trim().replace(/\.(?:md|markdown)$/i, '').trim();
+      if (!title) return '';
+      title = title.replace(/\s+/g, '_').replace(/[\u2012-\u2015\u2212]/g, '-')
+        .replace(/[<>:"/\\|?*\x00-\x1f\x7f]/g, '');
+      let name = '';
+      for (const char of title) {
+        if (/[A-Za-z0-9._-]/.test(char) || /[\p{L}\p{N}]/u.test(char)) name += char;
+        else if (/\S/.test(char)) name += '_';
+      }
+      return name.replace(/[_.-]+/g, '_').replace(/^[._\-\s]+|[._\-\s]+$/g, '');
+    }
+    function renameError(errorNode, message) {
+      errorNode.textContent = message;
+    }
+    function openRenameDialog() {
+      if (!notes || !session || dialog) return;
+      const oldPath = path;
+      const oldName = oldPath.slice(oldPath.lastIndexOf('/') + 1);
+      const ext = /\.markdown$/i.test(oldName) ? '.markdown' : '.md';
+      const currentTitle = oldName.replace(/\.(?:md|markdown)$/i, '').replace(/_/g, ' ');
+      dialog = node('div', { className: 'de-dialog-backdrop' });
+      const panel = node('section', { className: 'de-dialog', role: 'dialog', 'aria-modal': 'true', 'aria-label': tr('ui.rename', 'Rename note') });
+      const input = node('input', { type: 'text', value: currentTitle, 'data-rename-input': '', 'aria-label': tr('ui.renameTitle', 'New note name') });
+      const error = node('p', { role: 'alert', className: 'de-rename-error' });
+      const confirm = button('confirm-rename', tr('ui.renameConfirm', 'Rename'), async () => {
+        const name = normalizeNoteName(input.value);
+        if (!name) { renameError(error, tr('ui.renameInvalid', 'Enter a valid note name.')); input.focus(); return; }
+        const newPath = oldPath.slice(0, oldPath.lastIndexOf('/') + 1) + name + ext;
+        if (newPath === oldPath) { closeDialog(); return; }
+        confirm.disabled = true;
+        input.disabled = true;
+        try {
+          if (saving) await saving;
+          if (dirty() && !await save()) {
+            renameError(error, tr('ui.renameSaveFailed', 'Save the note before renaming it.'));
+            return;
+          }
+          if (unresolvedDraft) {
+            renameError(error, tr('ui.renameSaveFailed', 'Save the note before renaming it.'));
+            return;
+          }
+          // Retain the old title as an alias so incoming [[links]] still resolve.
+          const originalTitle = oldName.replace(/\.(?:md|markdown)$/i, '').replace(/_/g, ' ');
+          const parsed = readAliases(disk);
+          const aliasNeeded = titleKey(originalTitle) !== titleKey(name.replace(/_/g, ' '))
+            && !parsed.aliases.some(alias => titleKey(alias) === titleKey(originalTitle));
+          const aliases = aliasNeeded ? [...parsed.aliases, originalTitle] : parsed.aliases;
+          const newline = disk.includes('\r\n') ? '\r\n' : '\n';
+          const nextBytes = aliasNeeded
+            ? '<!-- verstak-note-aliases-v1: ' + JSON.stringify(aliases) + ' -->' + newline + parsed.body
+            : disk;
+          await api.files.move(oldPath, newPath, { overwrite: false });
+          if (nextBytes !== disk) {
+            try { await api.files.writeText(newPath, nextBytes, { createIfMissing: false, overwrite: true }); }
+            catch (writeError) {
+              try { await api.files.move(newPath, oldPath, { overwrite: false }); }
+              catch (_) {
+                renameError(error, tr('ui.renamePartial', 'The file was renamed, but its old links could not be preserved. Reopen the note from the list.'));
+                return;
+              }
+              throw writeError;
+            }
+          }
+          await draftWrites.catch(() => {});
+          const previousDraftKey = draftKey;
+          path = newPath;
+          request.path = path;
+          root.dataset.resourcePath = path;
+          pathLabel.textContent = path;
+          pathLabel.title = path;
+          disk = nextBytes;
+          file = noteFile(nextBytes, notes);
+          saved = session.text;
+          hash = 2166136261;
+          for (const char of path) hash = Math.imul(hash ^ char.codePointAt(0), 16777619) >>> 0;
+          draftKey = 'draft-' + hash.toString(16);
+          if (api.storage?.data?.write) await api.storage.data.write(previousDraftKey, {}).catch(() => {});
+          catalog = null;
+          catalogPromise = null;
+          closeDialog();
+          updateStatus();
+          try {
+            await api.workbench.openResource({
+              kind: 'vault-file', path, extension: ext, mode: mode === 'preview' ? 'view' : 'edit',
+              context: { ...request.context, sourcePluginId: 'verstak.default-editor', sourceView: 'editor' },
+            });
+          } catch (_) { message.textContent = tr('ui.renameOpenFailed', 'Note renamed. Open it from the notes list if navigation failed.'); }
+        } catch (caught) {
+          renameError(error, /conflict|exist/i.test(String(caught))
+            ? tr('ui.renameConflict', 'A note with that name already exists.')
+            : tr('ui.renameFailed', 'Could not rename the note. Try again.'));
+        } finally {
+          confirm.disabled = false;
+          input.disabled = false;
+        }
+      });
+      panel.append(node('h2', {}, [tr('ui.rename', 'Rename note')]),
+        node('label', {}, [tr('ui.renameTitle', 'New note name'), input]), error,
+        node('div', { className: 'de-dialog-actions' }, [button('cancel-rename', tr('ui.closeFind', 'Close'), closeDialog), confirm]));
+      dialog.append(panel);
+      root.append(dialog);
+      dialog.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && !confirm.disabled) { event.preventDefault(); closeDialog(); }
+        if (event.key === 'Enter' && event.target === input) { event.preventDefault(); confirm.click(); }
+        if (event.key === 'Tab') {
+          const controls = [...panel.querySelectorAll('button,input')].filter(control => !control.disabled);
+          if (event.shiftKey && document.activeElement === controls[0]) { event.preventDefault(); controls.at(-1).focus(); }
+          else if (!event.shiftKey && document.activeElement === controls.at(-1)) { event.preventDefault(); controls[0].focus(); }
+        }
+      });
+      input.focus();
+      input.select();
+    }
+    function openShortcutHelp() {
+      if (dialog) return;
+      dialog = node('div', { className: 'de-dialog-backdrop' });
+      const panel = node('section', {
+        className: 'de-dialog', role: 'dialog', 'aria-modal': 'true',
+        'aria-label': tr('ui.shortcuts', 'Keyboard shortcuts'),
+      });
+      const items = [
+        ['Ctrl+S', 'ui.save', 'Save'],
+        ...(notes ? [['F2', 'ui.rename', 'Rename note']] : []),
+        ...(markdown ? [
+          ['Ctrl+E', 'ui.toggleMode', 'Switch editing / reading'],
+          ['Ctrl+Shift+E', 'ui.split', 'Side by side'],
+          ['Ctrl+B', 'ui.md.bold', 'Bold'],
+          ['Ctrl+I', 'ui.md.italic', 'Italic'],
+          ['Ctrl+K', 'ui.md.link', 'Link'],
+          ['Ctrl+Shift+7', 'ui.md.numberedList', 'Numbered list'],
+          ['Ctrl+Shift+8', 'ui.md.bulletList', 'Bullet list'],
+          ['Ctrl+Shift+9', 'ui.md.taskItem', 'Task list'],
+        ] : []),
+        ['Ctrl+F', 'ui.find', 'Find / replace'],
+        ['Ctrl+H', 'ui.replaceValue', 'Replace with'],
+        ['Ctrl+Z', 'ui.undo', 'Undo'],
+        ['Ctrl+Y / Ctrl+Shift+Z', 'ui.redo', 'Redo'],
+      ];
+      const shortcuts = node('div', { className: 'de-shortcuts-list' });
+      for (const [keys, key, fallback] of items) {
+        shortcuts.append(node('div', { className: 'de-shortcut-row' }, [
+          node('span', {}, [tr(key, fallback)]),
+          node('kbd', {}, [keys]),
+        ]));
+      }
+      const close = button('close-shortcuts', tr('ui.closeFind', 'Close'), closeDialog);
+      panel.append(node('h2', {}, [tr('ui.shortcuts', 'Keyboard shortcuts')]), shortcuts,
+        node('div', { className: 'de-dialog-actions' }, [close]));
+      dialog.append(panel);
+      root.append(dialog);
+      dialog.addEventListener('keydown', event => {
+        if (event.key === 'Escape') { event.preventDefault(); closeDialog(); }
+      });
+      close.focus();
+    }
     function closeDialog() { dialog?.remove(); dialog = null; session?.focus(); }
     function linkAtCaret() {
       if (!session || session.selection.from !== session.selection.to) return null;
@@ -789,13 +995,19 @@ export const DefaultEditor = {
       if (dialog || target?.closest('input:not([type=checkbox]),select') || target?.closest('[contenteditable]') && !target.closest('.cm-editor')) return false;
       const match = (code, shift = false) => api.keys?.matches ? api.keys.matches(event, { code, ctrlOrMeta: true, shift }) : event.code === code && (event.ctrlKey || event.metaKey) && event.shiftKey === shift && !event.altKey;
       let handled = true;
-      if (match('KeyZ', true)) session?.redo();
+      if (notes && event.key === 'F2' && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) openRenameDialog();
+      else if (match('KeyZ', true)) session?.redo();
       else if (match('KeyZ')) session?.undo();
       else if (match('KeyY')) session?.redo();
       else if (match('KeyS')) save();
+      else if (markdown && match('KeyE', true)) setMode('split');
+      else if (markdown && match('KeyE')) setMode(mode === 'edit' ? 'preview' : 'edit');
       else if (match('KeyF') || match('KeyH')) { openFind(); if (event.code === 'KeyH') replacement.focus(); }
       else if (markdown && match('KeyK')) openLinkPicker(notes ? 'note' : 'web');
       else if (markdown && (match('KeyB') || match('KeyI')) && mode !== 'preview') session?.format(event.code === 'KeyB' ? 'bold' : 'italic');
+      else if (markdown && mode !== 'preview' && (match('Digit7', true) || match('Digit8', true) || match('Digit9', true))) {
+        session?.format(event.code === 'Digit7' ? 'numbered' : event.code === 'Digit8' ? 'bullet' : 'task');
+      }
       else handled = false;
       if (handled) { event.preventDefault(); event.stopPropagation(); }
       return handled;
@@ -815,10 +1027,11 @@ export const DefaultEditor = {
     });
     const localeUnsubscribe = api.i18n?.onDidChangeLocale?.(() => {
       const actions = {
+        shortcuts: ['shortcuts', 'Keyboard shortcuts'],
         'mode-edit': ['edit', 'Edit'], 'mode-preview': ['preview', 'Read'], 'mode-split': ['split', 'Side by side'],
         undo: ['undo', 'Undo'], redo: ['redo', 'Redo'], save: ['save', 'Save'], reload: ['reload', 'Reload'],
         'toggle-outline': ['outline', 'Outline'], 'toggle-links': ['links', 'Links'], 'toggle-width': ['wide', 'Wide page'],
-        'toggle-wrap': ['wrapLongLines', 'Wrap long lines'], find: ['find', 'Find / replace'],
+        'toggle-wrap': ['wrapLongLines', 'Wrap long lines'], find: ['find', 'Find / replace'], rename: ['rename', 'Rename note'],
         'insert-link': ['md.link', 'Link'], 'insert-note-link': ['noteLink', 'Link to note'], 'attach-file': ['attachFile', 'Attach file or image'],
         'find-previous': ['findPrevious', 'Previous'], 'find-next': ['findNext', 'Next'],
         'find-replace': ['replace', 'Replace'], 'find-replace-all': ['replaceAll', 'Replace all'], 'close-find': ['closeFind', 'Close'],
@@ -829,7 +1042,7 @@ export const DefaultEditor = {
         const label = tr(`ui.${key}`, fallback);
         if (control.classList.contains('de-icon-button')) {
           control.setAttribute('aria-label', label);
-          const shortcut = action === 'save' ? 'Ctrl+S' : action === 'find' ? 'Ctrl+F' : action === 'insert-link' ? 'Ctrl+K' : '';
+          const shortcut = action === 'save' ? 'Ctrl+S' : action === 'find' ? 'Ctrl+F' : action === 'insert-link' ? 'Ctrl+K' : action === 'rename' ? 'F2' : action === 'mode-edit' || action === 'mode-preview' ? 'Ctrl+E' : action === 'mode-split' ? 'Ctrl+Shift+E' : '';
           control.title = action === 'undo' ? tr('ui.undoHint', 'Undo — Ctrl+Z')
             : action === 'redo' ? tr('ui.redoHint', 'Redo — Ctrl+Y / Ctrl+Shift+Z')
             : shortcut ? `${label} — ${shortcut}` : label;
@@ -839,8 +1052,18 @@ export const DefaultEditor = {
       for (const [action, control] of formattingButtons) {
         const label = tr(`ui.md.${formatKeys[action]}`, control.getAttribute('aria-label') || action);
         control.setAttribute('aria-label', label);
-        const shortcut = action === 'bold' ? 'Ctrl+B' : action === 'italic' ? 'Ctrl+I' : '';
+        const shortcut = action === 'bold' ? 'Ctrl+B' : action === 'italic' ? 'Ctrl+I'
+          : action === 'numbered' ? 'Ctrl+Shift+7' : action === 'bullet' ? 'Ctrl+Shift+8'
+          : action === 'task' ? 'Ctrl+Shift+9' : '';
         control.title = shortcut ? `${label} — ${shortcut}` : label;
+      }
+      selectionActions.setAttribute('aria-label', tr('ui.selectionActions', 'Selected text actions'));
+      for (const [action, key] of [['bold', 'bold'], ['italic', 'italic'], ['link', 'link']]) {
+        const control = root.querySelector(`[data-editor-action="selection-${action}"]`);
+        if (!control) continue;
+        const label = tr(`ui.md.${key}`, action);
+        control.title = label;
+        control.setAttribute('aria-label', label);
       }
       root.querySelector('[data-attachment-input]')?.setAttribute('aria-label', tr('ui.attachFile', 'Attach file or image'));
       for (const [control, key] of [[query, 'findQuery'], [replacement, 'replaceValue']]) {
