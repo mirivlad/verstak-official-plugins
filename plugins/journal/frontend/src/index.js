@@ -35,10 +35,10 @@
     '.journal-filter{font-size:.78rem;padding-top:.2rem;padding-bottom:.2rem;width:auto;min-width:9rem}',
     '.journal-total{font-size:.78rem;color:var(--vt-color-text-secondary,#b7c0d4);white-space:nowrap}',
     '.journal-status{font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3)}',
-    '.journal-status.error{display:inline-flex;border:1px solid rgba(233,69,96,.45);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-danger-muted,rgba(233,69,96,.14));color:#ffc6ce;padding:.18rem .4rem}',
-    '.journal-input{font-size:.8rem;padding:.38rem .5rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:#0f1424;color:var(--vt-color-text-primary,#f4f7fb);min-width:0;font-family:inherit}',
+    '.journal-status.error{display:inline-flex;border:1px solid rgba(233,69,96,.45);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-danger-muted,rgba(233,69,96,.14));color:var(--vt-color-danger-foreground, #ffc6ce);padding:.18rem .4rem}',
+    '.journal-input{font-size:.8rem;padding:.38rem .5rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-input, #0f1424);color:var(--vt-color-text-primary,#f4f7fb);min-width:0;font-family:inherit}',
     '.journal-input.textarea{min-height:7rem;resize:vertical;line-height:1.4}',
-    '.journal-input.journal-select{appearance:none;background-color:#0f1424;background-image:linear-gradient(45deg,transparent 50%,var(--vt-color-text-muted,#7f8aa3) 50%),linear-gradient(135deg,var(--vt-color-text-muted,#7f8aa3) 50%,transparent 50%);background-position:calc(100% - 14px) 50%,calc(100% - 9px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:1.7rem}.journal-input.journal-select option{background:#0f1424;color:var(--vt-color-text-primary,#f4f7fb)}',
+    '.journal-input.journal-select{appearance:none;background-color:var(--vt-color-input, #0f1424);background-image:linear-gradient(45deg,transparent 50%,var(--vt-color-text-muted,#7f8aa3) 50%),linear-gradient(135deg,var(--vt-color-text-muted,#7f8aa3) 50%,transparent 50%);background-position:calc(100% - 14px) 50%,calc(100% - 9px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:1.7rem}.journal-input.journal-select option{background:var(--vt-color-input, #0f1424);color:var(--vt-color-text-primary,#f4f7fb)}',
     '.journal-input:focus{outline:none;border-color:var(--vt-color-accent,#4ecca3);box-shadow:var(--vt-focus-ring,0 0 0 2px rgba(78,204,163,.34))}',
     '.journal-billable{display:flex;align-items:center;gap:.25rem;font-size:.74rem;color:var(--vt-color-text-secondary,#b7c0d4);white-space:nowrap}',
     '.journal-proposals{flex-shrink:0;max-height:40%;overflow:auto;padding:.5rem .75rem .6rem;border-bottom:1px solid var(--vt-color-border,#202b46);background:var(--vt-color-surface-muted,#111629)}',
@@ -88,7 +88,7 @@
     '.journal-candidate-group{border:1px solid var(--vt-color-border,#202b46);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-surface-muted,#111629)}.journal-candidate-group summary{cursor:pointer;padding:.5rem .6rem;font-weight:600;color:var(--vt-color-text-primary,#f4f7fb)}.journal-candidate-group-body{display:grid;gap:.35rem;padding:0 .6rem .6rem}.journal-candidate-group-actions{display:flex;gap:.35rem;justify-content:flex-end}.journal-candidate-group-actions .journal-btn{padding:.2rem .45rem;font-size:.7rem}',
     '.journal-candidate-activity{display:flex;align-items:flex-start;gap:.45rem;line-height:1.35;overflow-wrap:anywhere}',
     '.journal-modal-actions{display:flex;justify-content:flex-end;gap:.5rem}',
-    '.journal-btn.primary{background:var(--vt-color-accent,#4ecca3);border-color:var(--vt-color-accent,#4ecca3);color:#101827}',
+    '.journal-btn.primary{background:var(--vt-color-action, #6254d9);border-color:var(--vt-color-action, #6254d9);color:var(--vt-color-on-action, #ffffff)}',
     '.journal-btn.ghost{background:transparent}',
     '@media(max-width:820px){.journal-row{grid-template-columns:1fr}.journal-btn{width:100%}.journal-toolbar{align-items:stretch}.journal-status{width:100%}.journal-modal-grid{grid-template-columns:1fr}}'
   ].join('\n');
