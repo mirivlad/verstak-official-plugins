@@ -502,8 +502,8 @@
       var mouseLogContainer = el('pre', {
         className: 'pt-mouse-log',
         style: {
-          background: '#0d0d1a',
-          color: '#4ecca3',
+          background: 'var(--vt-color-background, #0d0d1a)',
+          color: 'var(--vt-color-accent, #4ecca3)',
           padding: '0.75rem',
           borderRadius: '6px',
           fontSize: '0.75rem',

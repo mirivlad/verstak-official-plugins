@@ -14,8 +14,8 @@ const proseHighlight = HighlightStyle.define([
   { tag: tags.emphasis, fontStyle: 'italic' },
   { tag: tags.link, color: 'var(--de-accent, #4ecca3)' },
   { tag: tags.url, color: 'var(--de-accent, #4ecca3)' },
-  { tag: tags.monospace, fontFamily: 'monospace', color: '#b6d9fc' },
-  { tag: tags.processingInstruction, color: '#9999b5' },
+  { tag: tags.monospace, fontFamily: 'monospace', color: 'var(--de-accent, #b8b0ff)' },
+  { tag: tags.processingInstruction, color: 'var(--de-muted, #a0a1af)' },
 ]);
 
 // The session owns history and selection even when there is no editing pane.
@@ -48,11 +48,11 @@ export function createDocument({ text = '', isMarkdown = true, onChange = () => 
         '.cm-content': { padding: '18px 24px', minHeight: '100%', caretColor: 'var(--de-accent, #4ecca3)' },
         '.cm-focused': { outline: 'none' },
         '&.cm-focused': { outline: 'none' },
-        '.cm-activeLine': { backgroundColor: '#ffffff04' },
-        '.cm-cursor': { borderLeftColor: '#4ecca3' },
-        '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': { background: '#365b7866' },
-        '.cm-tooltip': { backgroundColor: '#182239', color: '#dedeea', border: '1px solid #45607d' },
-        '.cm-tooltip-autocomplete ul li[aria-selected]': { backgroundColor: '#27554b', color: '#fff' },
+        '.cm-activeLine': { backgroundColor: 'var(--vt-color-surface-muted, #18191f)' },
+        '.cm-cursor': { borderLeftColor: 'var(--vt-color-accent, #4ecca3)' },
+        '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': { background: 'var(--vt-color-surface-selected, #2c293e)' },
+        '.cm-tooltip': { backgroundColor: 'var(--vt-color-surface, #202128)', color: 'var(--vt-color-text-primary, #f0f0f5)', border: '1px solid var(--vt-color-border-strong, #737684)' },
+        '.cm-tooltip-autocomplete ul li[aria-selected]': { backgroundColor: 'var(--vt-color-action, #6254d9)', color: 'var(--vt-color-on-action, #ffffff)' },
       }, { dark: true }),
     ],
   });
