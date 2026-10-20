@@ -16,6 +16,8 @@
   // The host settings panel is narrower than the window; size this layout against the panel.
   STYLES += '.templates-shell{box-sizing:border-box;width:100%;container-type:inline-size}.templates-layout{grid-template-columns:minmax(11rem,13rem) minmax(0,1fr);align-items:start}.templates-list,.templates-form{align-content:start}@container(max-width:34rem){.templates-layout{grid-template-columns:1fr}}';
 
+  STYLES += '.templates-tool-icon{display:flex;align-items:center;justify-content:center;width:1rem;height:1rem;margin-top:.1rem;border-radius:3px;background:transparent;border:1px solid var(--vt-color-border-strong,#2c456a);color:var(--vt-color-accent,#4ecca3);font-size:.8rem}';
+
   function text(value) { return value == null ? '' : String(value); }
   function now() { return new Date().toISOString(); }
   function id() { return 'template:' + Date.now() + ':' + Math.random().toString(36).slice(2, 10); }
@@ -26,7 +28,28 @@
   function copy(value) { return JSON.parse(JSON.stringify(value)); }
   function normalize(raw) { raw = raw || {}; return { id: text(raw.id).trim() || id(), name: text(raw.name).trim(), description: text(raw.description).trim(), version: Number(raw.version) || 1, workspaceTools: Array.isArray(raw.workspaceTools) ? raw.workspaceTools.map(text).filter(Boolean) : [], initialFolders: Array.isArray(raw.initialFolders) ? raw.initialFolders.map(text).filter(Boolean) : [], initialFiles: Array.isArray(raw.initialFiles) ? raw.initialFiles.map(function (file) { return { path: text(file && file.path), content: text(file && file.content) }; }).filter(function (file) { return file.path; }) : [], toolConfig: raw.toolConfig && typeof raw.toolConfig === 'object' ? copy(raw.toolConfig) : {}, updatedAt: text(raw.updatedAt).trim() || now(), seed: raw.seed === true }; }
   function valid(template) { return template.name && template.workspaceTools.every(function (tool) { return tool.indexOf('/') === -1 && tool === tool.trim(); }) && template.initialFolders.every(function (folder) { return folder && folder.indexOf('..') === -1 && folder[0] !== '/'; }); }
-  function load(api) { return api.storage.data.readNDJSON(DATA_NAME).then(function (rows) { rows = (Array.isArray(rows) ? rows : []).map(normalize).filter(valid); if (rows.length) return rows; var seeds = SEEDS.map(function (seed) { return normalize(Object.assign({}, seed, { seed: true, updatedAt: now() })); }); return api.storage.data.writeNDJSON(DATA_NAME, seeds).then(function () { return seeds; }); }); }
+  function load(api) {
+    return api.storage.data.readNDJSON(DATA_NAME).then(function (rows) {
+      rows = (Array.isArray(rows) ? rows : []).map(normalize).filter(valid);
+      if (rows.length) {
+        var changed = false;
+        rows = rows.map(function (row) {
+          // Activity is now a background provider, not a Deal tool. Preserve
+          // custom recipes and unknown tools; only this retired ID is removed.
+          if (row.workspaceTools.indexOf('verstak.activity') === -1) return row;
+          changed = true;
+          return Object.assign({}, row, { workspaceTools: row.workspaceTools.filter(function (tool) { return tool !== 'verstak.activity'; }), version: row.version + 1, updatedAt: now() });
+        });
+        return changed ? api.storage.data.writeNDJSON(DATA_NAME, rows).then(function () { return rows; }) : rows;
+      }
+      var seeds = SEEDS.map(function (seed) { return normalize(Object.assign({}, seed, { seed: true, updatedAt: now() })); });
+      return api.storage.data.writeNDJSON(DATA_NAME, seeds).then(function () { return seeds; });
+    });
+  }
+  function displayText(api, template, field) {
+    var seed = template.seed && SEEDS.find(function (item) { return item.id === template.id; });
+    return seed && template[field] === seed[field] ? translate(api, 'seeds.' + seed.id + '.' + field, template[field]) : template[field];
+  }
   function save(api, templates) { var normalized = templates.map(normalize).filter(valid); return api.storage.data.writeNDJSON(DATA_NAME, normalized).then(function () { return normalized; }); }
   function createTemplate(api, raw) { var template = normalize(raw); if (!valid(template)) return Promise.reject(new Error('template name and recipe paths are required')); return load(api).then(function (rows) { if (rows.some(function (row) { return row.id === template.id; })) throw new Error('template id already exists'); return save(api, rows.concat([template])); }).then(function () { return template; }); }
   function updateTemplate(api, raw) { var template = normalize(raw); if (!valid(template)) return Promise.reject(new Error('template name and recipe paths are required')); return load(api).then(function (rows) { var found = false; var next = rows.map(function (row) { if (row.id !== template.id) return row; found = true; return template; }); if (!found) throw new Error('template not found: ' + template.id); return save(api, next); }).then(function () { return template; }); }
@@ -34,7 +57,7 @@
   function findTemplate(api, templateID) { return load(api).then(function (rows) { var found = rows.find(function (row) { return row.id === templateID; }); if (!found) throw new Error('template not found: ' + templateID); return found; }); }
   function duplicateTemplate(api, templateID) { return findTemplate(api, templateID).then(function (template) { return createTemplate(api, { name: template.name + ' (copy)', description: template.description, workspaceTools: template.workspaceTools, initialFolders: template.initialFolders, initialFiles: template.initialFiles, toolConfig: template.toolConfig, version: 1, seed: false, updatedAt: now() }); }); }
   function availableTools(api) { return api.contributions.list('workspaceItems').then(function (items) { var seen = {}; return (Array.isArray(items) ? items : []).filter(function (item) { return item && item.pluginId && !seen[item.pluginId] && (seen[item.pluginId] = true); }).map(function (item) { return { id: item.pluginId, title: text(item.title).trim() || item.pluginId, icon: text(item.icon).trim(), description: text(item.description).trim() }; }).sort(function (a, b) { return a.title.localeCompare(b.title); }); }); }
-  function createDeal(api, args) { args = args || {}; return findTemplate(api, text(args.templateId).trim()).then(function (template) { return availableTools(api).then(function (available) { var availableIDs = available.map(function (tool) { return tool.id; }); var missing = template.workspaceTools.filter(function (tool) { return availableIDs.indexOf(tool) === -1; }); if (missing.length) { var error = new Error('workspace tools are unavailable: ' + missing.join(', ')); error.missingTools = missing; throw error; } return api.workspaces.create(text(args.parentFolderId).trim(), text(args.name).trim(), { workspaceTools: template.workspaceTools, initialFolders: template.initialFolders, initialFiles: template.initialFiles, toolConfig: template.toolConfig, provenance: { templateId: template.id, templateName: template.name, templateVersion: template.version } }); }); }); }
+  function createDeal(api, args) { args = args || {}; return findTemplate(api, text(args.templateId).trim()).then(function (template) { return availableTools(api).then(function (available) { var availableIDs = available.map(function (tool) { return tool.id; }); var missing = template.workspaceTools.filter(function (tool) { return availableIDs.indexOf(tool) === -1; }); if (missing.length) { var error = new Error('workspace tools are unavailable: ' + missing.join(', ')); error.code = 'TEMPLATE_TOOLS_UNAVAILABLE'; error.missingTools = missing; throw error; } return api.workspaces.create(text(args.parentFolderId).trim(), text(args.name).trim(), { workspaceTools: template.workspaceTools, initialFolders: template.initialFolders, initialFiles: template.initialFiles, toolConfig: template.toolConfig, provenance: { templateId: template.id, templateName: template.name, templateVersion: template.version } }); }); }); }
 
   function TemplatesSettings() {}
   TemplatesSettings.mount = function (container, props, api) {
@@ -62,7 +85,7 @@
       } }));
       if (!templates.length) list.appendChild(element('div', { className: 'templates-empty', textContent: translate(api, 'ui.empty', 'No templates yet.') }));
       templates.forEach(function (template) {
-        list.appendChild(element('button', { className: 'templates-template' + (selected === template.id ? ' selected' : ''), type: 'button', textContent: template.name, onClick: function () {
+        list.appendChild(element('button', { className: 'templates-template' + (selected === template.id ? ' selected' : ''), type: 'button', textContent: displayText(api, template, 'name'), onClick: function () {
           if (selected === template.id || !canDiscardDraft()) return;
           select(template.id); message = ''; render();
         } }));
@@ -86,10 +109,12 @@
           var checked = selectedTools.indexOf(tool.id) !== -1;
           toolGrid.appendChild(element('button', { className: 'templates-tool' + (checked ? ' selected' : ''), type: 'button', 'aria-pressed': checked ? 'true' : 'false', 'data-template-tool': tool.id, 'data-template-tool-icon': tool.icon, onClick: function () {
             saveDraft(); selectedTools = checked ? selectedTools.filter(function (id) { return id !== tool.id; }) : selectedTools.concat([tool.id]); render();
-          } }, [element('span', { className: 'templates-tool-icon', 'aria-hidden': 'true' }), element('span', { className: 'templates-tool-title', textContent: tool.title }), element('span', { className: 'templates-tool-description', textContent: tool.description })]));
+          } }, [element('span', { className: 'templates-tool-icon', 'aria-hidden': 'true', textContent: checked ? '✓' : '' }), element('span', { className: 'templates-tool-title', textContent: tool.title }), element('span', { className: 'templates-tool-description', textContent: tool.description })]));
         });
         selectedTools.filter(function (id) { return !catalog.some(function (tool) { return tool.id === id; }); }).forEach(function (id) {
-          toolGrid.appendChild(element('button', { className: 'templates-tool', type: 'button', disabled: 'disabled', 'data-template-tool': id }, [element('span', { className: 'templates-tool-icon', 'aria-hidden': 'true' }), element('span', { className: 'templates-tool-title', textContent: translate(api, 'ui.toolUnavailable', 'Unavailable workspace tool') }), element('span', { className: 'templates-tool-description', textContent: translate(api, 'ui.missing', 'Install or enable these plugins before creating this Deal:') })]));
+          toolGrid.appendChild(element('button', { className: 'templates-tool selected', type: 'button', 'aria-pressed': 'true', 'data-template-tool': id, onClick: function () {
+            saveDraft(); selectedTools = selectedTools.filter(function (toolID) { return toolID !== id; }); render();
+          } }, [element('span', { className: 'templates-tool-icon', 'aria-hidden': 'true', textContent: '✓' }), element('span', { className: 'templates-tool-title', textContent: translate(api, 'ui.toolUnavailable', 'Unavailable workspace tool') + ': ' + id }), element('span', { className: 'templates-tool-description', textContent: translate(api, 'ui.removeUnavailable', 'Remove from this template. Plugin data will be kept.') })]));
         });
         form.appendChild(toolGrid);
         field(translate(api, 'ui.folders', 'Initial folders (one per line)'), folders);
@@ -119,7 +144,7 @@
 
   window.VerstakPluginRegister(PLUGIN_ID, { components: { TemplatesSettings: TemplatesSettings }, activate: function (api) {
     return Promise.all([
-      api.commands.register('verstak.templates.list', function () { return load(api); }),
+      api.commands.register('verstak.templates.list', function () { return load(api).then(function (rows) { return rows.map(function (template) { return Object.assign({}, template, { displayName: displayText(api, template, 'name'), displayDescription: displayText(api, template, 'description') }); }); }); }),
       api.commands.register('verstak.templates.create', function (args) { return createTemplate(api, args); }),
       api.commands.register('verstak.templates.update', function (args) { return updateTemplate(api, args); }),
       api.commands.register('verstak.templates.duplicate', function (args) { return duplicateTemplate(api, args && args.id); }),
