@@ -25,5 +25,16 @@
   "ui.saved": "Template saved.",
   "ui.duplicated": "Template duplicated.",
   "ui.created": "Deal created.",
-  "ui.error": "Could not complete that action."
+  "ui.error": "Could not complete that action.",
+  "ui.removeUnavailable": "Remove from this template. Plugin data will be kept.",
+  "seeds.seed-general.name": "General",
+  "seeds.seed-general.description": "A flexible Deal with notes and files.",
+  "seeds.seed-project.name": "Project",
+  "seeds.seed-project.description": "A portfolio-ready project Deal.",
+  "seeds.seed-writing.name": "Writing",
+  "seeds.seed-writing.description": "A writing-focused Deal.",
+  "seeds.seed-admin.name": "Admin",
+  "seeds.seed-admin.description": "An administration Deal.",
+  "seeds.seed-minimal.name": "Minimal",
+  "seeds.seed-minimal.description": "An empty Deal with no workspace plugins."
 }

@@ -25,5 +25,16 @@
   "ui.saved": "Шаблон сохранён.",
   "ui.duplicated": "Шаблон продублирован.",
   "ui.created": "Дело создано.",
-  "ui.error": "Не удалось выполнить действие."
+  "ui.error": "Не удалось выполнить действие.",
+  "ui.removeUnavailable": "Убрать из шаблона. Данные плагина сохранятся.",
+  "seeds.seed-general.name": "Универсальное",
+  "seeds.seed-general.description": "Дело для заметок и файлов.",
+  "seeds.seed-project.name": "Проект",
+  "seeds.seed-project.description": "Проект с задачами, этапами и рабочими материалами.",
+  "seeds.seed-writing.name": "Тексты",
+  "seeds.seed-writing.description": "Дело для работы над текстами.",
+  "seeds.seed-admin.name": "Администрирование",
+  "seeds.seed-admin.description": "Задачи, документы и секреты в одном Деле.",
+  "seeds.seed-minimal.name": "Минимальное",
+  "seeds.seed-minimal.description": "Пустое Дело без дополнительных инструментов."
 }

@@ -61,13 +61,14 @@ new Function(source)();
 if (!bundle || bundle.id !== 'verstak.templates') throw new Error('Templates plugin did not register');
 
 let records = [];
+let writes = 0;
 const commands = {};
 const created = [];
 const api = {
   commands: { register(id, handler) { commands[id] = handler; return Promise.resolve(); } },
   storage: { data: {
     readNDJSON() { return Promise.resolve(records); },
-    writeNDJSON(_name, rows) { records = rows; return Promise.resolve(); }
+    writeNDJSON(_name, rows) { writes += 1; records = rows; return Promise.resolve(); }
   } },
   contributions: { list() { return Promise.resolve([{ pluginId: 'verstak.notes' }, { pluginId: 'verstak.files' }]); } },
   workspaces: { create(parentFolderId, name, recipe) { created.push({ parentFolderId, name, recipe }); return Promise.resolve({ workspaceId: '11111111-1111-4111-8111-111111111111', name }); } }
@@ -79,6 +80,34 @@ const api = {
   const seeds = await commands['verstak.templates.list']({});
   if (seeds.length !== 5 || !seeds.some((row) => row.name === 'Project')) throw new Error('Seed templates were not persisted');
   if (seeds.some((row) => row.workspaceTools.includes('verstak.activity'))) throw new Error('Background Activity provider must not be stored as a Deal workspace tool');
+  const originalSeeds = JSON.parse(JSON.stringify(records));
+  records = seeds.filter((row) => row.id !== 'seed-minimal').map((row) => ({
+    ...row, workspaceTools: [...row.workspaceTools, 'verstak.activity'],
+  }));
+  records.push({ ...seeds[0], id: 'custom-legacy', seed: false, name: 'My recipe', description: 'Keep this',
+    workspaceTools: ['verstak.notes', 'verstak.activity', 'unknown.plugin'], initialFolders: ['Brief'],
+    toolConfig: { custom: { preserve: true } }, version: 7 });
+  const migrated = await commands['verstak.templates.list']({});
+  if (migrated.some((row) => row.workspaceTools.includes('verstak.activity'))) throw new Error('Stored templates still contain the retired Activity tool');
+  const preserved = migrated.find((row) => row.id === 'custom-legacy');
+  if (preserved.name !== 'My recipe' || preserved.description !== 'Keep this' || preserved.initialFolders[0] !== 'Brief' || !preserved.toolConfig.custom.preserve || !preserved.workspaceTools.includes('unknown.plugin') || preserved.version !== 8) throw new Error('Migration changed user recipe data');
+  const migratedJSON = JSON.stringify(records);
+  const writesAfterMigration = writes;
+  await commands['verstak.templates.list']({});
+  if (JSON.stringify(records) !== migratedJSON || writes !== writesAfterMigration) throw new Error('Template migration is not idempotent');
+  let missingError;
+  try { await commands['verstak.templates.createDeal']({ templateId: 'custom-legacy', name: 'Missing' }); } catch (error) { missingError = error; }
+  if (!missingError || missingError.code !== 'TEMPLATE_TOOLS_UNAVAILABLE' || !missingError.missingTools.includes('unknown.plugin')) throw new Error('Unknown tools were silently discarded');
+  const ru = require('../plugins/templates/locales/ru.json');
+  api.i18n = { t(key, _params, fallback) { return ru[key] || fallback; } };
+  records = originalSeeds;
+  const localized = await commands['verstak.templates.list']({});
+  if (localized[0].displayName !== 'Универсальное' || records[0].name !== 'General') throw new Error('Seed translation changed persisted data');
+  records[0].name = 'My title';
+  if ((await commands['verstak.templates.list']({}))[0].displayName !== 'My title') throw new Error('Seed translation overwrote a user name');
+  records[0].name = 'General';
+  delete api.i18n;
+
   const custom = await commands['verstak.templates.create']({ id: 'custom', name: 'Custom', workspaceTools: ['verstak.notes', 'verstak.files'], initialFolders: ['Notes'], initialFiles: [{ path: 'README.md', content: '# Custom' }], toolConfig: { notes: { layout: 'compact' } } });
   const updated = await commands['verstak.templates.update']({ ...custom, name: 'Custom updated', version: 2 });
   if (updated.name !== 'Custom updated') throw new Error('Template update failed');
