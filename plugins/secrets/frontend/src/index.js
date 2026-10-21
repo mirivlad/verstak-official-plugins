@@ -21,6 +21,7 @@
   var STYLES = [
     '.secrets-root{display:grid;grid-template-columns:minmax(17rem,20rem) minmax(0,1fr);height:100%;min-height:0;background:var(--vt-color-background,#101020);color:var(--vt-color-text-primary,#f4f7fb);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}',
     '.secrets-panel{min-height:0;overflow:auto;border-right:1px solid var(--vt-color-border,#202b46);background:var(--vt-color-surface-muted,#111629)}',
+    '.secrets-dialog-content .secrets-main{padding:0;background:transparent}.secrets-dialog-content .secrets-form{padding:0;border:0;background:transparent}.secrets-dialog-content .secrets-row{grid-template-columns:1fr}.secrets-dialog-content .secrets-textarea{min-height:5rem}',
     '.secrets-main{min-width:0;min-height:0;overflow:auto;padding:1rem;background:var(--vt-color-background,#101020)}',
     '.secrets-toolbar{display:flex;align-items:center;gap:.5rem;min-height:2.75rem;padding:.65rem .75rem;border-bottom:1px solid var(--vt-color-border,#202b46)}',
     '.secrets-filters{display:flex;align-items:center;flex-wrap:nowrap;gap:.4rem;padding:.5rem .55rem;border-bottom:1px solid var(--vt-color-border,#202b46)}',
@@ -51,7 +52,7 @@
     '.secrets-textarea{min-height:6rem;resize:vertical;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}',
     '.secrets-input:focus,.secrets-textarea:focus,.secrets-select:focus,.secrets-search:focus{border-color:var(--vt-color-accent,#4ecca3);box-shadow:var(--vt-focus-ring,0 0 0 2px rgba(78,204,163,.34))}',
     '.secrets-actions{display:flex;gap:.5rem;flex-wrap:wrap}',
-    '.secrets-status{font-size:.78rem;color:var(--vt-color-text-muted,#7f8aa3);min-height:1rem}',
+    '.secrets-status{font-size:.78rem;color:var(--vt-color-text-muted,#7f8aa3);min-height:1rem;overflow-wrap:anywhere}',
     '.secrets-status.error{color:var(--vt-color-danger-foreground, #ffc6ce)}',
     '.secrets-secret-value{white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid var(--vt-color-border-strong,#2c456a);background:var(--vt-color-input, #0f1424);border-radius:var(--vt-radius-sm,4px);padding:.7rem;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.82rem}',
     '.secrets-hidden-value{display:inline-flex;align-items:center;min-height:2rem;width:100%;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-input, #0f1424);color:var(--vt-color-text-muted,#7f8aa3);padding:.35rem .55rem;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.08em}',
@@ -76,6 +77,7 @@
         if (key === 'className') elem.className = attrs[key];
         else if (key.slice(0, 2) === 'on') elem.addEventListener(key.slice(2).toLowerCase(), attrs[key]);
         else if (key === 'textContent') elem.textContent = attrs[key];
+        else if (typeof attrs[key] === 'boolean') elem[key] = attrs[key];
         else elem.setAttribute(key, attrs[key]);
       });
     }
@@ -113,7 +115,7 @@
     var request = props && props.request || {};
     var path = text(resource.path || request.path || props && props.secretId);
     if (path.indexOf('verstak-secret://') === 0) return decodeURIComponent(path.slice('verstak-secret://'.length));
-    return decodeURIComponent(path.replace(/^\/+/, ''));
+    return path.replace(/^\/+/, '');
   }
 
   function groupRecords(records, translate) {
@@ -140,6 +142,15 @@
     if (window.navigator && window.navigator.clipboard && typeof window.navigator.clipboard.writeText === 'function') {
       return window.navigator.clipboard.writeText(value);
     }
+    var opener = document.activeElement;
+    var input = el('textarea', { readonly: '', style: 'position:fixed;left:-10000px;top:0' });
+    input.value = value;
+    document.body.appendChild(input);
+    input.select();
+    var copied = false;
+    try { copied = document.execCommand('copy'); }
+    finally { input.remove(); if (opener && opener.isConnected) opener.focus(); }
+    if (copied) return Promise.resolve();
     return Promise.reject(new Error('clipboard API unavailable'));
   }
 
@@ -151,16 +162,19 @@
       var disposed = false;
       var workspaceRoot = workspaceFromProps(props || {});
       var selectedID = selectedIDFromProps(props || {});
+      var dialogMode = !!(props && props.request && props.request.presentation === 'dialog');
       var records = [];
       var workspaceOptions = [];
       var scopeFilter = 'all';
       var searchQuery = '';
       var selectedRecord = null;
       var selectedValue = '';
+      var recordLoaded = false;
       var isValueVisible = false;
       var deleteModal = null;
       var initialized = false;
       var unlocked = false;
+      var resetRequested = false;
       var statusText = '';
       var statusError = false;
       function tr(key, params, fallback) {
@@ -261,9 +275,14 @@
       }
 
       function renderLocked() {
+        if (resetRequested) {
+          renderArchiveConfirmation();
+          return;
+        }
         var passwordInput = el('input', {
           className: 'secrets-input',
           type: 'password',
+          autocomplete: initialized ? 'current-password' : 'new-password',
           'data-secret-master-password': '',
           placeholder: tr('ui.masterPassword', null, 'Master password')
         });
@@ -293,6 +312,11 @@
             });
           }
         }, [tr('ui.unlock', null, 'Unlock')]);
+        function unlockOnEnter(event) {
+          if (event.key === 'Enter' && !unlockBtn.disabled) { event.preventDefault(); unlockBtn.click(); }
+        }
+        passwordInput.addEventListener('keydown', unlockOnEnter);
+        if (confirmInput) confirmInput.addEventListener('keydown', unlockOnEnter);
         if (!initialized) unlockBtn.textContent = tr('ui.createMaster', null, 'Create master password');
         var rows = [
           el('div', { className: 'secrets-row' }, [
@@ -307,10 +331,16 @@
           ]));
         }
         rows.push(el('div', { className: 'secrets-actions' }, [unlockBtn]));
+        if (initialized || statusError) {
+          rows.push(el('button', {
+            className: 'secrets-btn', type: 'button', 'data-secret-forgot-password': '',
+            onClick: function () { resetRequested = true; statusText = ''; statusError = false; renderLocked(); }
+          }, [tr('ui.forgotPassword', null, 'Forgot master password?')]));
+        }
         rows.push(el('div', { className: statusError ? 'secrets-status error' : 'secrets-status' }, [statusText]));
         containerEl.innerHTML = '';
-        containerEl.appendChild(el('div', { className: 'secrets-root' }, [
-          el('div', { className: 'secrets-panel' }, [
+        containerEl.appendChild(el('div', { className: dialogMode ? 'secrets-dialog-content' : 'secrets-root' }, [
+          dialogMode ? null : el('div', { className: 'secrets-panel' }, [
             el('div', { className: 'secrets-toolbar' }, [
               el('span', { className: 'secrets-title' }, [tr('ui.title', null, 'Secrets')])
             ])
@@ -322,6 +352,49 @@
             ])
           ])
         ]));
+        if (dialogMode) {
+          passwordInput.focus();
+        }
+      }
+
+      function renderArchiveConfirmation() {
+        var acknowledgement = el('input', { type: 'checkbox', 'data-secret-archive-acknowledge': '' });
+        var confirm = el('button', {
+          className: 'secrets-btn danger', type: 'button', 'data-secret-archive-confirm': '',
+          onClick: function () {
+            if (!acknowledgement.checked || confirm.disabled) return;
+            confirm.disabled = true;
+            api.secrets.archiveAndReset(true).then(function (archivePath) {
+              initialized = false;
+              unlocked = false;
+              resetRequested = false;
+              records = [];
+              selectedRecord = null;
+              selectedValue = '';
+              statusText = tr('ui.archiveCreated', { path: archivePath }, 'Old secrets saved to: ' + archivePath + '. Create a new master password.');
+              statusError = false;
+              renderLocked();
+            }).catch(function (err) {
+              resetRequested = false;
+              setUserFacingError('archive', err);
+            });
+          }
+        }, [tr('ui.archiveAndReset', null, 'Archive and start a new store')]);
+        confirm.disabled = true;
+        acknowledgement.addEventListener('change', function () { confirm.disabled = !acknowledgement.checked; });
+        containerEl.innerHTML = '';
+        containerEl.appendChild(el('div', { className: 'secrets-main' }, [
+          el('div', { className: 'secrets-card' }, [
+            el('h2', {}, [tr('ui.forgotPassword', null, 'Forgot master password?')]),
+            el('p', { className: 'secrets-modal-message' }, [tr('ui.archiveExplanation', null, 'The master password cannot be recovered. The complete encrypted store will be preserved in an archive. You can then set a new password and create new secrets. Old links will not open secrets from the archive.')]),
+            el('label', { className: 'secrets-modal-message' }, [acknowledgement, ' ', tr('ui.archiveAcknowledge', null, 'I understand that old secrets still require the old password.')]),
+            el('div', { className: 'secrets-actions' }, [
+              el('button', { className: 'secrets-btn', type: 'button', 'data-secret-archive-cancel': '', onClick: function () { resetRequested = false; renderLocked(); } }, [tr('ui.cancel', null, 'Cancel')]),
+              confirm
+            ])
+          ])
+        ]));
+        acknowledgement.focus();
       }
 
       function renderList() {
@@ -386,6 +459,7 @@
       }
 
       function renderSelected() {
+        if (dialogMode) return renderSecretDialog();
         if (!selectedRecord) return el('div', { className: 'secrets-card' }, [
           el('h2', {}, [tr('ui.select', null, 'Select a secret')]),
           el('div', { className: statusError ? 'secrets-status error' : 'secrets-status' }, [statusText])
@@ -445,6 +519,30 @@
         ]);
       }
 
+      function renderSecretDialog() {
+        if (!selectedRecord) return el('div', { className: 'secrets-card' }, [
+          el('h2', {}, [tr('ui.title', null, 'Secrets')]),
+          el('p', { className: 'secrets-status error' }, [statusText || tr('ui.requestedUnavailable', null, 'The requested secret is unavailable.')])
+        ]);
+        var username = el('input', { className: 'secrets-input', type: 'text', readonly: '', 'aria-label': tr('ui.username', null, 'Username'), 'data-secret-dialog-username': '' });
+        username.value = text(selectedRecord.username);
+        var value = el('textarea', { className: 'secrets-textarea', readonly: '', 'aria-label': tr('ui.value', null, 'Value'), 'data-secret-dialog-value': '' });
+        value.value = recordLoaded ? selectedValue : '';
+        return el('div', { className: 'secrets-card' }, [
+          el('h2', {}, [selectedRecord.title || selectedRecord.id]),
+          el('div', { className: 'secrets-form' }, [
+            el('div', { className: 'secrets-row' }, [el('label', { className: 'secrets-label' }, [tr('ui.username', null, 'Username')]), username]),
+            el('div', { className: 'secrets-actions' }, [el('button', { className: 'secrets-btn', type: 'button', disabled: !username.value || !recordLoaded ? '' : null, 'data-secret-copy-username': '', onClick: function () { copySecretValue(selectedRecord.username); } }, [tr('ui.copyUsername', null, 'Copy username')])]),
+            el('div', { className: 'secrets-row' }, [el('label', { className: 'secrets-label' }, [tr('ui.value', null, 'Value')]), value]),
+            el('div', { className: 'secrets-actions' }, [
+              el('button', { className: 'secrets-btn', type: 'button', disabled: !recordLoaded || !selectedValue ? '' : null, 'data-secret-copy-value': selectedRecord.id, onClick: function () { copySecretValue(selectedValue); } }, [tr('ui.copyValue', null, 'Copy value')]),
+              el('button', { className: 'secrets-btn primary', type: 'button', disabled: !recordLoaded ? '' : null, 'data-secret-edit': selectedRecord.id, onClick: showEditSecret }, [tr('ui.edit', null, 'Edit')])
+            ]),
+            el('div', { className: statusError ? 'secrets-status error' : 'secrets-status', 'aria-live': 'polite' }, [statusText])
+          ])
+        ]);
+      }
+
       function fieldRow(label, value, valueClass) {
         return el('tr', {}, [
           el('th', {}, [label]),
@@ -454,12 +552,13 @@
 
       function renderSecretForm(existing) {
         var isEdit = !!existing;
+        var formStatus = el('div', { className: statusError ? 'secrets-status error' : 'secrets-status', 'aria-live': 'polite' }, [statusText]);
         var title = el('input', { className: 'secrets-input', type: 'text', 'data-secret-title': '', placeholder: tr('ui.fieldTitle', null, 'Title') });
         title.value = existing ? text(existing.title) : '';
         var id = el('input', { className: 'secrets-input', type: 'text', placeholder: 'stable.id' });
         id.value = existing ? text(existing.id) : '';
         id.disabled = isEdit;
-        var username = el('input', { className: 'secrets-input', type: 'text', placeholder: tr('ui.optionalUsername', null, 'optional username') });
+        var username = el('input', { className: 'secrets-input', type: 'text', 'data-secret-username': '', placeholder: tr('ui.optionalUsername', null, 'optional username') });
         username.value = existing ? text(existing.username) : '';
         var value = el('textarea', { className: 'secrets-textarea', 'data-secret-value': '', placeholder: tr('ui.secretValue', null, 'Secret value') });
         value.value = isEdit ? selectedValue : '';
@@ -489,23 +588,26 @@
           el('h2', {}, [isEdit ? tr('ui.editSecret', null, 'Edit secret') : tr('ui.newSecret', null, 'New secret')]),
           el('div', { className: 'secrets-form' }, [
             el('div', { className: 'secrets-row' }, [el('label', { className: 'secrets-label' }, [tr('ui.fieldTitle', null, 'Title')]), title]),
-            el('div', { className: 'secrets-row' }, [el('label', { className: 'secrets-label' }, ['ID']), id]),
+            dialogMode ? null : el('div', { className: 'secrets-row' }, [el('label', { className: 'secrets-label' }, ['ID']), id]),
             el('div', { className: 'secrets-row' }, [el('label', { className: 'secrets-label' }, [tr('ui.username', null, 'Username')]), username]),
-            el('div', { className: 'secrets-row' }, [el('label', { className: 'secrets-label' }, [tr('ui.scope', null, 'Scope')]), scope]),
-            workspaceRow,
+            dialogMode ? null : el('div', { className: 'secrets-row' }, [el('label', { className: 'secrets-label' }, [tr('ui.scope', null, 'Scope')]), scope]),
+            dialogMode ? null : workspaceRow,
             el('div', { className: 'secrets-row' }, [el('label', { className: 'secrets-label' }, [tr('ui.value', null, 'Value')]), value]),
             el('div', { className: 'secrets-actions' }, [
               el('button', {
                 className: 'secrets-btn primary',
                 type: 'button',
                 'data-secret-save': '',
-                onClick: function () {
-                  var nextID = text(id.value).trim() || text(title.value).trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '.').replace(/^\.+|\.+$/g, '');
-                  var targetWorkspace = cleanWorkspace(workspace.value);
+                onClick: function (event) {
+                  var nextID = text(id.value).trim();
+                  var targetWorkspace = dialogMode && isEdit ? recordWorkspaceRoot(existing) : cleanWorkspace(workspace.value);
                   if (scope.value === ScopeWorkspace && !targetWorkspace) {
-                    setStatus(tr('ui.workspaceRequired', null, 'Choose a Deal for this secret.'), true);
+                    formStatus.textContent = tr('ui.workspaceRequired', null, 'Choose a Deal for this secret.');
+                    formStatus.className = 'secrets-status error';
                     return;
                   }
+                  var saveButton = event.currentTarget || event.target;
+                  saveButton.disabled = true;
                   api.secrets.write({
                     id: nextID,
                     title: text(title.value).trim() || nextID,
@@ -518,13 +620,16 @@
                     selectedValue = '';
                     return loadRecords();
                   }).catch(function (err) {
-                    setUserFacingError('save', err);
-                  });
+                    if (!disposed) {
+                      formStatus.textContent = userFacingError('save', err);
+                      formStatus.className = 'secrets-status error';
+                    }
+                  }).finally(function () { saveButton.disabled = false; });
                 }
               }, [tr('ui.save', null, 'Save')]),
               el('button', { className: 'secrets-btn', type: 'button', onClick: function () { mode = 'selected'; render(); } }, [tr('ui.cancel', null, 'Cancel')])
             ]),
-            el('div', { className: statusError ? 'secrets-status error' : 'secrets-status' }, [statusText])
+            formStatus
           ])
         ]);
       }
@@ -538,8 +643,8 @@
           return;
         }
         containerEl.innerHTML = '';
-        containerEl.appendChild(el('div', { className: 'secrets-root' }, [
-          el('div', { className: 'secrets-panel' }, renderList()),
+        containerEl.appendChild(el('div', { className: dialogMode ? 'secrets-dialog-content' : 'secrets-root' }, [
+          dialogMode ? null : el('div', { className: 'secrets-panel' }, renderList()),
           el('div', { className: 'secrets-main' }, [
             mode === 'new' ? renderSecretForm(null) : mode === 'edit' ? renderSecretForm(selectedRecord) : renderSelected()
           ])
@@ -547,6 +652,7 @@
       }
 
       function loadRecords() {
+        if (dialogMode) return selectRecord(selectedID);
         return api.secrets.list().then(function (items) {
           records = Array.isArray(items) ? items : [];
           var wanted = selectedID || (selectedRecord && selectedRecord.id) || '';
@@ -575,13 +681,15 @@
         selectedID = id;
         selectedRecord = records.find(function (record) { return record.id === id; }) || null;
         selectedValue = '';
-        isValueVisible = false;
+        recordLoaded = false;
+        isValueVisible = dialogMode;
         render();
         if (!id) return Promise.resolve();
         return api.secrets.read(id).then(function (record) {
           if (disposed) return;
           selectedRecord = record;
           selectedValue = text(record.value);
+          recordLoaded = true;
           render();
         }).catch(function (err) {
           if (disposed) return;
@@ -597,6 +705,10 @@
       }
 
       function showEditSecret() {
+        if (selectedRecord && !recordLoaded) {
+          selectRecord(selectedRecord.id).then(function () { if (recordLoaded && !disposed) { mode = 'edit'; render(); } });
+          return;
+        }
         if (!selectedRecord) return;
         mode = 'edit';
         statusText = '';
@@ -697,6 +809,9 @@
 
       containerEl.__secretsCleanup = function () {
         disposed = true;
+        selectedValue = '';
+        selectedRecord = null;
+        records = [];
         removeDeleteModal();
         if (typeof localeUnsubscribe === 'function') localeUnsubscribe();
       };
