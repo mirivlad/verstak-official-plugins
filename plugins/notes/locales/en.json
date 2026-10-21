@@ -56,5 +56,7 @@
   "overview.overviewNote": "Overview note",
   "contributions.commands.verstak.notes.list.title": "List Notes",
   "contributions.commands.verstak.notes.create.title": "Create Note",
-  "contributions.commands.verstak.notes.open.title": "Open Note"
+  "contributions.commands.verstak.notes.open.title": "Open Note",
+  "ui.openError": "Could not open the note. It may have been moved or deleted.",
+  "overview.modified": "Modified"
 }

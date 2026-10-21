@@ -55,6 +55,32 @@ function commandApi(extra = {}) {
   await openNote({ workspaceRootPath: 'Project', path: created.path });
   if (!opened.length || opened[0].path !== created.path) throw new Error('notes open did not route to workbench');
 
+  entries.get(created.path).modifiedAt = '2026-01-01T12:00:00Z';
+  entries.set('Project/Notes/Recent_note.md', { type: 'file', modifiedAt: '2026-05-03T12:00:00Z' });
+  entries.set('Project/Notes/Second.md', { type: 'file', modifiedAt: '2026-05-02T12:00:00Z' });
+  entries.set('Project/Notes/Older.md', { type: 'file', modifiedAt: '2025-01-01T12:00:00Z' });
+  entries.set('Project/Notes/Unknown_date.md', { type: 'file', modifiedAt: 'invalid-date' });
+  entries.set('Project/Notes/Ignore.png', { type: 'file', modifiedAt: '2026-06-01T12:00:00Z' });
+  entries.set('Project/Overview.md', { type: 'file' });
+  const noteOverview = await notes.handlers.get('verstak.notes.provideOverview')({ workspaceRootPath: 'Project' });
+  if (noteOverview.summary[0].count !== 5 || noteOverview.summary[0].action.toolRequest) {
+    throw new Error('Notes summary must count notes and open their list');
+  }
+  const recentPaths = (noteOverview.resume || []).map(item => item.action.toolRequest?.openNotePath);
+  if (recentPaths.join('|') !== 'Project/Notes/Recent_note.md|Project/Notes/Second.md|Project/Notes/Architecture.md') {
+    throw new Error('Overview must offer the three most recently modified notes with distinct exact paths');
+  }
+  if (noteOverview.resume[0].title !== 'Recent note' || noteOverview.resume[0].occurredAt !== '2026-05-03T12:00:00Z') {
+    throw new Error('recent note must retain its readable title and actual modification time');
+  }
+  if (noteOverview.resources[0].action.toolRequest?.openNotePath !== 'Project/Overview.md') {
+    throw new Error('Overview resource must open the named file instead of the Notes list');
+  }
+  const emptyOverview = await notes.handlers.get('verstak.notes.provideOverview')({ workspaceRootPath: 'Empty' });
+  if (emptyOverview.summary[0].count !== 0 || (emptyOverview.resume || []).length || emptyOverview.resources?.length) {
+    throw new Error('empty Deal must not invent recent notes or resources');
+  }
+
   const settings = {};
   let notifications = [];
   const todo = commandApi({
