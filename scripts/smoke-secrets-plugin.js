@@ -166,6 +166,7 @@ async function flush() {
   let unlocked = false;
   let unlockError = '';
   const readCalls = [];
+  let workspaceListCalls = 0;
   const copied = [];
   const deleted = [];
   const api = {
@@ -201,11 +202,17 @@ async function flush() {
     clipboard: {
       writeText: async (text) => copied.push(text),
     },
+    workspaces: {
+      list: async () => {
+        workspaceListCalls++;
+        return [
+          { id: 'client-a', name: 'Client A', rootPath: 'ClientA' },
+          { id: 'client-b', name: 'Client B', rootPath: 'Clients/ClientB' },
+        ];
+      },
+    },
     files: {
-      list: async () => [
-        { type: 'folder', relativePath: 'ClientA' },
-        { type: 'folder', relativePath: 'ClientB' },
-      ],
+      list: async () => { throw new Error('Folders must not be used as Deals'); },
     },
   };
 
@@ -238,6 +245,14 @@ async function flush() {
   unlockButton.click();
   await flush();
 
+  if (workspaceListCalls !== 1) throw new Error('Deal options must load immediately after the first unlock');
+  const firstScopeFilter = walk(container, (node) => node.getAttribute && node.getAttribute('data-secret-scope-filter') === '');
+  if (!firstScopeFilter.children.some((node) => node.getAttribute('value') === 'workspace:Clients/ClientB')) {
+    throw new Error('nested Deal is missing after the first unlock');
+  }
+  if (firstScopeFilter.children.some((node) => node.getAttribute('value') === 'workspace:Clients')) {
+    throw new Error('organizational folder must not appear as a Deal');
+  }
   if (!container.textContent.includes('Global')) throw new Error('global group missing');
   if (!container.textContent.includes('ClientA')) throw new Error('workspace group missing');
   if (!container.textContent.includes('Client A DB')) throw new Error('workspace secret missing');
@@ -337,11 +352,24 @@ async function flush() {
   globalValueInput.value = 'client-b-api-value';
   scopeInput.value = 'workspace';
   scopeInput.dispatchEvent('change');
-  workspaceInput.value = 'ClientB';
+  if (!workspaceInput.children.some((node) => node.getAttribute('value') === 'Clients/ClientB')) throw new Error('nested Deal missing from new secret form');
+  workspaceInput.value = 'Clients/ClientB';
   globalSaveButton.click();
   await flush();
-  if (!records.some((record) => record.title === 'Client B API' && record.scope && record.scope.workspaceRootPath === 'ClientB')) {
+  if (!records.some((record) => record.title === 'Client B API' && record.scope && record.scope.workspaceRootPath === 'Clients/ClientB')) {
     throw new Error('global secrets form did not create a Deal-scoped secret');
+  }
+
+  const currentDeal = document.createElement('div');
+  component.mount(currentDeal, { workspaceRootPath: 'Clients/Current' }, {
+    ...api,
+    workspaces: { list: async () => { throw new Error('temporary workspace list failure'); } },
+  });
+  await flush();
+  walk(currentDeal, (node) => node.tagName === 'BUTTON' && node.textContent === 'New').click();
+  const currentWorkspace = walk(currentDeal, (node) => node.getAttribute && node.getAttribute('data-secret-workspace') === '');
+  if (!currentWorkspace.children.some((node) => node.getAttribute('value') === 'Clients/Current') || currentWorkspace.value !== 'Clients/Current') {
+    throw new Error('current Deal must remain selected when the workspace list is unavailable');
   }
 
   console.log('secrets plugin smoke passed');
