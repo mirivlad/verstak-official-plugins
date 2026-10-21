@@ -229,7 +229,7 @@
       function workspaceRoots() {
         var seen = {};
         var values = [];
-        workspaceOptions.concat(records.map(recordWorkspaceRoot)).forEach(function (value) {
+        workspaceOptions.concat([workspaceRoot], records.map(recordWorkspaceRoot)).forEach(function (value) {
           value = cleanWorkspace(value);
           if (!value || seen[value]) return;
           seen[value] = true;
@@ -260,15 +260,11 @@
       }
 
       function loadWorkspaceOptions() {
-        if (!api || !api.files || typeof api.files.list !== 'function') return Promise.resolve();
-        return api.files.list('').then(function (items) {
-          workspaceOptions = (Array.isArray(items) ? items : []).filter(function (item) {
-            return text(item && item.type).toLowerCase() === 'folder';
-          }).map(function (item) {
-            return cleanWorkspace(item.relativePath || item.name);
-          }).filter(function (value) {
-            return value && value.indexOf('/') === -1;
-          });
+        if (!api || !api.workspaces || typeof api.workspaces.list !== 'function') return Promise.resolve();
+        return api.workspaces.list().then(function (items) {
+          workspaceOptions = (Array.isArray(items) ? items : []).map(function (item) {
+            return cleanWorkspace(item && item.rootPath);
+          }).filter(Boolean);
         }).catch(function () {
           workspaceOptions = [];
         });
@@ -305,7 +301,7 @@
             api.secrets.unlock(passwordInput.value).then(function () {
               initialized = true;
               unlocked = true;
-              return loadRecords();
+              return loadWorkspaceOptions().then(loadRecords);
             }).catch(function (err) {
               unlockBtn.disabled = false;
               setUserFacingError('unlock', err);
