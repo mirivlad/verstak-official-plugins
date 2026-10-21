@@ -27,6 +27,7 @@ const ICONS = {
   code: '<path d="m8 9-4 3 4 3M16 9l4 3-4 3"/>',
   'code-block': '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m9 9-3 3 3 3M15 9l3 3-3 3"/>',
   link: '<path d="M10 13a5 5 0 0 0 7.54.54l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15"/><path d="M14 11a5 5 0 0 0-7.54-.54l-2 2a5 5 0 0 0 7.07 7.07l1.15-1.15"/>',
+  secret: '<circle cx="8" cy="8" r="5"/><path d="m12 12 9 9m-5-5 3-3m-1 5 3-3"/>',
   'note-link': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h8"/><path d="M14 2v6h6M10 13H8M10 17H8"/><path d="M16 16h2a3 3 0 0 1 0 6h-2M18 19h-4"/>',
   attachment: '<path d="m20.8 11.6-8.5 8.5a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8L15.2 6"/>',
   rename: '<path d="M12 20h9"/><path d="m15 5 4 4M5 19l4-.8L20 7.2 16.8 4 5.8 15Z"/>',
@@ -200,6 +201,9 @@ export const DefaultEditor = {
         title: `${linkLabel} — Ctrl+K`,
       }));
       if (notes) formatting.append(iconButton('insert-note-link', tr('ui.noteLink', 'Link to note'), 'note-link', () => openLinkPicker('note')));
+      const secretLinkButton = iconButton('insert-secret-link', tr('ui.secretLink', 'Link to secret'), 'secret', openSecretPicker);
+      secretLinkButton.hidden = true;
+      formatting.append(secretLinkButton);
       const attachmentInput = node('input', { type: 'file', multiple: '', hidden: '', 'data-attachment-input': '', 'aria-label': tr('ui.attachFile', 'Attach file') });
       attachmentInput.addEventListener('change', () => {
         if (session && attachmentInput.files?.length) {
@@ -602,7 +606,7 @@ export const DefaultEditor = {
       if (secret) {
         event.preventDefault();
         if (dirty() && !await save()) return;
-        try { await api.workbench.openResource({ kind: 'secret', path: decodeURIComponent(secret.dataset.secretId), mode: 'view', context: { sourcePluginId: 'verstak.default-editor', sourceView: 'editor' } }); }
+        try { await api.workbench.openResource({ kind: 'secret', path: decodeURIComponent(secret.dataset.secretId), mode: 'view', presentation: 'dialog', context: { sourcePluginId: 'verstak.default-editor', sourceView: 'editor' } }); }
         catch (_) { message.textContent = tr('ui.linksOpenFailed', 'Could not open the note.'); }
       }
     }
@@ -850,6 +854,84 @@ export const DefaultEditor = {
       close.focus();
     }
     function closeDialog() { dialog?.remove(); dialog = null; session?.focus(); }
+    async function openSecretPicker() {
+      if (!session || !secrets) return;
+      if (mode === 'preview') setMode('edit');
+      closeDialog();
+      const range = { from: session.selection.from, to: session.selection.to };
+      const selectedText = session.text.slice(range.from, range.to);
+      const scopeRoot = folder.replace(/\/?Notes$/, '');
+      dialog = node('div', { className: 'de-dialog-backdrop', 'data-secret-picker': '' });
+      const panel = node('section', { className: 'de-dialog', role: 'dialog', 'aria-modal': 'true', 'aria-label': tr('ui.secretLink', 'Link to secret') });
+      const content = node('div');
+      const message = node('p', { role: 'alert', 'aria-live': 'polite' });
+      const cancel = button('cancel-secret-link', tr('ui.cancel', 'Cancel'), closeDialog);
+      panel.append(node('h2', {}, [tr('ui.secretLink', 'Link to secret')]), content, message, node('div', { className: 'de-dialog-actions' }, [cancel]));
+      dialog.append(panel);
+      root.append(dialog);
+      const current = () => !disposed && dialog?.contains(panel);
+      const failed = () => { if (current()) message.textContent = tr('ui.secretOperationFailed', 'Could not open the secret list. Check the password and try again.'); };
+      async function showRecords() {
+        const records = await api.secrets.list();
+        if (!current()) return;
+        content.replaceChildren();
+        message.textContent = '';
+        const query = node('input', { type: 'search', 'data-secret-picker-search': '', placeholder: tr('ui.secretSearch', 'Find a secret in this Deal or shared secrets'), 'aria-label': tr('ui.secretSearch', 'Find a secret in this Deal or shared secrets') });
+        const results = node('div', { className: 'de-picker-results' });
+        function renderMatches() {
+          results.replaceChildren();
+          const found = records.filter(record => (record.scope?.kind === 'global' || record.scope?.workspaceRootPath === scopeRoot)
+            && `${record.title} ${record.username || ''}`.toLocaleLowerCase().includes(query.value.toLocaleLowerCase()));
+          for (const record of found) {
+            const choose = button('choose-secret-link', record.title || record.id, () => {
+              const label = (selectedText || record.title || record.id).replace(/[\r\n]/g, ' ').replace(/[\\[\]]/g, '\\$&');
+              session.select(range.from, range.to);
+              session.replaceSelection(`[${label}](verstak-secret://${encodeURIComponent(record.id)})`);
+              closeDialog();
+            }, { 'data-secret-picker-id': record.id });
+            choose.append(node('small', {}, [record.scope?.kind === 'global' ? tr('ui.sharedSecret', 'Shared secret') : scopeRoot]));
+            results.append(choose);
+          }
+          if (!found.length) results.append(tr('ui.noSecrets', 'No matching secrets. Create one in the Secrets tool.'));
+        }
+        query.addEventListener('input', renderMatches);
+        content.append(query, results);
+        renderMatches();
+        query.focus();
+      }
+      dialog.addEventListener('keydown', event => {
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeDialog(); }
+        if (event.key === 'Tab') {
+          const controls = [...panel.querySelectorAll('button, input')].filter(control => !control.disabled && control.getClientRects().length);
+          const first = controls[0], last = controls[controls.length - 1];
+          if ((event.shiftKey && document.activeElement === first) || (!event.shiftKey && document.activeElement === last)) {
+            event.preventDefault(); (event.shiftKey ? last : first)?.focus();
+          }
+        }
+      });
+      cancel.focus();
+      try {
+        const status = await api.secrets.status();
+        if (!current()) return;
+        if (status.unlocked) { await showRecords(); return; }
+        if (!status.initialized) { content.textContent = tr('ui.noSecrets', 'No matching secrets. Create one in the Secrets tool.'); return; }
+        const password = node('input', { type: 'password', 'data-secret-picker-password': '', autocomplete: 'current-password', 'aria-label': tr('ui.masterPassword', 'Master password') });
+        const unlock = button('unlock-secret-picker', tr('ui.unlockSecrets', 'Unlock secrets'), async () => {
+          unlock.disabled = true;
+          try {
+            const pending = api.secrets.unlock(password.value);
+            password.value = '';
+            await pending;
+            if (current()) await showRecords();
+          } catch (_) { failed(); }
+          finally { unlock.disabled = false; }
+        });
+        password.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); if (!unlock.disabled) unlock.click(); } });
+        content.append(node('label', {}, [tr('ui.masterPassword', 'Master password')]), password,
+          node('p', {}, [tr('ui.masterPasswordSession', 'Unlock once until the application closes or the vault changes.')]), unlock);
+        password.focus();
+      } catch (_) { failed(); }
+    }
     function linkAtCaret() {
       if (!session || session.selection.from !== session.selection.to) return null;
       const offset = session.selection.from;
@@ -1019,6 +1101,8 @@ export const DefaultEditor = {
     api.settings?.read('outlineVisible').then(value => { if (!disposed && value === true) { outlineVisible = true; updateSides(); } }).catch(() => {});
     api.contributions?.list('openProviders').then(providers => {
       secrets = (providers || []).some(provider => (provider.supports || []).some(support => support.kind === 'secret'));
+      const secretLinkButton = formatting.querySelector('[data-editor-action="insert-secret-link"]');
+      if (secretLinkButton) secretLinkButton.hidden = !secrets;
       if (!disposed) renderPreview();
     }).catch(() => {});
     const unsubscribe = api.events?.subscribe?.('file.changed', () => {
@@ -1032,7 +1116,7 @@ export const DefaultEditor = {
         undo: ['undo', 'Undo'], redo: ['redo', 'Redo'], save: ['save', 'Save'], reload: ['reload', 'Reload'],
         'toggle-outline': ['outline', 'Outline'], 'toggle-links': ['links', 'Links'], 'toggle-width': ['wide', 'Wide page'],
         'toggle-wrap': ['wrapLongLines', 'Wrap long lines'], find: ['find', 'Find / replace'], rename: ['rename', 'Rename note'],
-        'insert-link': ['md.link', 'Link'], 'insert-note-link': ['noteLink', 'Link to note'], 'attach-file': ['attachFile', 'Attach file or image'],
+        'insert-link': ['md.link', 'Link'], 'insert-note-link': ['noteLink', 'Link to note'], 'insert-secret-link': ['secretLink', 'Link to secret'], 'attach-file': ['attachFile', 'Attach file or image'],
         'find-previous': ['findPrevious', 'Previous'], 'find-next': ['findNext', 'Next'],
         'find-replace': ['replace', 'Replace'], 'find-replace-all': ['replaceAll', 'Replace all'], 'close-find': ['closeFind', 'Close'],
       };

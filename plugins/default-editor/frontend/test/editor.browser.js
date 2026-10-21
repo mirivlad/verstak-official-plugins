@@ -139,7 +139,7 @@ test('narrow editor keeps both toolbars in single scrollable rows', async t => {
       const actions = root.querySelector('.de-toolbar-actions');
       const formatting = root.querySelector('.de-md-toolbar');
       const upper = [...actions.querySelectorAll('.de-icon-button')];
-      const lower = [...formatting.querySelectorAll('.de-icon-button')];
+      const lower = [...formatting.querySelectorAll('.de-icon-button')].filter(control => control.getClientRects().length);
       const ySpread = nodes => Math.max(...nodes.map(e => e.getBoundingClientRect().top)) - Math.min(...nodes.map(e => e.getBoundingClientRect().top));
       return {
         overflow: root.scrollWidth > root.clientWidth,

@@ -101,5 +101,13 @@
   "ui.draftConflict": "A draft and an externally changed file are available.",
   "ui.restoreDraft": "Restore draft",
   "ui.keepFile": "Keep file version",
-  "ui.wrapLongLines": "Wrap long lines"
+  "ui.wrapLongLines": "Wrap long lines",
+  "ui.secretLink": "Link to secret",
+  "ui.secretSearch": "Find a secret in this Deal or shared secrets",
+  "ui.sharedSecret": "Shared secret",
+  "ui.noSecrets": "No matching secrets. Create one in the Secrets tool.",
+  "ui.masterPassword": "Master password",
+  "ui.unlockSecrets": "Unlock secrets",
+  "ui.masterPasswordSession": "Unlock once until the application closes or the vault changes.",
+  "ui.secretOperationFailed": "Could not open the secret list. Check the password and try again."
 }

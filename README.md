@@ -23,6 +23,18 @@ separate `Imported` tree. Plugin bundles are built
 into independent directories that the desktop host loads from its `plugins/`
 folder.
 
+## Secrets in notes
+
+Create a secret in a Deal's Secrets tool, then use **Link to secret** in the
+Markdown editor. The picker shows that Deal's secrets and shared secrets; selected
+note text becomes the link label. Only the link is saved in Markdown.
+
+Clicking a link opens a dialog above the note with copyable login/value fields
+and **Edit**. The master password is requested once until the application closes
+or the vault changes. **Forgot master password?** preserves the complete encrypted
+store in an archive before allowing a new store. The old archive still requires
+the old password.
+
 ## Build
 
 Requirements: Node.js with npm, Go and Python 3. Keep this repository next to
