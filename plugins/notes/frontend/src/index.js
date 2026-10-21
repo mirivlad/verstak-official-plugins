@@ -612,6 +612,23 @@
         }).catch(function (err) { console.error('[notes] openResource:', err); });
       }
 
+      function openRequestedNote() {
+        var requestedPath = cleanPath(props && props.toolRequest && props.toolRequest.openNotePath);
+        if (!requestedPath) return;
+        var parent = parentPath(requestedPath);
+        if ((parent !== notesParent() && parent !== notesFolderPath(notesParent())) || !/\.(md|markdown)$/i.test(requestedPath)) {
+          setStatus(tr('ui.openError', null, 'Could not open the note. It may have been moved or deleted.'), 'error');
+          return;
+        }
+        api.files.metadata(requestedPath).then(function (metadata) {
+          if (disposed) return;
+          if (!metadata || metadata.type !== 'file') throw new Error('note is not a regular file');
+          openNote({ path: requestedPath });
+        }).catch(function (err) {
+          if (!disposed) setStatus(userFacingError('ui.openError', 'Could not open the note. It may have been moved or deleted.', err), 'error');
+        });
+      }
+
       function conflictMessage(title, existingPath) {
         return [
           tr('ui.conflictMessage', { title: title }, 'A note with the title "' + title + '" already exists.'),
@@ -990,6 +1007,7 @@
 
       loadContributionActions();
       loadNotes();
+      openRequestedNote();
 
       var localeUnsubscribe = null;
       if (api.i18n && typeof api.i18n.onDidChangeLocale === 'function') {
@@ -1143,14 +1161,35 @@
     ]).then(function (results) {
       var noteFiles = (results[0] || []).filter(function (entry) {
         return entry && entry.type === 'file' && /\.(md|markdown)$/i.test(entry.name || entry.relativePath || '');
+      }).map(function (entry) {
+        return Object.assign({}, entry, { relativePath: cleanPath(entry.relativePath || notesPath + '/' + entry.name) });
       });
-      var overview = noteFiles.concat(results[1] || []).find(function (entry) {
+      var rootFiles = (results[1] || []).filter(function (entry) {
+        return entry && entry.type === 'file';
+      }).map(function (entry) {
+        return Object.assign({}, entry, { relativePath: cleanPath(entry.relativePath || workspace + '/' + entry.name) });
+      });
+      var overview = noteFiles.concat(rootFiles).find(function (entry) {
         var value = String(entry && (entry.relativePath || entry.name) || '').replace(/\\/g, '/');
         return entry && entry.type === 'file' && /(^|\/)overview\.md$/i.test(value);
       });
       var count = noteFiles.length;
       var countKey = count === 1 ? 'overview.countOne' : 'overview.countMany';
+      var recentNotes = noteFiles.filter(function (entry) {
+        return Number.isFinite(Date.parse(entry.modifiedAt));
+      }).sort(function (a, b) {
+        return Date.parse(b.modifiedAt) - Date.parse(a.modifiedAt) || a.relativePath.localeCompare(b.relativePath);
+      }).slice(0, 3);
       var result = {
+        resume: recentNotes.map(function (entry) {
+          return {
+            id: 'note:' + entry.relativePath,
+            title: titleFromFilename(entry.name || fileName(entry.relativePath)),
+            meta: overviewText(api, 'overview.modified', null, 'Modified') + ' · ' + entry.relativePath,
+            occurredAt: entry.modifiedAt,
+            action: { workspaceItemId: 'verstak.notes.workspace', toolRequest: { openNotePath: entry.relativePath } }
+          };
+        }),
         summary: [{
           id: 'notes',
           label: overviewText(api, 'overview.summary', null, 'Notes'),
@@ -1166,7 +1205,7 @@
           id: 'overview-note',
           title: String(overview.name || fileName(relative) || 'Overview.md'),
           meta: relative || overviewText(api, 'overview.overviewNote', null, 'Overview note'),
-          action: { workspaceItemId: 'verstak.notes.workspace' }
+          action: { workspaceItemId: 'verstak.notes.workspace', toolRequest: { openNotePath: relative } }
         }];
       }
       return result;

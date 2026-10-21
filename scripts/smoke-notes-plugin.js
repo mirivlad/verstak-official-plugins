@@ -247,16 +247,37 @@ async function flush() {
   }
 }
 
-async function mountNotes(api) {
+async function mountNotes(api, props = {}) {
   const document = makeDocument();
   const component = loadNotesComponent(document);
   const container = new FakeNode('div');
-  component.mount(container, { workspaceNode: { name: 'Project' } }, api);
+  component.mount(container, { workspaceNode: { name: 'Project' }, ...props }, api);
   await flush();
   return { container, document, component };
 }
 
 (async () => {
+  const requestedApi = makeApi();
+  requestedApi.entries.set('Project/Notes', { type: 'folder' });
+  requestedApi.entries.set('Project/Notes/Requested.md', { type: 'file', content: '# Requested\n' });
+  const requested = await mountNotes(requestedApi, { toolRequest: { openNotePath: 'Project/Notes/Requested.md' } });
+  if (requestedApi.opened.length !== 1 || requestedApi.opened[0].path !== 'Project/Notes/Requested.md') {
+    throw new Error('Overview request must open its exact note once');
+  }
+  requested.component.unmount(requested.container);
+
+  const missing = await mountNotes(requestedApi, { toolRequest: { openNotePath: 'Project/Notes/Missing.md' } });
+  if (requestedApi.opened.length !== 1 || !missing.container.textContent.includes('Could not open the note')) {
+    throw new Error('a removed Overview note must leave the Notes list with a useful error');
+  }
+  missing.component.unmount(missing.container);
+
+  const outside = await mountNotes(requestedApi, { toolRequest: { openNotePath: 'Another/Notes/Other.md' } });
+  if (requestedApi.opened.length !== 1 || !outside.container.textContent.includes('Could not open the note')) {
+    throw new Error('Overview request must not open a note outside the selected Deal');
+  }
+  outside.component.unmount(outside.container);
+
   const emptyApi = makeApi();
   const emptyMounted = await mountNotes(emptyApi);
   if (walk(emptyMounted.container, (node) => node.getAttribute && node.getAttribute('data-action') === 'overview')) {

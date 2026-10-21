@@ -56,5 +56,7 @@
   "overview.overviewNote": "Обзорная заметка",
   "contributions.commands.verstak.notes.list.title": "Список заметок",
   "contributions.commands.verstak.notes.create.title": "Создать заметку",
-  "contributions.commands.verstak.notes.open.title": "Открыть заметку"
+  "contributions.commands.verstak.notes.open.title": "Открыть заметку",
+  "ui.openError": "Не удалось открыть заметку. Возможно, она перемещена или удалена.",
+  "overview.modified": "Изменено"
 }
