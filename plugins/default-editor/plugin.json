@@ -20,6 +20,7 @@
     "files.read",
     "files.write",
     "storage.namespace",
+    "secrets.read",
     "events.subscribe",
     "workbench.open"
   ],
