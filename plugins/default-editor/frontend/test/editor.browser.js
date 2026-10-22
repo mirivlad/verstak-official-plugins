@@ -464,6 +464,27 @@ test('save errors keep draft, retry works, and closing and reopening restores it
   await expect.poll(() => stored(page)).toBe('draft');
 });
 
+for (const externalChange of [false, true]) {
+  test(`reopening a draft for reading keeps it unsaved${externalChange ? ' after restoring a conflict' : ''}`, async t => {
+    const page = await mount(t, { text: 'base', mode: 'edit' });
+    await page.locator('.cm-content').fill('unsaved draft');
+    await page.evaluate(async externalChange => {
+      await window.component.unmount(document.getElementById('root'));
+      if (externalChange) window.files[window.props.request.path] = 'external file';
+      window.props.request.mode = 'view';
+      window.mount();
+    }, externalChange);
+    if (externalChange) await page.locator('[data-editor-action=restore-draft]').click();
+    await expect(page.locator('.cm-content')).toHaveText('unsaved draft');
+    await expect(page.locator('[data-editor-mode-button=edit]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('[data-save-state]')).toHaveText('Modified');
+    await page.waitForTimeout(400);
+    assert.equal(await stored(page), externalChange ? 'external file' : 'base');
+    await page.locator('[data-editor-action=save]').click();
+    await expect.poll(() => stored(page)).toBe('unsaved draft');
+  });
+}
+
 test('find and replace is literal and one undoable operation', async t => {
   const page = await mount(t, { text: 'a.b a.b other', mode: 'edit' });
   await page.locator('[data-editor-action=find]').click();
