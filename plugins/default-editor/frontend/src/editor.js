@@ -1165,7 +1165,8 @@ export const DefaultEditor = {
       root.removeEventListener('keydown', shortcut);
       if (typeof unsubscribe === 'function') unsubscribe();
       if (typeof localeUnsubscribe === 'function') localeUnsubscribe();
+      return draftWrites;
     };
   },
-  unmount(root) { root.__deCleanup?.(); root.replaceChildren(); },
+  unmount(root) { const pending = root.__deCleanup?.(); root.replaceChildren(); return pending; },
 };
