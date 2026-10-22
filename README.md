@@ -73,6 +73,9 @@ create a GitHub Release.
 
 ## Alpha behaviour
 
+- In Desktop v0.3.4+, Browser Inbox can add a link, text, or both directly.
+  Choose a Deal in the global view; the Deal view uses its current Deal.
+  This queue remains device-local. Converted notes and files use normal sync.
 - Browser Inbox archives processed captures and can restore them; permanent
   deletion is a separate action.
 - Saving a browser link creates a collision-safe `.url` file. Opening a link is

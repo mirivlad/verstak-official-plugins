@@ -23,7 +23,8 @@
   var SEARCH_COMMAND_ID = 'verstak.browser-inbox.search';
 
   function injectStyles() {
-    if (document.getElementById('browser-inbox-style-injected')) return;
+    var existing = document.getElementById('browser-inbox-style-injected');
+    if (existing) { existing.textContent = STYLES; return; }
     var style = document.createElement('style');
     style.id = 'browser-inbox-style-injected';
     style.textContent = STYLES;
@@ -45,6 +46,16 @@
     '.browser-inbox-btn{font-size:.78rem;padding:.32rem .65rem;border:1px solid var(--vt-color-border-strong,#2c456a);border-radius:var(--vt-radius-md,6px);background:var(--vt-color-surface-hover,#1b2440);color:var(--vt-color-text-secondary,#b7c0d4);cursor:pointer}',
     '.browser-inbox-btn:hover{background:var(--vt-color-surface-hover,#1b2440);border-color:var(--vt-color-accent,#4ecca3);color:var(--vt-color-text-primary,#f4f7fb)}',
     '.browser-inbox-btn:disabled{opacity:.45;cursor:default}',
+    '.browser-inbox-btn.primary{background:var(--vt-color-action,#6254d9);border-color:var(--vt-color-action,#6254d9);color:var(--vt-color-on-action,#fff)}',
+    '.browser-inbox-btn.primary:hover:not(:disabled){background:var(--vt-color-action-hover,#5141c8);border-color:var(--vt-color-action-hover,#5141c8);color:var(--vt-color-on-action,#fff)}',
+    '.browser-inbox-manual-overlay{position:fixed;inset:0;z-index:1100;display:flex;align-items:center;justify-content:center;padding:1rem;box-sizing:border-box;background:rgba(8,10,18,.48)}',
+    '.browser-inbox-manual-panel{box-sizing:border-box;width:36rem;max-width:100%;max-height:calc(100vh - 2rem);overflow:auto;padding:1.25rem;border:1px solid var(--vt-color-border-strong,#737684);border-radius:12px;background:var(--vt-color-surface,#202128);color:var(--vt-color-text-primary,#f0f0f5);box-shadow:0 20px 60px rgba(0,0,0,.25);font:inherit}',
+    '.browser-inbox-manual-head{display:flex;justify-content:space-between;align-items:center;gap:1rem}.browser-inbox-manual-title{margin:0;font-size:1.1rem;font-weight:600}',
+    '.browser-inbox-manual-hint{font-size:.85rem;line-height:1.5;color:var(--vt-color-text-muted,#a0a1af);margin:.5rem 0 1rem}',
+    '.browser-inbox-manual-form{display:grid;gap:.8rem}.browser-inbox-manual-field{display:grid;gap:.3rem}.browser-inbox-manual-label{font-size:.82rem;color:var(--vt-color-text-secondary,#b7c0d4)}',
+    '.browser-inbox-manual-form .browser-inbox-input,.browser-inbox-manual-form .browser-inbox-select{width:100%;max-width:none;min-height:2.35rem;padding:.5rem .65rem;font-size:.88rem;color:var(--vt-color-text-primary,#f0f0f5)}',
+    '.browser-inbox-manual-form textarea{min-height:7rem;resize:vertical;line-height:1.5;font:inherit}.browser-inbox-manual-actions{display:flex;justify-content:flex-end;gap:.5rem}',
+    '.browser-inbox-manual-status{margin:0;font-size:.82rem;line-height:1.45;color:var(--vt-color-text-muted,#a0a1af)}.browser-inbox-manual-status.error{color:var(--vt-color-danger-foreground,#ffc6ce)}',
     '.browser-inbox-btn.danger{border-color:rgba(233,69,96,.42);color:var(--vt-color-danger-foreground, #ff9a9a);background:var(--vt-color-danger-muted,rgba(233,69,96,.14))}',
     '.browser-inbox-status{font-size:.72rem;color:var(--vt-color-text-muted,#7f8aa3);white-space:nowrap}',
     '.browser-inbox-status.error{display:inline-flex;border:1px solid rgba(233,69,96,.45);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-danger-muted,rgba(233,69,96,.14));color:var(--vt-color-danger-foreground, #ffc6ce);padding:.18rem .4rem}',
@@ -410,6 +421,8 @@
     var showUnattachedActivity = false;
     var activityAnchorId = '';
     var activityTarget = '';
+    var manualDialog = null;
+    var canAddManual = api && api.settings && typeof api.settings.upsertRecord === 'function';
     function tr(key, params, fallback) {
       if (api && api.i18n && typeof api.i18n.t === 'function') return api.i18n.t(key, params, fallback);
       return fallback || key;
@@ -491,8 +504,16 @@
         clearScope().then(render);
       }
     });
+    var addBtn = canAddManual ? el('button', {
+      className: 'browser-inbox-btn primary',
+      'data-browser-inbox-action': 'add',
+      textContent: tr('ui.manual.addAction', null, 'Add material'),
+      onClick: openManualCapture
+    }) : null;
+    if (addBtn) addBtn.disabled = true;
     toolbar.appendChild(titleEl);
     toolbar.appendChild(countEl);
+    if (addBtn) toolbar.appendChild(addBtn);
     filtersEl.appendChild(statusFilterEl);
     if (scope.mode === 'global') {
       filtersEl.appendChild(workspaceFilterEl);
@@ -573,6 +594,170 @@
       });
     }
 
+    function openManualCapture() {
+      if (manualDialog || disposed || !canAddManual) return;
+      var captureId = captureFromEvent({ payload: {} }).captureId;
+      var closed = false;
+      var saving = false;
+      var messageKey = '';
+      var overlay = el('div', { className: 'browser-inbox-manual-overlay' });
+      var panel = el('div', { className: 'browser-inbox-manual-panel', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': captureId + '-heading', 'aria-describedby': captureId + '-hint', tabindex: '-1', 'data-browser-inbox-add-dialog': '' });
+      var heading = el('h2', { className: 'browser-inbox-manual-title', id: captureId + '-heading' });
+      var hint = el('p', { className: 'browser-inbox-manual-hint', id: captureId + '-hint' });
+      var form = el('form', { className: 'browser-inbox-manual-form', onSubmit: submit });
+      var urlInput = el('input', { className: 'browser-inbox-input', type: 'text', inputmode: 'url', placeholder: 'https://example.com', 'data-browser-inbox-add': 'url' });
+      var nameInput = el('input', { className: 'browser-inbox-input', type: 'text', 'data-browser-inbox-add': 'title' });
+      var textInput = el('textarea', { className: 'browser-inbox-input', rows: '5', 'data-browser-inbox-add': 'text' });
+      var targetSelect = scope.mode === 'global' ? el('select', { className: 'browser-inbox-select', 'data-browser-inbox-add': 'workspace' }) : null;
+      var scopeCaption = el('p', { className: 'browser-inbox-manual-status' });
+      var closeBtn = el('button', { className: 'browser-inbox-btn', type: 'button', textContent: '×', onClick: function () { close(false); } });
+      var cancelBtn = el('button', { className: 'browser-inbox-btn', type: 'button', onClick: function () { close(false); } });
+      var saveBtn = el('button', { className: 'browser-inbox-btn primary', type: 'submit', 'data-browser-inbox-add-submit': '' });
+      var messageEl = el('p', { className: 'browser-inbox-manual-status', role: 'status', 'aria-live': 'polite' });
+      function field(name, control) {
+        var id = captureId + '-' + name;
+        control.setAttribute('id', id);
+        var label = el('label', { className: 'browser-inbox-manual-label', for: id });
+        form.appendChild(el('div', { className: 'browser-inbox-manual-field' }, [label, control]));
+        return label;
+      }
+      var urlLabel = field('url', urlInput);
+      var nameLabel = field('title', nameInput);
+      var textLabel = field('text', textInput);
+      var targetLabel = targetSelect ? field('workspace', targetSelect) : null;
+      if (!targetSelect) form.appendChild(scopeCaption);
+      form.appendChild(messageEl);
+      form.appendChild(el('div', { className: 'browser-inbox-manual-actions' }, [cancelBtn, saveBtn]));
+      panel.appendChild(el('div', { className: 'browser-inbox-manual-head' }, [heading, closeBtn]));
+      panel.appendChild(hint);
+      panel.appendChild(form);
+      overlay.appendChild(panel);
+      var controls = [urlInput, nameInput, textInput, closeBtn, cancelBtn, saveBtn];
+      if (targetSelect) controls.push(targetSelect);
+
+      function refreshWorkspaces() {
+        if (!targetSelect) return;
+        var selected = targetSelect.value;
+        var oldOption = targetSelect.options[targetSelect.selectedIndex];
+        var oldLabel = oldOption ? oldOption.textContent : '';
+        targetSelect.innerHTML = '';
+        targetSelect.appendChild(option('', tr('ui.unassigned', null, 'Unassigned')));
+        workspaceOptions.forEach(function (root) {
+          if (workspaceIds[root]) targetSelect.appendChild(option(workspaceIds[root], root));
+        });
+        if (selected && !workspaceOptions.some(function (root) { return workspaceIds[root] === selected; })) {
+          targetSelect.appendChild(option(selected, oldLabel || tr('ui.manual.unavailableDeal', null, 'Choose an available Deal.')));
+        }
+        targetSelect.value = selected;
+      }
+      function refreshLocale() {
+        heading.textContent = tr('ui.manual.title', null, 'Add material');
+        hint.textContent = tr('ui.manual.hint', null, 'Save a link or a text snippet to Inbox.');
+        urlLabel.textContent = tr('ui.manual.url', null, 'Link');
+        nameLabel.textContent = tr('ui.manual.name', null, 'Title');
+        nameInput.setAttribute('placeholder', tr('ui.manual.optional', null, 'Optional'));
+        textLabel.textContent = tr('ui.manual.text', null, 'Text');
+        textInput.setAttribute('placeholder', tr('ui.manual.textPlaceholder', null, 'Paste a quote or your note'));
+        if (targetLabel) targetLabel.textContent = tr('ui.manual.deal', null, 'Deal');
+        scopeCaption.textContent = tr('ui.manual.currentDeal', { workspace: scope.label }, 'Deal: ' + scope.label);
+        closeBtn.setAttribute('aria-label', tr('ui.manual.close', null, 'Close'));
+        cancelBtn.textContent = tr('ui.manual.cancel', null, 'Cancel');
+        saveBtn.textContent = saving ? tr('ui.manual.saving', null, 'Adding…') : tr('ui.manual.save', null, 'Add');
+        messageEl.textContent = messageKey ? tr(messageKey) : '';
+        messageEl.className = 'browser-inbox-manual-status' + (messageKey && !saving ? ' error' : '');
+        messageEl.setAttribute('role', messageKey && !saving ? 'alert' : 'status');
+        refreshWorkspaces();
+      }
+      function setSaving(value) {
+        saving = value;
+        controls.forEach(function (control) { control.disabled = value; });
+        form.setAttribute('aria-busy', String(value));
+        refreshLocale();
+      }
+      function showError(key, control) {
+        messageKey = key;
+        refreshLocale();
+        if (control) control.focus();
+      }
+      function close(force) {
+        if (closed || (saving && !force)) return;
+        closed = true;
+        panel.removeEventListener('keydown', onKeyDown);
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        manualDialog = null;
+        if (!disposed && addBtn && addBtn.isConnected) addBtn.focus();
+      }
+      function onKeyDown(event) {
+        event.stopPropagation();
+        if (event.key === 'Escape') { event.preventDefault(); close(false); }
+        if (event.key !== 'Tab') return;
+        var focusable = Array.prototype.slice.call(panel.querySelectorAll('button,input,textarea,select')).filter(function (control) { return !control.disabled && control.getClientRects().length; });
+        var index = focusable.indexOf(document.activeElement);
+        if (!focusable.length) { event.preventDefault(); panel.focus(); }
+        else if (event.shiftKey && index <= 0) { event.preventDefault(); focusable[focusable.length - 1].focus(); }
+        else if (!event.shiftKey && (index === -1 || index === focusable.length - 1)) { event.preventDefault(); focusable[0].focus(); }
+      }
+      function submit(event) {
+        event.preventDefault();
+        if (saving || closed || disposed) return;
+        var url = urlInput.value.trim();
+        var bodyText = textInput.value;
+        if (!url && !bodyText.trim()) { showError('ui.manual.inputRequired', urlInput); return; }
+        if (url) {
+          try {
+            var parsed = new URL(url);
+            if (!/^https?:\/\//i.test(url) || (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')) throw new Error('unsupported URL');
+            url = parsed.href;
+          } catch (_) { showError('ui.manual.invalidUrl', urlInput); return; }
+        }
+        var targetId = targetSelect ? targetSelect.value : (scope.workspaceId || workspaceIds[scope.workspaceRoot] || '');
+        var targetRoot = workspaceOptions.find(function (root) { return workspaceIds[root] === targetId; }) || '';
+        if ((targetId || scope.mode === 'workspace') && !targetRoot) { showError(targetSelect ? 'ui.manual.unavailableDeal' : 'ui.manual.currentDealUnavailable', targetSelect || urlInput); return; }
+        var kind = bodyText.trim() ? 'selection' : 'link';
+        var record = captureFromEvent({ name: 'browser.capture.' + kind, payload: {
+          captureId: captureId, capturedAt: new Date().toISOString(), kind: kind, url: url,
+          title: nameInput.value.trim() || (url ? domainFromUrl(url) || url : bodyText.trim().split(/\r?\n/)[0].slice(0, 120)),
+          source: 'manual', domain: domainFromUrl(url), workspaceRootPath: targetRoot,
+          workspaceId: targetId, workspaceState: targetRoot ? 'active' : 'unassigned'
+        } });
+        record.text = bodyText;
+        messageKey = 'ui.manual.saving';
+        setSaving(true);
+        panel.focus();
+        api.settings.upsertRecord(GLOBAL_KEY, 'captureId', record, MAX_CAPTURES).then(function () {
+          if (closed || disposed) return false;
+          return loadStored(true).then(function () {
+            var saved = captures.find(function (item) { return item.captureId === captureId; });
+            if (!saved || saved.title !== record.title || saved.url !== record.url || saved.text !== record.text || saved.workspaceId !== record.workspaceId) throw new Error('saved material could not be confirmed');
+            return true;
+          });
+        }).then(function (saved) {
+          if (!saved || closed || disposed) return;
+          var notification = api.events && typeof api.events.publish === 'function'
+            ? api.events.publish('browser.capture.' + kind, record).catch(function (error) { console.warn('[BrowserInbox] capture notification failed', error); })
+            : Promise.resolve();
+          return notification.then(function () {
+            if (closed || disposed) return;
+            statusFilter = 'all'; workspaceFilter = ''; searchQuery = '';
+            statusFilterEl.value = 'all'; searchInput.value = '';
+            selectedId = captureId; statusClass = '';
+            statusText = tr('ui.manual.saved', null, 'Material added');
+            render(); close(true);
+          });
+        }).catch(function (error) {
+          if (closed || disposed) return;
+          console.warn('[BrowserInbox] manual capture failed', error);
+          messageKey = 'ui.manual.saveError'; setSaving(false);
+        });
+      }
+      manualDialog = { close: close, refreshLocale: refreshLocale, refreshWorkspaces: refreshWorkspaces };
+      refreshLocale();
+      if (targetSelect) targetSelect.value = workspaceIds[workspaceFilter] || '';
+      panel.addEventListener('keydown', onKeyDown);
+      document.body.appendChild(overlay);
+      urlInput.focus();
+    }
+
     function publishMutation(action, payload, verify, verifySettings) {
       if (!api || !api.events || typeof api.events.publish !== 'function') {
         reportError('ui.saveError', 'Could not update browser materials. Please try again.');
@@ -647,7 +832,7 @@
     }
 
     function applyDomainBinding(capture) {
-      if (!capture || capture.workspaceRootPath) return capture;
+      if (!capture || capture.workspaceRootPath || capture.source === 'manual') return capture;
       var workspaceRoot = domainBindings[domainFromCapture(capture)];
       if (!workspaceRoot) return capture;
       capture.workspaceRootPath = workspaceRoot;
@@ -1242,7 +1427,7 @@
       var visible = visibleCaptures();
       if (visible.length === 0) {
         var emptyText = captures.length === 0
-          ? tr('ui.empty', null, 'No browser materials yet. Send a page, selection, or link from the extension.')
+          ? (canAddManual ? tr('ui.manual.empty', null, 'No browser materials yet. Add a link or text here, or send one from the extension.') : tr('ui.empty', null, 'No browser materials yet. Send a page, selection, or link from the extension.'))
           : tr('ui.emptyFiltered', null, 'No materials match the current filters.');
         listEl.appendChild(el('div', { className: 'browser-inbox-empty', textContent: emptyText }));
         return;
@@ -1258,10 +1443,10 @@
           }
         }, [
           el('div', { className: 'browser-inbox-row-head' }, [
-            el('span', { className: 'browser-inbox-kind', textContent: capture.kind }),
+            el('span', { className: 'browser-inbox-kind', textContent: capture.source === 'manual' ? tr(capture.kind === 'selection' ? 'ui.manual.text' : 'ui.manual.url') : capture.kind }),
             el('span', { className: 'browser-inbox-row-title', textContent: displayTitle(capture, tr('ui.untitledCapture', null, 'Untitled material')) })
           ]),
-          el('div', { className: 'browser-inbox-row-url', textContent: capture.url || capture.domain || capture.captureId })
+          el('div', { className: 'browser-inbox-row-url', textContent: capture.url || capture.domain || (capture.source === 'manual' ? tr('ui.manual.source', null, 'Added manually') : capture.captureId) })
         ]);
         row.appendChild(el('div', { className: 'browser-inbox-row-meta' }, [
           el('span', {
@@ -1294,15 +1479,15 @@
       detailEl.appendChild(el('div', { className: 'browser-inbox-detail-title', textContent: displayTitle(capture, tr('ui.untitledCapture', null, 'Untitled material')) }));
       detailEl.appendChild(el('div', { className: 'browser-inbox-meta' }, [
         el('div', { className: 'browser-inbox-meta-label', textContent: tr('ui.kind', null, 'Kind') }),
-        el('div', { className: 'browser-inbox-meta-value', textContent: capture.kind }),
+        el('div', { className: 'browser-inbox-meta-value', textContent: capture.source === 'manual' ? tr(capture.kind === 'selection' ? 'ui.manual.text' : 'ui.manual.url') : capture.kind }),
         el('div', { className: 'browser-inbox-meta-label', textContent: tr('ui.url', null, 'URL') }),
         el('div', { className: 'browser-inbox-meta-value', textContent: capture.url || '-' }),
         el('div', { className: 'browser-inbox-meta-label', textContent: tr('ui.domain', null, 'Domain') }),
         el('div', { className: 'browser-inbox-meta-value', textContent: capture.domain || '-' }),
         el('div', { className: 'browser-inbox-meta-label', textContent: tr('ui.captured', null, 'Captured') }),
         el('div', { className: 'browser-inbox-meta-value', textContent: formatDate(capture.capturedAt) || '-' }),
-        el('div', { className: 'browser-inbox-meta-label', textContent: tr('ui.browser', null, 'Browser') }),
-        el('div', { className: 'browser-inbox-meta-value', textContent: capture.browserName || capture.source || '-' }),
+        el('div', { className: 'browser-inbox-meta-label', textContent: capture.source === 'manual' ? tr('ui.manual.sourceLabel', null, 'Source') : tr('ui.browser', null, 'Browser') }),
+        el('div', { className: 'browser-inbox-meta-value', textContent: capture.source === 'manual' ? tr('ui.manual.source', null, 'Added manually') : capture.browserName || capture.source || '-' }),
         el('div', { className: 'browser-inbox-meta-label', textContent: tr('ui.workspace', null, 'Deal') }),
         el('div', { className: 'browser-inbox-meta-value', textContent: capture.workspaceRootPath || tr('ui.unassigned', null, 'Unassigned') }),
         el('div', { className: 'browser-inbox-meta-label', textContent: tr('ui.status', null, 'Status') }),
@@ -1568,6 +1753,7 @@
       return Promise.all(WORKSPACE_EVENTS.map(function (eventName) {
         return api.events.subscribe(eventName, function () {
           return loadWorkspaceOptions().then(function () {
+            if (manualDialog) manualDialog.refreshWorkspaces();
             if (!disposed) render();
           });
         }).then(function (unsubscribe) {
@@ -1579,6 +1765,7 @@
     render();
     Promise.all([loadStored(), loadWorkspaceOptions()]).then(function () {
       if (disposed) return;
+      if (addBtn) addBtn.disabled = false;
       render();
       return Promise.all([subscribeEvents(), subscribeWorkspaceEvents(), loadBrowserActivity()]);
     }).then(function () {
@@ -1592,12 +1779,15 @@
         workspaceFilterEl.setAttribute('aria-label', tr('ui.workspaceFilter', null, 'Deal filter'));
         searchInput.setAttribute('aria-label', tr('ui.search', null, 'Search captures'));
         clearBtn.textContent = tr('ui.clear', null, 'Clear');
+        if (addBtn) addBtn.textContent = tr('ui.manual.addAction', null, 'Add material');
+        if (manualDialog) manualDialog.refreshLocale();
         render();
       });
     }
 
     containerEl.__browserInboxUnmount = function () {
       disposed = true;
+      if (manualDialog) manualDialog.close(true);
       while (unsubscribers.length > 0) {
         try {
           unsubscribers.pop()();
