@@ -457,6 +457,7 @@ export const DefaultEditor = {
         message.textContent = '';
         if (draft?.path === path && typeof draft.content === 'string') {
           if (draft.base === bytes) {
+            if (mode === 'preview') mode = 'edit';
             session.change({ from: 0, to: session.text.length, insert: noteFile(draft.content, notes).text });
             message.textContent = tr('ui.draftRestored', 'Your unsaved draft was restored.');
           } else {
@@ -464,8 +465,10 @@ export const DefaultEditor = {
             message.textContent = tr('ui.draftConflict', 'A draft and an externally changed file are available.');
             const restore = button('restore-draft', tr('ui.restoreDraft', 'Restore draft'), () => {
               unresolvedDraft = false;
+              if (mode === 'preview') mode = 'edit';
               session.change({ from: 0, to: session.text.length, insert: noteFile(draft.content, notes).text });
               message.replaceChildren(tr('ui.draftRestored', 'Your unsaved draft was restored.'));
+              rebuild();
             });
             const keep = button('discard-draft', tr('ui.keepFile', 'Keep file version'), () => {
               unresolvedDraft = false; persistDraft(); message.replaceChildren();
