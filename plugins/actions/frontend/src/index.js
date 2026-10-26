@@ -2,7 +2,6 @@
   'use strict';
   var ID = 'verstak.actions';
   var KEY = 'actions';
-  var ICONS = ['external-link', 'activity', 'book-open', 'file', 'folder', 'git-branch', 'key-round', 'list', 'puzzle', 'settings'];
   var UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   var changes = new Set();
   var mounts = new WeakMap();
@@ -32,8 +31,43 @@
     if (record.type === 'script' && (!record.interpreter || !(/^(\/|[a-z]:[\\/])/i.test(record.target)))) throw new Error('invalid_script');
     if (record.type === 'url') { var u = new URL(record.target); if (['http:', 'https:'].indexOf(u.protocol) === -1 || u.username || u.password) throw new Error('invalid_url'); }
     if (record.mode !== 'wait' && record.mode !== 'detached') throw new Error('invalid_action');
-    if (ICONS.indexOf(record.icon) === -1) throw new Error('invalid_action');
+    if (typeof record.icon !== 'string' || !/^[a-z0-9][a-z0-9-]{0,79}$/.test(record.icon)) throw new Error('invalid_action');
     return record;
+  }
+  // Only group words and unescape quotes. No shell expansion or evaluation.
+  // Backslashes in paths stay literal unless directly before a double quote.
+  function parseArguments(text) {
+    var args = [], word = '', quote = '', started = false;
+    for (var i = 0; i < text.length; i++) {
+      var ch = text[i];
+      if (ch === '\\' && quote !== "'") {
+        var end = i;
+        while (text[end] === '\\') end++;
+        var count = end - i;
+        if (text[end] === '"') {
+          word += '\\'.repeat(Math.floor(count / 2)); started = true;
+          if (count % 2) word += '"';
+          else quote = quote === '"' ? '' : '"';
+          i = end; continue;
+        }
+        word += text.slice(i, end); started = true; i = end - 1; continue;
+      }
+      if ((ch === '"' || ch === "'") && (!quote || quote === ch)) {
+        quote = quote ? '' : ch; started = true;
+      } else if (/\s/.test(ch) && !quote) {
+        if (started) args.push(word);
+        word = ''; started = false;
+      } else { word += ch; started = true; }
+    }
+    if (quote) throw new Error('invalid_arguments');
+    if (started) args.push(word);
+    return args;
+  }
+  function formatArguments(args) {
+    return args.map(function (arg) {
+      if (arg && !/[\s"']/.test(arg)) return arg;
+      return '"' + arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, '$1$1') + '"';
+    }).join(' ');
   }
   function enqueue(fn) { var result = writes.then(fn); writes = result.catch(function () {}); return result; }
   function notify() { changes.forEach(function (refresh) { refresh(); }); }
@@ -87,7 +121,34 @@
     return { kind: 'process', executable: record.type === 'script' ? record.interpreter : record.target, args: record.type === 'script' ? [record.target].concat(record.args) : record.args.slice(), cwd: record.cwd, mode: record.mode };
   }
 
-  var CSS = '.actions-view{height:100%;min-height:0;overflow:auto;box-sizing:border-box;padding:1rem;container-type:inline-size;color:var(--vt-color-text-primary);display:flex;flex-direction:column;gap:1rem}.actions-toolbar,.actions-controls{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}.actions-toolbar h2{font-size:1.1rem;margin:0;flex:1}.actions-hint{font-size:.85rem;line-height:1.5;color:var(--vt-color-text-muted);margin:0}.actions-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr));gap:.75rem}.actions-card{display:flex;flex-direction:column;gap:.65rem;padding:.85rem;border:1px solid var(--vt-color-border);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface)}.actions-launch{display:flex;align-items:center;gap:.6rem;text-align:left;min-height:2.5rem;width:100%;overflow-wrap:anywhere}.actions-launch svg{flex-shrink:0}.actions-description{font-size:.85rem;white-space:pre-wrap;overflow-wrap:anywhere;margin:0;color:var(--vt-color-text-secondary)}.actions-controls .vt-button{font-size:.8rem}.actions-status{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.85rem;line-height:1.5}.actions-status.error{color:var(--vt-color-danger-foreground)}.actions-form{display:grid;gap:.8rem;width:100%;max-width:44rem;box-sizing:border-box}.actions-field[hidden]{display:none}.actions-field{display:grid;gap:.3rem;min-width:0;font-size:.85rem}.actions-input,.actions-form .vt-select{width:100%;box-sizing:border-box;min-height:2.3rem;padding:.5rem .6rem;border:1px solid var(--vt-color-border);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-surface);color:var(--vt-color-text-primary);font:inherit}.actions-form textarea{resize:vertical;min-height:4.5rem}.actions-output{max-height:20rem;overflow:auto;border:1px solid var(--vt-color-border);border-radius:var(--vt-radius-sm,4px);padding:.75rem;white-space:pre-wrap;overflow-wrap:anywhere;font-size:.82rem;margin:0}.actions-section-title{font-size:.95rem;margin:0 0 .6rem}.actions-view button:disabled{opacity:.55}.actions-confirm{border:1px solid var(--vt-color-border);padding:.75rem;border-radius:var(--vt-radius-sm,4px)}';
+  var CSS = `
+.actions-view{height:100%;min-height:0;overflow:auto;box-sizing:border-box;padding:1rem;container-type:inline-size;color:var(--vt-color-text-primary);display:flex;flex-direction:column;gap:1rem}
+.actions-toolbar,.actions-controls{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+.actions-toolbar h2{font-size:1.1rem;margin:0;flex:1}
+.actions-hint{font-size:.85rem;line-height:1.5;color:var(--vt-color-text-muted);margin:0}
+.actions-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,200px),1fr));gap:.5rem}
+.actions-card{position:relative;min-width:0;border:1px solid var(--vt-color-border);border-radius:var(--vt-radius-lg,8px);background:var(--vt-color-surface);overflow:hidden}
+.actions-view .actions-launch{display:flex;align-items:center;gap:.6rem;text-align:left;width:100%;height:80px;padding:1.5rem .75rem .6rem;border:0;border-radius:inherit;background:transparent;color:inherit;cursor:pointer;font:inherit}
+.actions-launch span{overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
+.actions-launch svg{flex-shrink:0}
+.actions-launch:hover{background:var(--vt-color-surface-hover)}
+.actions-card-controls{position:absolute;top:3px;right:3px;display:flex;gap:2px;opacity:0;pointer-events:none;background:var(--vt-color-surface);border-radius:var(--vt-radius-sm,4px)}
+.actions-card:hover .actions-card-controls,.actions-card:focus-within .actions-card-controls{opacity:1;pointer-events:auto}
+.actions-view .actions-card-controls button{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;min-width:24px;min-height:24px;padding:3px;border:0;border-radius:var(--vt-radius-sm,4px);background:transparent;color:var(--vt-color-text-secondary);cursor:pointer}
+.actions-view .actions-card-controls button:hover{background:var(--vt-color-surface-hover);color:var(--vt-color-text-primary)}
+.actions-view button:focus-visible{outline:2px solid var(--vt-color-accent);outline-offset:-2px}
+@media(hover:none){.actions-card-controls{opacity:1;pointer-events:auto}}
+.actions-status{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.85rem;line-height:1.5}.actions-status.error{color:var(--vt-color-danger-foreground)}
+.actions-form{display:grid;gap:.8rem;width:100%;max-width:44rem;box-sizing:border-box}
+.actions-field[hidden]{display:none}.actions-field{display:grid;gap:.3rem;min-width:0;font-size:.85rem}
+.actions-input,.actions-form .vt-select{width:100%;box-sizing:border-box;min-height:2.3rem;padding:.5rem .6rem;border:1px solid var(--vt-color-border);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-surface);color:var(--vt-color-text-primary);font:inherit}
+.actions-form textarea{resize:vertical;min-height:4.5rem}
+.actions-icon-picker{justify-self:start;display:inline-flex;align-items:center;gap:.5rem}
+.actions-output{max-height:20rem;overflow:auto;border:1px solid var(--vt-color-border);border-radius:var(--vt-radius-sm,4px);padding:.75rem;white-space:pre-wrap;overflow-wrap:anywhere;font-size:.82rem;margin:0}
+.actions-section-title{font-size:.95rem;margin:0 0 .6rem}.actions-view button:disabled{opacity:.55;cursor:default}
+.actions-confirm{border-top:1px solid var(--vt-color-border);padding:.75rem}
+`;
+
 
   function ActionsView() {}
   ActionsView.mount = function (container, props, api) {
@@ -99,6 +160,11 @@
     var style = el('style', {textContent: CSS});
     container.appendChild(style); container.appendChild(root);
     function button(label, action, attrs) { return el('button', Object.assign({type:'button',className:'vt-button ghost',textContent:t(api, label), 'data-action':action}, attrs || {})); }
+    function iconButton(action, icon, id) {
+      var control = button(action, action, {'data-action-id':id,title:t(api,action),'aria-label':t(api,action),textContent:''});
+      if (api.ui.createIcon) control.appendChild(api.ui.createIcon(icon,16));
+      return control;
+    }
     function fail(error) {
       var message = String(error && error.message || '');
       var codes = ['program_not_found', 'directory_not_found', 'approval_required', 'invalid_arguments', 'invalid_script', 'invalid_url', 'invalid_action', 'invalid_scope', 'start_failed', 'action_not_found', 'action_limit', 'host_upgrade_required', 'invalid_directory', 'absolute_executable_required', 'invalid_limits', 'invalid_request', 'open_failed', 'process_control_unavailable', 'too_many_processes', 'approval_store_unavailable', 'approval_store_invalid', 'review_failed', 'review_expired'];
@@ -120,22 +186,34 @@
       var form = el('form', {className:'actions-form','data-action-form':''});
       var title = field(form, 'title', 'input', editing.title); title.required = true; title.maxLength = 120;
       var description = field(form, 'description', 'textarea', editing.description);
-      var icon = field(form, 'icon', 'select', editing.icon || 'external-link', ICONS.map(function (v) { return [v,v]; }));
-      var preview = el('span', {'data-action-icon-preview':''});
-      function drawIcon() { preview.textContent = ''; if (api.ui.createIcon) preview.appendChild(api.ui.createIcon(icon.value)); }
-      icon.addEventListener('change', drawIcon); drawIcon(); form.appendChild(preview);
+      var iconValue = editing.icon || 'external-link';
+      var icon = button('icon', 'pick-icon', {className:'vt-button secondary actions-icon-picker','data-action-field':'icon','aria-label':t(api,'icon')});
+      function drawIcon() {
+        icon.textContent = '';
+        if (api.ui.createIcon) icon.appendChild(api.ui.createIcon(iconValue));
+        icon.appendChild(el('span',{textContent:iconValue}));
+      }
+      drawIcon(); form.appendChild(el('div',{className:'actions-field'},[el('span',{textContent:t(api,'icon')}),icon]));
+      icon.addEventListener('click', function () {
+        if (!api.ui.pickIcon) { fail(new Error('host_upgrade_required')); return; }
+        icon.disabled = true;
+        api.ui.pickIcon(iconValue).then(function (value) {
+          if (!disposed && value !== null) { iconValue = value; editing.icon = value; drawIcon(); }
+        }).catch(fail).finally(function () { icon.disabled = false; if (!disposed && icon.isConnected) icon.focus(); });
+      });
       var type = field(form, 'type', 'select', editing.type || 'application', ['application','script','url'].map(function (v) { return [v,t(api,v)]; }));
       var target = field(form, 'target', 'input', editing.target); target.required = true; target.autocomplete = 'off';
       var interpreter = field(form, 'interpreter', 'input', editing.interpreter);
-      var args = field(form, 'args', 'textarea', editing._argsText == null ? JSON.stringify(editing.args || []) : editing._argsText);
-      form.appendChild(el('p',{className:'actions-hint',textContent:t(api,'argsHint')}));
+      var args = field(form, 'args', 'input', editing._argsText == null ? formatArguments(editing.args || []) : editing._argsText);
+      args.autocomplete = 'off'; args.spellcheck = false; args.placeholder = t(api,'argsPlaceholder');
+      var argsHint = el('p',{className:'actions-hint',textContent:t(api,'argsHint')}); form.appendChild(argsHint);
       var cwd = field(form, 'cwd', 'input', editing.cwd);
       var mode = field(form, 'mode', 'select', editing.mode || 'wait', ['wait','detached'].map(function(v){return [v,t(api,v)];}));
       var scopes = [['',t(api,'global')]];
       if (workspaceId) scopes.push([workspaceId,t(api,'thisDeal')]);
       var scope = field(form, 'scope', 'select', editing.workspaceId || '', scopes);
       function typeFields() {
-        var isURL = type.value === 'url';
+        var isURL = type.value === 'url'; argsHint.hidden = isURL;
         interpreter.parentNode.hidden = type.value !== 'script';
         [args,cwd,mode].forEach(function (input) { input.parentNode.hidden = isURL; });
       }
@@ -146,8 +224,8 @@
       form.appendChild(el('div',{className:'actions-controls'},[submit,cancel]));
       form.addEventListener('submit',function(event){
         event.preventDefault(); if (busy) return;
-        var argv; try { argv = JSON.parse(args.value); if (!Array.isArray(argv)) throw new Error(); } catch (_) { fail(new Error('invalid_arguments')); return; }
-        var values = {id:editing.id,title:title.value.trim(),description:description.value,icon:icon.value,type:type.value,target:target.value.trim(),interpreter:interpreter.value.trim(),args:argv,cwd:cwd.value.trim(),mode:mode.value,workspaceId:scope.value};
+        var argv; try { argv = type.value === 'url' ? [] : editing._argsText == null ? (editing.args || []).slice() : parseArguments(args.value); } catch (_) { fail(new Error('invalid_arguments')); return; }
+        var values = {id:editing.id,title:title.value.trim(),description:description.value,icon:iconValue,type:type.value,target:target.value.trim(),interpreter:interpreter.value.trim(),args:argv,cwd:cwd.value.trim(),mode:mode.value,workspaceId:scope.value};
         editing = values; busy='save'; status=''; render();
         save(api,values).then(function(){editing=null;status=t(api,'saved');failed=false;}).catch(fail).finally(function(){busy='';render();});
       });
@@ -180,17 +258,18 @@
       var grid=el('div',{className:'actions-grid'});
       if (!list.length) grid.appendChild(el('p',{className:'actions-hint',textContent:t(api,'empty')}));
       list.forEach(function(record,index){
-        var launch=button('run','run',{'data-action-id':record.id,className:'vt-button actions-launch',textContent:record.title});
-        if(api.ui.createIcon)launch.insertBefore(api.ui.createIcon(record.icon),launch.firstChild);
+        var launch=button('run','run',{'data-action-id':record.id,className:'actions-launch',textContent:'',title:record.description || record.title,'aria-label':record.title});
+        if(api.ui.createIcon)launch.appendChild(api.ui.createIcon(record.icon,22));
+        launch.appendChild(el('span',{textContent:record.title}));
         launch.disabled=!!busy;launch.addEventListener('click',function(){run(record);});
-        var edit=button('edit','edit',{'data-action-id':record.id});edit.addEventListener('click',function(){editing=Object.assign({},record);status='';focusAfterRender='title';render();});
-        var del=button('delete','delete',{'data-action-id':record.id});del.addEventListener('click',function(){deleting=record.id;render();});
-        var up=button('up','up',{'data-action-id':record.id});up.disabled=index===0||!!busy;up.addEventListener('click',function(){reorder(api,record.id,list[index-1].id).catch(fail);});
-        var forget=button('forget','forget',{'data-action-id':record.id});forget.disabled=!!busy;
+        var edit=iconButton('edit','pencil',record.id);edit.addEventListener('click',function(){editing=Object.assign({},record);status='';focusAfterRender='title';render();});
+        var del=iconButton('delete','trash-2',record.id);del.addEventListener('click',function(){deleting=record.id;render();});
+        var up=iconButton('up','arrow-up',record.id);up.disabled=index===0||!!busy;up.addEventListener('click',function(){reorder(api,record.id,list[index-1].id).catch(fail);});
+        var forget=iconButton('forget','shield',record.id);forget.disabled=!!busy;
         forget.addEventListener('click',function(){try{api.processes.revoke(request(record)).then(function(){status=t(api,'forgotten');failed=false;render();}).catch(fail);}catch(error){fail(error);}});
-        var down=button('down','down',{'data-action-id':record.id});down.disabled=index===list.length-1||!!busy;down.addEventListener('click',function(){reorder(api,record.id,list[index+1].id).catch(fail);});
+        var down=iconButton('down','arrow-down',record.id);down.disabled=index===list.length-1||!!busy;down.addEventListener('click',function(){reorder(api,record.id,list[index+1].id).catch(fail);});
         edit.disabled=!!busy;del.disabled=!!busy;
-        var card=el('article',{className:'actions-card'},[launch,el('p',{className:'actions-description',textContent:record.description||''}),el('div',{className:'actions-controls'},[edit,del,up,down,forget])]);
+        var card=el('article',{className:'actions-card'},[launch,el('div',{className:'actions-card-controls'},[edit,del,up,down,forget])]);
         if(deleting===record.id){
           var yes=button('confirmDelete','confirm-delete');yes.disabled=!!busy;yes.addEventListener('click',function(){remove(api,record.id).then(function(){deleting='';status=t(api,'deleted');render();}).catch(fail);});
           var no=button('cancel','cancel-delete');no.addEventListener('click',function(){deleting='';render();});
@@ -205,7 +284,6 @@
       root.textContent='';
       var add=button('add','add',{className:'vt-button primary'});add.disabled=!!busy;add.addEventListener('click',function(){editing={workspaceId:workspaceId};status='';focusAfterRender='title';render();});
       root.appendChild(el('div',{className:'actions-toolbar'},[el('h2',{textContent:t(api,'heading')}),add]));
-      root.appendChild(el('p',{className:'actions-hint',textContent:t(api,'trustHint')}));
       if(status)root.appendChild(el('div',{className:'actions-status'+(failed?' error':''),role:failed?'alert':'status','data-action-status':'',textContent:status}));
       if(operationID){var cancel=button('stop','stop');cancel.addEventListener('click',function(){api.processes.cancel(operationID).catch(fail);});root.appendChild(cancel);}
       if(outcome&&(outcome.stdout||outcome.stderr))root.appendChild(el('pre',{className:'actions-output','data-action-output':'',textContent:(outcome.stdout?t(api,'stdout')+'\n'+outcome.stdout:'')+(outcome.stderr?'\n'+t(api,'stderr')+'\n'+outcome.stderr:'')}));

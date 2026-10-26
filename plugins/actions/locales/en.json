@@ -15,7 +15,7 @@
   "ui.type": "Action type",
   "ui.target": "Program, absolute script path or URL",
   "ui.interpreter": "Interpreter (explicit program)",
-  "ui.args": "Arguments (JSON array of strings)",
+  "ui.args": "Arguments",
   "ui.cwd": "Working directory (optional, defaults to home)",
   "ui.mode": "Launch mode",
   "ui.scope": "Available in",
@@ -26,8 +26,7 @@
   "ui.detached": "Background GUI application",
   "ui.global": "Global actions",
   "ui.thisDeal": "This Deal",
-  "ui.argsHint": "Example: [\"connect\", \"my-alias\"]. Each string is one argument; spaces and symbols are passed literally.",
-  "ui.trustHint": "Definitions sync; device approvals do not. Review the native confirmation before the first launch. Changing the program or arguments requires review again. Do not store passwords or tokens in actions.",
+  "ui.argsHint": "Separate arguments with spaces. Put several words in quotes: connect \"my alias\". Symbols such as $ and * are passed literally.",
   "ui.add": "Add action",
   "ui.save": "Save",
   "ui.cancel": "Cancel",
@@ -55,7 +54,7 @@
   "ui.program_not_found": "Program not found on this device. Edit its path or install it.",
   "ui.directory_not_found": "Working directory does not exist on this device.",
   "ui.approval_required": "This definition needs a new device review. Run it again to review.",
-  "ui.invalid_arguments": "Enter arguments as a JSON array of strings, for example [\"one\", \"two words\"].",
+  "ui.invalid_arguments": "Close the argument quotes. Use \"two words\" for an argument containing spaces.",
   "ui.invalid_script": "Specify an interpreter and an absolute script path.",
   "ui.invalid_url": "Enter a complete http:// or https:// URL without embedded credentials.",
   "ui.invalid_action": "Check the name, program and launch mode.",
@@ -77,5 +76,6 @@
   "ui.approval_store_unavailable": "Device permissions cannot be saved or read. Check access to the application configuration folder.",
   "ui.approval_store_invalid": "The device permission file is damaged. Restore it or remove process-approvals.json from the application settings to review actions again.",
   "ui.review_failed": "The native confirmation could not be opened. Try again.",
-  "ui.review_expired": "The application state changed during review. Run the action again to review it."
+  "ui.review_expired": "The application state changed during review. Run the action again to review it.",
+  "ui.argsPlaceholder": "connect \"my alias\""
 }

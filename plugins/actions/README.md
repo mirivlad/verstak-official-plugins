@@ -17,11 +17,16 @@ Supported actions:
 - Script: explicit interpreter, absolute script path, followed by literal argv.
 - URL: HTTP(S), opened with the system handler after device review.
 
-Arguments use a JSON string array, e.g. `["connect", "my-alias"]` or
-`["--name", "two words"]`. They are not parsed as a shell command. No variable
-expansion or implicit interpreter is applied. Ten existing built-in Lucide
-icons can be selected. Light/dark theme tokens, RU/EN labels and a wrapping card
-layout are used. Output is plain text, held only in the currently mounted view.
+Enter arguments as a line, e.g. `connect my-alias` or `--name "two words"`.
+Single and double quotes group words; `""` passes an empty argument. Backslashes
+remain literal except directly before a double quote, where pairs represent a
+backslash and an odd final backslash escapes the quote. No shell expansion or
+implicit interpreter is applied. Stored argv arrays remain unchanged.
+The shared searchable Lucide picker selects icons. Compact cards launch with
+one click; edit, delete, move and revoke controls appear on hover or keyboard
+focus (always on touch screens). Descriptions appear as card tooltips.
+Light/dark theme tokens and RU/EN labels are used. Output is plain text, held
+only in the currently mounted view.
 
 The first launch asks for host-native device permission. Subsequent launches of
 the exact same request need one click. Changes to program/argv/cwd/mode require
