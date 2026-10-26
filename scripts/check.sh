@@ -325,6 +325,8 @@ if command -v node &>/dev/null; then
   report "journal frontend behavior" $?
   node "$ROOT/scripts/smoke-browser-inbox-plugin.js"
   report "browser inbox frontend behavior" $?
+  node "$ROOT/scripts/smoke-actions-plugin.js"
+  report "actions CRUD and passive lifecycle" $?
   node "$ROOT/scripts/smoke-todo-plugin.js"
   report "todo frontend behavior" $?
   node "$ROOT/scripts/smoke-capability-operations.js"

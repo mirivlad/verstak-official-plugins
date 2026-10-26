@@ -102,3 +102,5 @@ replaces the release assets.
 
 Copyright © 2026 Verstak contributors. Licensed under
 [GNU AGPLv3 or later](LICENSE).
+
+[Actions 2.0](plugins/actions/README.md): applications, explicit scripts and URLs, with global/Deal scope and device-local review.
