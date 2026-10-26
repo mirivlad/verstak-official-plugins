@@ -103,3 +103,5 @@ Frontend и manifest общие; нативные Go sidecar собираютс�
 
 Copyright © 2026 Verstak contributors. Распространяется на условиях
 [GNU AGPLv3 или новее](LICENSE).
+
+[Actions 2.0](plugins/actions/README.md): приложения, скрипты и URL, глобально и в Делах, с разрешением на каждом устройстве.

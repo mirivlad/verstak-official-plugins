@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "verstak.actions",
+  "name": "Actions",
+  "version": "2.0.0",
+  "apiVersion": "0.1.0",
+  "description": "User-defined applications, explicit scripts and URLs with device-local review.",
+  "source": "official",
+  "icon": "external-link",
+  "localization": { "defaultLocale": "en", "locales": { "en": "locales/en.json", "ru": "locales/ru.json" } },
+  "provides": ["actions.launcher"],
+  "requires": ["verstak/core/processes/v1"],
+  "permissions": ["storage.namespace", "process.spawn", "external.openURL", "ui.register", "commands.register", "events.subscribe"],
+  "sync": { "records": [{"id":"actions", "storage":"settings", "key":"actions", "identity":"id"}] },
+  "frontend": { "entry": "frontend/src/index.js" },
+  "contributes": {
+    "views": [{ "id":"verstak.actions.view", "title":"Actions", "icon":"external-link", "component":"ActionsView" }],
+    "sidebarItems": [{ "id":"verstak.actions.sidebar", "title":"Actions", "icon":"external-link", "view":"verstak.actions.view", "position":38 }],
+    "workspaceItems": [{ "id":"verstak.actions.workspace", "title":"Actions", "icon":"external-link", "order":65, "alwaysAvailable":true, "component":"ActionsView" }],
+    "commands": [
+      {"id":"verstak.actions.open", "title":"Actions: open global actions", "handler":"verstak.actions.open"},
+      {"id":"verstak.actions.list", "title":"List Actions", "handler":"verstak.actions.list"},
+      {"id":"verstak.actions.save", "title":"Save Action", "handler":"verstak.actions.save"},
+      {"id":"verstak.actions.delete", "title":"Delete Action", "handler":"verstak.actions.delete"}
+    ]
+  }
+}
