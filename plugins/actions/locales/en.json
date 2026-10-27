@@ -1,6 +1,6 @@
 {
   "manifest.name": "Actions",
-  "manifest.description": "User-defined applications, explicit scripts and URLs with device-local review.",
+  "manifest.description": "User-defined applications, scripts and URLs with confirmation of external changes.",
   "contributions.views.verstak.actions.view.title": "Actions",
   "contributions.sidebarItems.verstak.actions.sidebar.title": "Actions",
   "contributions.workspaceItems.verstak.actions.workspace.title": "Actions",
@@ -41,7 +41,7 @@
   "ui.deleteConfirm": "Delete this action?",
   "ui.saved": "Action saved",
   "ui.deleted": "Action deleted",
-  "ui.reviewing": "Checking device permission…",
+  "ui.reviewing": "Preparing launch…",
   "ui.notRun": "Launch cancelled; nothing was run.",
   "ui.running": "Running…",
   "ui.timedOut": "Time limit reached. Process stopped.",
@@ -64,8 +64,6 @@
   "ui.action_limit": "Action storage limit reached.",
   "ui.host_upgrade_required": "Update Verstak to use Actions 2.0.",
   "ui.operation_failed": "Could not complete the operation. Check plugin permissions and try again.",
-  "ui.forget": "Forget permission",
-  "ui.forgotten": "Device permission revoked.",
   "ui.invalid_directory": "Use an absolute working directory path.",
   "ui.absolute_executable_required": "Use an executable name on PATH or an absolute program path.",
   "ui.invalid_limits": "The time or output limit is invalid.",
@@ -76,6 +74,10 @@
   "ui.approval_store_unavailable": "Device permissions cannot be saved or read. Check access to the application configuration folder.",
   "ui.approval_store_invalid": "The device permission file is damaged. Restore it or remove process-approvals.json from the application settings to review actions again.",
   "ui.review_failed": "The native confirmation could not be opened. Try again.",
-  "ui.review_expired": "The application state changed during review. Run the action again to review it.",
-  "ui.argsPlaceholder": "connect \"my alias\""
+  "ui.review_expired": "The action changed during confirmation. Run it again to review the current command.",
+  "ui.argsPlaceholder": "connect \"my alias\"",
+  "ui.confirmEveryRun": "Ask for confirmation before every launch",
+  "ui.local_data_unavailable": "Could not read or save trust on this device.",
+  "ui.local_data_invalid": "Local trust data is damaged. Restore it or remove action-trust-v1.json from the application configuration.",
+  "ui.invalid_local_data": "Could not read or save trust on this device."
 }
