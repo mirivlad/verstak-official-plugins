@@ -2,6 +2,7 @@
   'use strict';
   var ID = 'verstak.actions';
   var KEY = 'actions';
+  var TRUST_KEY = 'action-trust-v1';
   var UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   var changes = new Set();
   var mounts = new WeakMap();
@@ -30,6 +31,7 @@
     if (!Array.isArray(record.args) || record.args.length > 256 || record.args.some(function (a) { return typeof a !== 'string' || a.indexOf('\0') !== -1; })) throw new Error('invalid_arguments');
     if (record.type === 'script' && (!record.interpreter || !(/^(\/|[a-z]:[\\/])/i.test(record.target)))) throw new Error('invalid_script');
     if (record.type === 'url') { var u = new URL(record.target); if (['http:', 'https:'].indexOf(u.protocol) === -1 || u.username || u.password) throw new Error('invalid_url'); }
+    if (record.confirmEveryRun != null && typeof record.confirmEveryRun !== 'boolean') throw new Error('invalid_action');
     if (record.mode !== 'wait' && record.mode !== 'detached') throw new Error('invalid_action');
     if (typeof record.icon !== 'string' || !/^[a-z0-9][a-z0-9-]{0,79}$/.test(record.icon)) throw new Error('invalid_action');
     return record;
@@ -82,7 +84,7 @@
       var record = validate({
         id: args.id || window.crypto.randomUUID(), title: args.title, description: String(args.description || '').slice(0, 2000), icon: args.icon || 'external-link',
         type: args.type, target: args.target, interpreter: String(args.interpreter || ''), args: args.args || [], cwd: String(args.cwd || ''), mode: args.mode || 'wait',
-        workspaceId: args.workspaceId || '', rank: before ? before.rank : visible(records).reduce(function (max, r) { return Math.max(max, Number(r.rank) || 0); }, 0) + 1024,
+        confirmEveryRun: args.confirmEveryRun === true, workspaceId: args.workspaceId || '', rank: before ? before.rank : visible(records).reduce(function (max, r) { return Math.max(max, Number(r.rank) || 0); }, 0) + 1024,
         updatedAt: new Date().toISOString()
       });
       if (args.id && (!before || before.deleted)) throw new Error('action_not_found');
@@ -121,6 +123,32 @@
     return { kind: 'process', executable: record.type === 'script' ? record.interpreter : record.target, args: record.type === 'script' ? [record.target].concat(record.args) : record.args.slice(), cwd: record.cwd, mode: record.mode };
   }
 
+  function localData(api) {
+    if (!api.storage || !api.storage.local || !api.processes || !api.processes.confirm) throw new Error('host_upgrade_required');
+    return api.storage.local;
+  }
+  function signature(record) {
+    // Stable authored execution fields; cosmetic edits and PATH normalization
+    // do not affect trust. A synced change cannot set this device-local hash.
+    var encoded = new TextEncoder().encode(JSON.stringify([request(record),record.confirmEveryRun === true]));
+    return window.crypto.subtle.digest('SHA-256',encoded).then(function(hash){
+      return Array.from(new Uint8Array(hash)).map(function(value){return value.toString(16).padStart(2,'0');}).join('');
+    });
+  }
+  function rememberTrust(api, record, digest) {
+    return enqueue(function(){
+      var local = localData(api);
+      return local.read(TRUST_KEY).then(function(value){
+        var trusted = Object.assign(Object.create(null),value || {});
+        trusted[record.id] = digest;
+        return local.write(TRUST_KEY,trusted);
+      });
+    });
+  }
+  function trustFromEditor(api, record) {
+    return signature(record).then(function(digest){return rememberTrust(api,record,digest);});
+  }
+
   var CSS = `
 .actions-view{height:100%;min-height:0;overflow:auto;box-sizing:border-box;padding:1rem;container-type:inline-size;color:var(--vt-color-text-primary);display:flex;flex-direction:column;gap:1rem}
 .actions-toolbar,.actions-controls{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
@@ -143,7 +171,7 @@
 .actions-field[hidden]{display:none}.actions-field{display:grid;gap:.3rem;min-width:0;font-size:.85rem}
 .actions-input,.actions-form .vt-select{width:100%;box-sizing:border-box;min-height:2.3rem;padding:.5rem .6rem;border:1px solid var(--vt-color-border);border-radius:var(--vt-radius-sm,4px);background:var(--vt-color-surface);color:var(--vt-color-text-primary);font:inherit}
 .actions-form textarea{resize:vertical;min-height:4.5rem}
-.actions-icon-picker{justify-self:start;display:inline-flex;align-items:center;gap:.5rem}
+.actions-check{display:flex;align-items:center;gap:.5rem;font-size:.85rem}.actions-check input{flex-shrink:0}.actions-icon-picker{justify-self:start;display:inline-flex;align-items:center;gap:.5rem}
 .actions-output{max-height:20rem;overflow:auto;border:1px solid var(--vt-color-border);border-radius:var(--vt-radius-sm,4px);padding:.75rem;white-space:pre-wrap;overflow-wrap:anywhere;font-size:.82rem;margin:0}
 .actions-section-title{font-size:.95rem;margin:0 0 .6rem}.actions-view button:disabled{opacity:.55;cursor:default}
 .actions-confirm{border-top:1px solid var(--vt-color-border);padding:.75rem}
@@ -167,7 +195,7 @@
     }
     function fail(error) {
       var message = String(error && error.message || '');
-      var codes = ['program_not_found', 'directory_not_found', 'approval_required', 'invalid_arguments', 'invalid_script', 'invalid_url', 'invalid_action', 'invalid_scope', 'start_failed', 'action_not_found', 'action_limit', 'host_upgrade_required', 'invalid_directory', 'absolute_executable_required', 'invalid_limits', 'invalid_request', 'open_failed', 'process_control_unavailable', 'too_many_processes', 'approval_store_unavailable', 'approval_store_invalid', 'review_failed', 'review_expired'];
+      var codes = ['program_not_found', 'directory_not_found', 'approval_required', 'invalid_arguments', 'invalid_script', 'invalid_url', 'invalid_action', 'invalid_scope', 'start_failed', 'action_not_found', 'action_limit', 'host_upgrade_required', 'invalid_directory', 'absolute_executable_required', 'invalid_limits', 'invalid_request', 'open_failed', 'process_control_unavailable', 'too_many_processes', 'approval_store_unavailable', 'approval_store_invalid', 'review_failed', 'review_expired', 'local_data_unavailable', 'local_data_invalid', 'invalid_local_data'];
       var code = codes.find(function (value) { return message.indexOf(value) !== -1; });
       status = t(api, code || 'operation_failed'); failed = true; render();
     }
@@ -212,6 +240,10 @@
       var scopes = [['',t(api,'global')]];
       if (workspaceId) scopes.push([workspaceId,t(api,'thisDeal')]);
       var scope = field(form, 'scope', 'select', editing.workspaceId || '', scopes);
+      var confirmEveryRun = el('input',{type:'checkbox','data-action-field':'confirmEveryRun'});
+      confirmEveryRun.checked = editing.confirmEveryRun === true;
+      confirmEveryRun.addEventListener('change',function(){editing.confirmEveryRun = confirmEveryRun.checked;});
+      form.appendChild(el('label',{className:'actions-check'},[confirmEveryRun,el('span',{textContent:t(api,'confirmEveryRun')})]));
       function typeFields() {
         var isURL = type.value === 'url'; argsHint.hidden = isURL;
         interpreter.parentNode.hidden = type.value !== 'script';
@@ -225,9 +257,9 @@
       form.addEventListener('submit',function(event){
         event.preventDefault(); if (busy) return;
         var argv; try { argv = type.value === 'url' ? [] : editing._argsText == null ? (editing.args || []).slice() : parseArguments(args.value); } catch (_) { fail(new Error('invalid_arguments')); return; }
-        var values = {id:editing.id,title:title.value.trim(),description:description.value,icon:iconValue,type:type.value,target:target.value.trim(),interpreter:interpreter.value.trim(),args:argv,cwd:cwd.value.trim(),mode:mode.value,workspaceId:scope.value};
+        var values = {id:editing.id,title:title.value.trim(),description:description.value,icon:iconValue,type:type.value,target:target.value.trim(),interpreter:interpreter.value.trim(),args:argv,cwd:cwd.value.trim(),mode:mode.value,confirmEveryRun:confirmEveryRun.checked,workspaceId:scope.value};
         editing = values; busy='save'; status=''; render();
-        save(api,values).then(function(){editing=null;status=t(api,'saved');failed=false;}).catch(fail).finally(function(){busy='';render();});
+        save(api,values).then(function(record){return trustFromEditor(api,record);}).then(function(){editing=null;status=t(api,'saved');failed=false;}).catch(fail).finally(function(){busy='';render();});
       });
       root.appendChild(form);
     }
@@ -237,14 +269,28 @@
       try { r=request(record); } catch(error) {fail(error);return;}
       if (!api.processes) {fail(new Error('host_upgrade_required'));return;}
       busy=record.id;outcome=null;failed=false;status=t(api,'reviewing');render();
-      api.processes.approved(r).then(function(approved){ return approved || api.processes.review(r); }).then(function(approved){
-        if (!approved || disposed) {status=t(api,'notRun');return null;}
-        // A synced edit while the native review was open must not launch an old definition.
+      var digest, known = false;
+      Promise.resolve().then(function(){return signature(record);}).then(function(value){
+        digest = value;
+        return localData(api).read(TRUST_KEY);
+      }).then(function(trusted){
+        known = !!(trusted && Object.prototype.hasOwnProperty.call(trusted,record.id) && trusted[record.id] === digest);
+        if (known && !record.confirmEveryRun) return true;
+        return api.processes.confirm(r);
+      }).then(function(accepted){
+        if (!accepted || disposed) {status=t(api,'notRun');return null;}
+        // A sync/import edit during confirmation must not launch changed data.
         return load(api).then(function(current){
           var latest=current.find(function(value){return value.id===record.id && !value.deleted;});
-          if (!latest || JSON.stringify(request(latest))!==JSON.stringify(r)) throw new Error('approval_required');
-          operationID=window.crypto.randomUUID();status=t(api,'running');render();
-          return api.processes.run(operationID,r);
+          if (!latest) throw new Error('action_not_found');
+          return signature(latest).then(function(currentDigest){
+            if (currentDigest !== digest) throw new Error('review_expired');
+            return (known ? Promise.resolve() : rememberTrust(api,record,digest)).then(function(){
+              if(disposed)return null;
+              operationID=window.crypto.randomUUID();status=t(api,'running');render();
+              return api.processes.run(operationID,r);
+            });
+          });
         });
       }).then(function(result){
         if (!result) return;
@@ -265,11 +311,9 @@
         var edit=iconButton('edit','pencil',record.id);edit.addEventListener('click',function(){editing=Object.assign({},record);status='';focusAfterRender='title';render();});
         var del=iconButton('delete','trash-2',record.id);del.addEventListener('click',function(){deleting=record.id;render();});
         var up=iconButton('up','arrow-up',record.id);up.disabled=index===0||!!busy;up.addEventListener('click',function(){reorder(api,record.id,list[index-1].id).catch(fail);});
-        var forget=iconButton('forget','shield',record.id);forget.disabled=!!busy;
-        forget.addEventListener('click',function(){try{api.processes.revoke(request(record)).then(function(){status=t(api,'forgotten');failed=false;render();}).catch(fail);}catch(error){fail(error);}});
         var down=iconButton('down','arrow-down',record.id);down.disabled=index===list.length-1||!!busy;down.addEventListener('click',function(){reorder(api,record.id,list[index+1].id).catch(fail);});
         edit.disabled=!!busy;del.disabled=!!busy;
-        var card=el('article',{className:'actions-card'},[launch,el('div',{className:'actions-card-controls'},[edit,del,up,down,forget])]);
+        var card=el('article',{className:'actions-card'},[launch,el('div',{className:'actions-card-controls'},[edit,del,up,down])]);
         if(deleting===record.id){
           var yes=button('confirmDelete','confirm-delete');yes.disabled=!!busy;yes.addEventListener('click',function(){remove(api,record.id).then(function(){deleting='';status=t(api,'deleted');render();}).catch(fail);});
           var no=button('cancel','cancel-delete');no.addEventListener('click',function(){deleting='';render();});

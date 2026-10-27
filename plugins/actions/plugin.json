@@ -4,7 +4,7 @@
   "name": "Actions",
   "version": "2.0.0",
   "apiVersion": "0.1.0",
-  "description": "User-defined applications, explicit scripts and URLs with device-local review.",
+  "description": "User-defined applications, scripts and URLs with confirmation of external changes.",
   "source": "official",
   "icon": "external-link",
   "localization": { "defaultLocale": "en", "locales": { "en": "locales/en.json", "ru": "locales/ru.json" } },
